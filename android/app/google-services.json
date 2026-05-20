@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "730093721780",
+    "project_id": "truck-router1",
+    "storage_bucket": "truck-router1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:730093721780:android:ff70554973740ecc515fe1",
+        "android_client_info": {
+          "package_name": "com.truckrouter.truck_router"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpIHXipKEPIF7Gdl08HWReF8tIJ7LXHYY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

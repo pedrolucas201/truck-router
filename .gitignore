@@ -1,0 +1,36 @@
+# Dart / Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+**/doc/api/
+
+# Android
+.gradle/
+/android/.gradle
+/android/app/debug
+/android/app/profile
+/android/app/release
+/android/local.properties
+
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Symbolication / obfuscation
+app.*.symbols
+app.*.map.json
