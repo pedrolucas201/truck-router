@@ -14,7 +14,7 @@ class TruckProfile {
     this.widthCm = 260,
     required this.lengthCm,
     required this.weightKg,
-    this.axleCount = 2,
+    this.axleCount = 5,
   });
 
   Map<String, String> toHereParams() => {
