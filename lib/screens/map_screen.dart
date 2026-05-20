@@ -51,6 +51,9 @@ class _MapScreenState extends State<MapScreen> {
   final _poiIconCache      = <String, BitmapDescriptor>{};
   List<RadarPoint>         _nearbyRadares = [];
   List<UserRestriction>    _userRestrictions = [];
+  double                   _currentZoom = 11.0;
+
+  static const _radarMinZoom = 14.0;
 
   static const _initialPosition = CameraPosition(
     target: LatLng(-23.5505, -46.6333),
@@ -745,21 +748,23 @@ class _MapScreenState extends State<MapScreen> {
       ));
     }
 
-    for (final r in _nearbyRadares) {
-      final isLombada = r.type.toLowerCase().contains('lombada');
-      final isPedagio = r.type.toLowerCase().contains('pedagio');
-      final key = isPedagio
-          ? 'pedagio'
-          : '${isLombada ? 'lombada' : 'radar'}_${r.speedKmh}';
-      markers.add(Marker(
-        markerId: MarkerId('radar_${r.lat}_${r.lng}'),
-        position: LatLng(r.lat, r.lng),
-        icon: _poiIconCache[key] ?? BitmapDescriptor.defaultMarker,
-        infoWindow: InfoWindow(
-          title: r.speedKmh > 0 ? '${r.speedKmh} km/h' : r.type,
-          snippet: r.type,
-        ),
-      ));
+    if (_currentZoom >= _radarMinZoom) {
+      for (final r in _nearbyRadares) {
+        final isLombada = r.type.toLowerCase().contains('lombada');
+        final isPedagio = r.type.toLowerCase().contains('pedagio');
+        final key = isPedagio
+            ? 'pedagio'
+            : '${isLombada ? 'lombada' : 'radar'}_${r.speedKmh}';
+        markers.add(Marker(
+          markerId: MarkerId('radar_${r.lat}_${r.lng}'),
+          position: LatLng(r.lat, r.lng),
+          icon: _poiIconCache[key] ?? BitmapDescriptor.defaultMarker,
+          infoWindow: InfoWindow(
+            title: r.speedKmh > 0 ? '${r.speedKmh} km/h' : r.type,
+            snippet: r.type,
+          ),
+        ));
+      }
     }
 
     for (final poi in kHardcodedPois) {
@@ -797,6 +802,11 @@ class _MapScreenState extends State<MapScreen> {
                 GoogleMap(
                   initialCameraPosition: _initialPosition,
                   onMapCreated: (c) => _mapController = c,
+                  onCameraMove: (pos) {
+                    if ((pos.zoom - _currentZoom).abs() > 0.3) {
+                      setState(() => _currentZoom = pos.zoom);
+                    }
+                  },
                   polylines: polylines,
                   markers: markers,
                   trafficEnabled: true,
