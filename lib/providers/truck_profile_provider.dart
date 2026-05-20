@@ -16,7 +16,7 @@ class TruckProfileProvider extends ChangeNotifier {
     if (_profiles.isEmpty) {
       return TruckProfile(
         id: 'default', name: 'Padrão',
-        heightCm: 420, lengthCm: 1400, weightKg: 25000,
+        heightCm: 420, lengthCm: 1400, weightKg: 25000, axleCount: 5,
       );
     }
     return _profiles.firstWhere(
@@ -40,7 +40,7 @@ class TruckProfileProvider extends ChangeNotifier {
         widthCm:   prefs.getInt('truck_width')      ?? 260,
         lengthCm:  prefs.getInt('truck_length')     ?? 1400,
         weightKg:  prefs.getInt('truck_weight')     ?? 25000,
-        axleCount: prefs.getInt('truck_axle_count') ?? 2,
+        axleCount: prefs.getInt('truck_axle_count') ?? 5,
       );
       _profiles = [p];
       _activeId = p.id;
