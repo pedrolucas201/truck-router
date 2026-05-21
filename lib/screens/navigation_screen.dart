@@ -633,43 +633,73 @@ class _BottomBar extends StatelessWidget {
 
     return Container(
       color: const Color(0xFF212121),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Velocidade atual
-          _BarItem(
-            top: '${speedKmh.round()}',
-            bottom: 'km/h',
-            topStyle: const TextStyle(
-                color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          // Alerta de radar (se houver) ou distância restante
-          if (radarAlert != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: isLombada ? Colors.orange.shade700 : Colors.red.shade700,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.speed, color: Colors.white, size: 18),
-                  Text(
-                    radarAlert!.speedKmh > 0
-                        ? '${radarAlert!.speedKmh} km/h'
-                        : isLombada ? 'Lombada' : 'Radar',
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+          // Velocímetro circular
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF2C2C2C),
+              border: Border.all(color: Colors.white24, width: 2),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${speedKmh.round()}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                    height: 1.0,
                   ),
-                ],
-              ),
-            )
-          else
-            _BarItem(top: remainingDist, bottom: 'restante'),
-          // Tempo restante
-          _BarItem(top: remainingTime, bottom: 'restante'),
+                ),
+                Text(
+                  'km/h',
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Alerta de radar (se houver) ou distância + tempo
+          Expanded(
+            child: radarAlert != null
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isLombada ? Colors.orange.shade700 : Colors.red.shade700,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.speed, color: Colors.white, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          radarAlert!.speedKmh > 0
+                              ? '${radarAlert!.speedKmh} km/h'
+                              : isLombada ? 'Lombada' : 'Radar',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _BarItem(top: remainingDist, bottom: 'restante'),
+                      _BarItem(top: remainingTime, bottom: 'chegada'),
+                    ],
+                  ),
+          ),
         ],
       ),
     );
@@ -679,9 +709,8 @@ class _BottomBar extends StatelessWidget {
 class _BarItem extends StatelessWidget {
   final String top;
   final String bottom;
-  final TextStyle? topStyle;
 
-  const _BarItem({required this.top, required this.bottom, this.topStyle});
+  const _BarItem({required this.top, required this.bottom});
 
   @override
   Widget build(BuildContext context) {
@@ -689,9 +718,8 @@ class _BarItem extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(top,
-            style: topStyle ??
-                const TextStyle(
-                    color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+            style: const TextStyle(
+                color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
         Text(bottom,
             style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
       ],
