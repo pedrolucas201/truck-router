@@ -935,9 +935,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                               onSelected: (value) {
                                 if (value == 'history') { _showHistory(); }
                                 if (value == 'truck') {
+                                  final truckProv = context.read<TruckProfileProvider>();
+                                  final routeProv = context.read<RouteProvider>();
+                                  final prevId = truckProv.activeId;
                                   Navigator.push(context, MaterialPageRoute(
                                     builder: (_) => const TruckProfileScreen(),
-                                  ));
+                                  )).then((_) {
+                                    if (!mounted) return;
+                                    if (truckProv.activeId != prevId) routeProv.clear();
+                                  });
                                 }
                               },
                               itemBuilder: (_) => [
@@ -1617,9 +1623,20 @@ class _RestrictionsBanner extends StatelessWidget {
           ? 'Restrição não contornável: $labels'
           : '${blocked.length} restrições não contornáveis: $labels';
     } else {
-      message = avoided.length == 1
-          ? '1 restrição contornada automaticamente'
-          : '${avoided.length} restrições contornadas automaticamente';
+      final total      = avoided.length;
+      final unverified = avoided.where((r) => !r.isVerified).length;
+      if (unverified == 0) {
+        message = total == 1
+            ? '1 restrição contornada automaticamente'
+            : '$total restrições contornadas automaticamente';
+      } else if (unverified == total) {
+        message = total == 1
+            ? '1 restrição contornada (aguardando confirmação de outros motoristas)'
+            : '$total restrições contornadas (não verificadas — aguardando mais relatos)';
+      } else {
+        final verified = total - unverified;
+        message = '$total restrições contornadas ($verified verificadas, $unverified aguardando confirmação)';
+      }
     }
 
     return Padding(
