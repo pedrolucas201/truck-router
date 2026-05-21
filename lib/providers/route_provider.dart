@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/route_result.dart';
 import '../models/truck_profile.dart';
-import '../services/firestore_restriction_service.dart';
+import '../repositories/restriction_repository.dart';
 import '../services/here_routing_service.dart';
 import '../services/overpass_service.dart';
 import '../services/tomtom_routing_service.dart';
@@ -10,6 +10,9 @@ import '../services/tomtom_routing_service.dart';
 enum RouteStatus { idle, loading, success, error }
 
 class RouteProvider extends ChangeNotifier {
+  final RestrictionRepository _repo;
+  RouteProvider(this._repo);
+
   RouteStatus _status = RouteStatus.idle;
   RouteResult? _result;
   String? _errorMessage;
@@ -63,7 +66,7 @@ class RouteProvider extends ChangeNotifier {
       final overpassFuture =
           OverpassService.queryAlongRoute(result.polylinePoints);
       final firestoreFuture =
-          FirestoreRestrictionService.fetchNearRoute(result.polylinePoints);
+          _repo.fetchNearRoute(result.polylinePoints);
       final overpassRestrictions = await overpassFuture;
       final firestoreRestrictions = await firestoreFuture;
 

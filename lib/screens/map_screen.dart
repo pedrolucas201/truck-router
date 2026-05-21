@@ -25,8 +25,8 @@ import 'truck_profile_screen.dart';
 import 'navigation_screen.dart';
 import '../models/user_restriction.dart';
 import '../services/auth_service.dart';
-import '../services/firestore_restriction_service.dart';
 import '../services/restriction_service.dart';
+import '../repositories/restriction_repository.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -255,6 +255,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _saveRestrictionAt(LatLng latLng) async {
+    final repo = context.read<RestrictionRepository>();
     final r = await showModalBottomSheet<UserRestriction>(
       context: context,
       isScrollControlled: true,
@@ -269,7 +270,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     () async {
       try {
         final uid = await AuthService.getUid();
-        await FirestoreRestrictionService.add(r, uid);
+        await repo.add(r, uid);
       } catch (_) {}
     }();
 
