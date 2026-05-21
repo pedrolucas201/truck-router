@@ -1194,19 +1194,20 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-                Positioned(
-                  bottom: 16,
-                  right: 16,
-                  child: FloatingActionButton.extended(
-                    heroTag: 'mark_restriction',
-                    onPressed: _enterMarkingMode,
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.teal.shade700,
-                    elevation: 3,
-                    icon: const Icon(Icons.add_location_alt),
-                    label: const Text('Marcar restrição'),
+                if (routeProvider.result != null && _panelCollapsed)
+                  Positioned(
+                    bottom: 16,
+                    right: 16,
+                    child: FloatingActionButton.small(
+                      heroTag: 'mark_restriction',
+                      onPressed: _enterMarkingMode,
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.teal.shade700,
+                      elevation: 3,
+                      tooltip: 'Marcar restrição',
+                      child: const Icon(Icons.add_location_alt),
+                    ),
                   ),
-                ),
                 ],
                 if (_markingMode) ...[
                   Positioned.fill(
