@@ -37,7 +37,8 @@ class NavigationScreen extends StatefulWidget {
   State<NavigationScreen> createState() => _NavigationScreenState();
 }
 
-class _NavigationScreenState extends State<NavigationScreen> {
+class _NavigationScreenState extends State<NavigationScreen>
+    with WidgetsBindingObserver {
   GoogleMapController? _mapController;
   StreamSubscription<Position>? _posSub;
   late final FlutterTts _tts;
@@ -71,6 +72,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
     super.initState();
     _result  = widget.result;
     _radares = List.of(widget.initialRadares);
+    WidgetsBinding.instance.addObserver(this);
     _initTts();
     _startGps();
     _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
@@ -82,11 +84,28 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _posSub?.cancel();
     _tts.stop();
     WakelockPlus.disable();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    _recenter();
+    if (_muted) return;
+    final maneuvers = _result.maneuvers;
+    if (_maneuverIndex >= maneuvers.length) return;
+    final m = maneuvers[_maneuverIndex];
+    if (m.action == 'depart' || m.action == 'arrive') return;
+    final dist = _distToNextManeuver;
+    final text = dist.isFinite && dist < 50000
+        ? 'Em ${_fmtDist(dist)}, ${m.instruction}'
+        : m.instruction;
+    _speak(text);
   }
 
   // ── TTS ──────────────────────────────────────────────────────────────────────
