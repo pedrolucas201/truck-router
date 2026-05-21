@@ -54,6 +54,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   List<UserRestriction>    _userRestrictions = [];
   double                   _currentZoom = 11.0;
   bool                     _markingMode = false;
+  bool                     _panelCollapsed = false;
   LatLng                   _cameraTarget = const LatLng(-23.5505, -46.6333);
   DateTime?                _routeCalculatedAt;
 
@@ -571,6 +572,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       _waypointLabels.clear();
       _waypointKeys.clear();
       _nearbyRadares    = [];
+      _panelCollapsed   = false;
     });
     context.read<RouteProvider>().clear();
   }
@@ -698,7 +700,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         }
       }
       if (mounted) {
-        setState(() => _nearbyRadares = filtered);
+        setState(() {
+          _nearbyRadares  = filtered;
+          _panelCollapsed = true;
+        });
       }
     }
 
@@ -762,6 +767,62 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       } catch (_) {}
 
     }
+  }
+
+  Widget _buildCollapsedPanel() {
+    return InkWell(
+      onTap: () => setState(() => _panelCollapsed = false),
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 14,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 10, height: 10,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle, color: Colors.red.shade400),
+                  ),
+                  Container(width: 2, height: 12, color: Colors.grey.shade300),
+                  Container(
+                    width: 10, height: 10,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle, color: Colors.teal.shade600),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _originLabel ?? '',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _destinationLabel ?? '',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.expand_more, color: Colors.teal.shade700, size: 22),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -881,7 +942,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       elevation: 4,
                       shadowColor: Colors.black26,
                       borderRadius: BorderRadius.circular(16),
-                      child: Padding(
+                      child: _panelCollapsed
+                          ? _buildCollapsedPanel()
+                          : Padding(
                         padding: const EdgeInsets.all(12),
                         child: Column(
                       mainAxisSize: MainAxisSize.min,
