@@ -53,6 +53,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
   double _distToNextManeuver = double.infinity;
   bool _muted = false;
   bool _isRerouting = false;
+  Timer? _refreshTimer;
   int _offRouteCount = 0;
   RadarPoint? _upcomingRadar;
   final Set<int> _announced = {};
@@ -72,6 +73,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
     _radares = List.of(widget.initialRadares);
     _initTts();
     _startGps();
+    _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
     WakelockPlus.enable();
     _buildUserArrow().then((icon) {
       if (mounted) setState(() => _userArrowIcon = icon);
@@ -80,6 +82,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _posSub?.cancel();
     _tts.stop();
     WakelockPlus.disable();
@@ -214,6 +217,11 @@ class _NavigationScreenState extends State<NavigationScreen> {
   }
 
   // ── Re-roteamento ─────────────────────────────────────────────────────────────
+
+  Future<void> _periodicRefresh() async {
+    if (_isRerouting || _currentPos == null) return;
+    await _reroute();
+  }
 
   Future<void> _reroute() async {
     if (_isRerouting || _currentPos == null) return;

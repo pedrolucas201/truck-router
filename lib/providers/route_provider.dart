@@ -5,6 +5,7 @@ import '../models/truck_profile.dart';
 import '../services/firestore_restriction_service.dart';
 import '../services/here_routing_service.dart';
 import '../services/overpass_service.dart';
+import '../services/tomtom_routing_service.dart';
 
 enum RouteStatus { idle, loading, success, error }
 
@@ -32,6 +33,21 @@ class RouteProvider extends ChangeNotifier {
 
     try {
       final deptTime = departureTime?.toIso8601String().split('.').first;
+
+      // TomTom roda em paralelo desde o início — não adiciona latência.
+      final tomtomFuture = () async {
+        try {
+          return await TomTomRoutingService.calculateRoute(
+            origin:        origin,
+            destination:   destination,
+            truck:         truck,
+            departureTime: deptTime,
+            waypoints:     waypoints,
+          );
+        } catch (_) {
+          return null;
+        }
+      }();
 
       // 1. Rota inicial já evitando restrições marcadas manualmente.
       var result = await HereRoutingService.calculateRoute(
@@ -76,6 +92,17 @@ class RouteProvider extends ChangeNotifier {
           // HERE não encontrou rota alternativa — usa a original e avisa.
           result = result.copyWith(restrictionsBlocked: conflicts);
         }
+      }
+
+      // 4. TomTom como segunda fonte: usa se encontrou rota >10% mais longa,
+      //    o que indica restrições físicas que a HERE não tem mapeadas.
+      final tomtomResult = await tomtomFuture;
+      if (tomtomResult != null &&
+          tomtomResult.distanceMeters > result.distanceMeters * 1.10) {
+        result = tomtomResult.copyWith(
+          restrictionsAvoided: result.restrictionsAvoided,
+          restrictionsBlocked: result.restrictionsBlocked,
+        );
       }
 
       _result = result;

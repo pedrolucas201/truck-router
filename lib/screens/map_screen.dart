@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -34,7 +35,7 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   GoogleMapController? _mapController;
   LatLng? _origin;
   LatLng? _destination;
@@ -52,6 +53,9 @@ class _MapScreenState extends State<MapScreen> {
   List<RadarPoint>         _nearbyRadares = [];
   List<UserRestriction>    _userRestrictions = [];
   double                   _currentZoom = 11.0;
+  bool                     _markingMode = false;
+  LatLng                   _cameraTarget = const LatLng(-23.5505, -46.6333);
+  DateTime?                _routeCalculatedAt;
 
   static const _radarMinZoom = 14.0;
 
@@ -63,8 +67,38 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadPoiIcons();
     _loadUserRestrictions();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (_routeCalculatedAt == null) return;
+    if (_departureTime != null) return;
+    if (_origin == null || _destination == null) return;
+    if (DateTime.now().difference(_routeCalculatedAt!) < const Duration(minutes: 15)) return;
+    _autoRecalculate();
+  }
+
+  Future<void> _autoRecalculate() async {
+    await _calculate();
+    if (!mounted) return;
+    if (context.read<RouteProvider>().result != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Rota atualizada automaticamente'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   Future<void> _loadPoiIcons() async {
@@ -220,7 +254,7 @@ class _MapScreenState extends State<MapScreen> {
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
-  Future<void> _onMapLongPress(LatLng latLng) async {
+  Future<void> _saveRestrictionAt(LatLng latLng) async {
     final r = await showModalBottomSheet<UserRestriction>(
       context: context,
       isScrollControlled: true,
@@ -231,7 +265,6 @@ class _MapScreenState extends State<MapScreen> {
     );
     if (r == null || !mounted) return;
 
-    // Salva localmente (imediato) e na nuvem (background).
     await RestrictionService.add(r);
     () async {
       try {
@@ -248,6 +281,30 @@ class _MapScreenState extends State<MapScreen> {
     if (_origin != null && _destination != null) {
       await _calculate();
     }
+  }
+
+  Future<void> _enterMarkingMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool('marking_onboarding_seen') ?? false;
+    if (!seen && mounted) {
+      await showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (_) => const _MarkingOnboardingSheet(),
+      );
+      await prefs.setBool('marking_onboarding_seen', true);
+    }
+    if (mounted) setState(() => _markingMode = true);
+  }
+
+  void _exitMarkingMode() => setState(() => _markingMode = false);
+
+  Future<void> _confirmMarkingPosition() async {
+    final latLng = _cameraTarget;
+    setState(() => _markingMode = false);
+    await _saveRestrictionAt(latLng);
   }
 
   Future<void> _showRestrictionDetails(UserRestriction r) async {
@@ -618,6 +675,7 @@ class _MapScreenState extends State<MapScreen> {
     if (!mounted) return;
 
     final result = context.read<RouteProvider>().result;
+    if (result != null) _routeCalculatedAt = DateTime.now();
     if (result != null) {
       final allRadares = await RadarService.load();
       final filtered = RadarService.deduplicateNearby(
@@ -806,13 +864,14 @@ class _MapScreenState extends State<MapScreen> {
                     if ((pos.zoom - _currentZoom).abs() > 0.3) {
                       setState(() => _currentZoom = pos.zoom);
                     }
+                    _cameraTarget = pos.target;
                   },
                   polylines: polylines,
                   markers: markers,
                   trafficEnabled: true,
                   myLocationButtonEnabled: false,
-                  onLongPress: _onMapLongPress,
                 ),
+                if (!_markingMode) ...[
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.all(12),
@@ -1065,6 +1124,86 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                   ),
                 ),
+                Positioned(
+                  bottom: 16,
+                  right: 16,
+                  child: FloatingActionButton.extended(
+                    heroTag: 'mark_restriction',
+                    onPressed: _enterMarkingMode,
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.teal.shade700,
+                    elevation: 3,
+                    icon: const Icon(Icons.add_location_alt),
+                    label: const Text('Marcar restrição'),
+                  ),
+                ),
+                ],
+                if (_markingMode) ...[
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: ColoredBox(color: Colors.black.withAlpha(25)),
+                    ),
+                  ),
+                  Positioned(
+                    top: 0, left: 0, right: 0,
+                    child: SafeArea(
+                      child: Center(
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            'Arraste o mapa até a restrição',
+                            style: TextStyle(color: Colors.white, fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Center(
+                    child: IgnorePointer(child: _Crosshair()),
+                  ),
+                  Positioned(
+                    bottom: 0, left: 0, right: 0,
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _exitMarkingMode,
+                                icon: const Icon(Icons.close),
+                                label: const Text('Cancelar'),
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: Colors.grey.shade700,
+                                  side: BorderSide(color: Colors.grey.shade300),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 2,
+                              child: FilledButton.icon(
+                                onPressed: _confirmMarkingPosition,
+                                icon: const Icon(Icons.check),
+                                label: const Text('Confirmar local'),
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1129,6 +1268,8 @@ class _ResultCard extends StatelessWidget {
             ),
           ),
         ),
+        if (result.usedTomTomData)
+          const _TomTomBanner(),
         if (result.restrictionsAvoided.isNotEmpty ||
             result.restrictionsBlocked.isNotEmpty)
           _RestrictionsBanner(
@@ -1420,6 +1561,40 @@ class _PoiSheet extends StatelessWidget {
   }
 }
 
+class _TomTomBanner extends StatelessWidget {
+  const _TomTomBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.teal.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.teal.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.verified_outlined, color: Colors.teal.shade700, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Rota otimizada com TomTom — restrições adicionais detectadas',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.teal.shade800,
+                    fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _RestrictionsBanner extends StatelessWidget {
   final List<BridgeRestriction> avoided;
   final List<BridgeRestriction> blocked;
@@ -1553,11 +1728,6 @@ class _AddRestrictionSheetState extends State<_AddRestrictionSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Marcar restrição', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            'Segure o dedo sobre uma ponte ou via restrita para marcar.',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-          ),
           const SizedBox(height: 16),
           Text('Tipo de restrição',
               style: TextStyle(
@@ -1678,6 +1848,148 @@ class _TypeChip extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── _MarkingOnboardingSheet ───────────────────────────────────────────────────
+
+class _MarkingOnboardingSheet extends StatelessWidget {
+  const _MarkingOnboardingSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.add_location_alt, color: primary, size: 22),
+              const SizedBox(width: 10),
+              Text('Marcar restrição de via',
+                  style: Theme.of(context).textTheme.titleMedium),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Use quando encontrar:',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const SizedBox(height: 10),
+          _OnboardingItem(Icons.height,         'Viaduto com altura limitada'),
+          _OnboardingItem(Icons.monitor_weight, 'Via com restrição de peso'),
+          _OnboardingItem(Icons.swap_horiz,     'Passagem com largura baixa'),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: primary.withAlpha(15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: primary.withAlpha(40)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline, size: 16, color: primary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Arraste o mapa até o local exato, confirme e informe o valor. '
+                    'Os dados coletados melhoram as rotas para todos os motoristas.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entendido'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OnboardingItem extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _OnboardingItem(this.icon, this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.grey.shade600),
+          const SizedBox(width: 12),
+          Text(text, style: const TextStyle(fontSize: 13)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── _Crosshair ────────────────────────────────────────────────────────────────
+
+class _Crosshair extends StatelessWidget {
+  const _Crosshair();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size(60, 60),
+      painter: _CrosshairPainter(Theme.of(context).colorScheme.primary),
+    );
+  }
+}
+
+class _CrosshairPainter extends CustomPainter {
+  final Color primaryColor;
+  const _CrosshairPainter(this.primaryColor);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    const gap = 8.0;
+
+    final shadow = Paint()
+      ..color = Colors.black38
+      ..strokeWidth = 4.0
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    final line = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawLine(Offset(0, cy), Offset(cx - gap, cy), shadow);
+    canvas.drawLine(Offset(cx + gap, cy), Offset(size.width, cy), shadow);
+    canvas.drawLine(Offset(cx, 0), Offset(cx, cy - gap), shadow);
+    canvas.drawLine(Offset(cx, cy + gap), Offset(cx, size.height), shadow);
+
+    canvas.drawLine(Offset(0, cy), Offset(cx - gap, cy), line);
+    canvas.drawLine(Offset(cx + gap, cy), Offset(size.width, cy), line);
+    canvas.drawLine(Offset(cx, 0), Offset(cx, cy - gap), line);
+    canvas.drawLine(Offset(cx, cy + gap), Offset(cx, size.height), line);
+
+    canvas.drawCircle(Offset(cx, cy), 5, Paint()..color = primaryColor);
+    canvas.drawCircle(Offset(cx, cy), 2.5, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ── _RestrictionDetailSheet ───────────────────────────────────────────────────
