@@ -431,13 +431,23 @@ class _NavigationScreenState extends State<NavigationScreen>
     final fraction  = totalM > 0 ? (remaining / totalM).clamp(0.0, 1.0) : 0.0;
     final remSec    = (_result.durationSeconds * fraction).round();
 
+    final pts = _result.polylinePoints;
+    final splitIdx = _closestPolylineIdx.clamp(0, pts.length - 1);
     final polylines = <Polyline>{
-      Polyline(
-        polylineId: const PolylineId('nav_route'),
-        points: _result.polylinePoints,
-        color: const Color(0xFF1565C0),
-        width: 7,
-      ),
+      if (splitIdx >= 1)
+        Polyline(
+          polylineId: const PolylineId('nav_traveled'),
+          points: pts.sublist(0, splitIdx + 1),
+          color: Colors.blueGrey.shade300,
+          width: 5,
+        ),
+      if (splitIdx < pts.length - 1)
+        Polyline(
+          polylineId: const PolylineId('nav_remaining'),
+          points: pts.sublist(splitIdx),
+          color: const Color(0xFF1565C0),
+          width: 7,
+        ),
     };
 
     final markers = <Marker>{
