@@ -22,6 +22,7 @@ import '../services/here_geocoding_service.dart';
 import '../services/radar_service.dart';
 import '../widgets/address_search_field.dart';
 import '../widgets/add_restriction_sheet.dart';
+import '../widgets/crosshair.dart';
 import 'truck_profile_screen.dart';
 import 'navigation_screen.dart';
 import '../models/user_restriction.dart';
@@ -1236,7 +1237,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     ),
                   ),
                   const Center(
-                    child: IgnorePointer(child: _Crosshair()),
+                    child: IgnorePointer(child: MapCrosshair()),
                   ),
                   Positioned(
                     bottom: 0, left: 0, right: 0,
@@ -1845,60 +1846,6 @@ class _OnboardingItem extends StatelessWidget {
       ),
     );
   }
-}
-
-// ── _Crosshair ────────────────────────────────────────────────────────────────
-
-class _Crosshair extends StatelessWidget {
-  const _Crosshair();
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: const Size(60, 60),
-      painter: _CrosshairPainter(Theme.of(context).colorScheme.primary),
-    );
-  }
-}
-
-class _CrosshairPainter extends CustomPainter {
-  final Color primaryColor;
-  const _CrosshairPainter(this.primaryColor);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-    const gap = 8.0;
-
-    final shadow = Paint()
-      ..color = Colors.black38
-      ..strokeWidth = 4.0
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final line = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawLine(Offset(0, cy), Offset(cx - gap, cy), shadow);
-    canvas.drawLine(Offset(cx + gap, cy), Offset(size.width, cy), shadow);
-    canvas.drawLine(Offset(cx, 0), Offset(cx, cy - gap), shadow);
-    canvas.drawLine(Offset(cx, cy + gap), Offset(cx, size.height), shadow);
-
-    canvas.drawLine(Offset(0, cy), Offset(cx - gap, cy), line);
-    canvas.drawLine(Offset(cx + gap, cy), Offset(size.width, cy), line);
-    canvas.drawLine(Offset(cx, 0), Offset(cx, cy - gap), line);
-    canvas.drawLine(Offset(cx, cy + gap), Offset(cx, size.height), line);
-
-    canvas.drawCircle(Offset(cx, cy), 5, Paint()..color = primaryColor);
-    canvas.drawCircle(Offset(cx, cy), 2.5, Paint()..color = Colors.white);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ── _RestrictionDetailSheet ───────────────────────────────────────────────────

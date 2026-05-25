@@ -20,6 +20,7 @@ import '../services/here_routing_service.dart';
 import '../services/radar_service.dart';
 import '../services/restriction_service.dart';
 import '../widgets/add_restriction_sheet.dart';
+import '../widgets/crosshair.dart';
 
 class NavigationScreen extends StatefulWidget {
   final RouteResult result;
@@ -70,6 +71,9 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   final List<UserRestriction> _userRestrictions = [];
   final _restrictionIconCache = <String, BitmapDescriptor>{};
+
+  bool _markingMode = false;
+  LatLng _cameraTarget = const LatLng(-15.788, -47.879);
   BitmapDescriptor? _userArrowIcon;
 
   static const _offRouteThresholdM = 80.0;
@@ -104,7 +108,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
-    _recenter();
+    if (!_markingMode) _recenter();
     if (_muted) return;
     final maneuvers = _result.maneuvers;
     if (_maneuverIndex >= maneuvers.length) return;
@@ -210,15 +214,17 @@ class _NavigationScreenState extends State<NavigationScreen>
       _upcomingRadar        = upcoming;
     });
 
-    // 5. Câmera segue o usuário
-    _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(CameraPosition(
-        target:  latLng,
-        zoom:    17,
-        tilt:    45,
-        bearing: pos.heading,
-      )),
-    );
+    // 5. Câmera segue o usuário (pausada no modo crosshair)
+    if (!_markingMode) {
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(CameraPosition(
+          target:  latLng,
+          zoom:    17,
+          tilt:    45,
+          bearing: pos.heading,
+        )),
+      );
+    }
   }
 
   // ── TTS por threshold de distância ───────────────────────────────────────────
@@ -460,18 +466,29 @@ class _NavigationScreenState extends State<NavigationScreen>
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
-  // ── Marcar restrição na posição atual ─────────────────────────────────────────
+  // ── Marcar restrição — fluxo crosshair ───────────────────────────────────────
 
-  Future<void> _markRestrictionAtCurrentPos() async {
-    final pos = _currentPos;
-    if (pos == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('GPS ainda não disponível')),
-        );
-      }
-      return;
-    }
+  void _enterMarkingMode() {
+    final pos = _currentPos ?? widget.destination;
+    _cameraTarget = pos;
+    setState(() => _markingMode = true);
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(CameraPosition(
+        target: pos,
+        zoom: 17,
+        tilt: 0,
+      )),
+    );
+  }
+
+  void _exitMarkingMode() {
+    setState(() => _markingMode = false);
+    _recenter();
+  }
+
+  Future<void> _confirmMarkingPosition() async {
+    final pos = _cameraTarget;
+    setState(() => _markingMode = false);
     final repo = context.read<RestrictionRepository>();
     final r = await showModalBottomSheet<UserRestriction>(
       context: context,
@@ -479,12 +496,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => AddRestrictionSheet(
-        position: pos,
-        saveLabel: 'Registrar restrição',
-      ),
+      builder: (_) => AddRestrictionSheet(position: pos),
     );
-    if (r == null || !mounted) return;
+    if (r == null || !mounted) { _recenter(); return; }
     await RestrictionService.add(r);
     () async {
       try {
@@ -497,9 +511,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (!mounted) return;
     _restrictionIconCache[key] = icon;
     setState(() => _userRestrictions.add(r));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Restrição registrada. Obrigado!')),
-    );
+    _recenter();
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
@@ -618,6 +630,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                           tilt: 45,
                         ),
                         onMapCreated: (c) => _mapController = c,
+                        onCameraMove: (pos) => _cameraTarget = pos.target,
                         polylines: polylines,
                         markers: markers,
                         trafficEnabled: true,
@@ -627,33 +640,101 @@ class _NavigationScreenState extends State<NavigationScreen>
                       );
                     },
                   ),
-                  // Botão marcar restrição
-                  Positioned(
-                    bottom: 64,
-                    right: 12,
-                    child: FloatingActionButton.small(
-                      heroTag: 'nav_mark_restriction',
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.teal.shade700,
-                      elevation: 4,
-                      tooltip: 'Marcar restrição aqui',
-                      onPressed: _markRestrictionAtCurrentPos,
-                      child: const Icon(Icons.add_location_alt),
+                  if (!_markingMode) ...[
+                    // Botão marcar restrição
+                    Positioned(
+                      bottom: 64,
+                      right: 12,
+                      child: FloatingActionButton.small(
+                        heroTag: 'nav_mark_restriction',
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.teal.shade700,
+                        elevation: 4,
+                        tooltip: 'Marcar restrição',
+                        onPressed: _enterMarkingMode,
+                        child: const Icon(Icons.add_location_alt),
+                      ),
                     ),
-                  ),
-                  // Botão centralizar
-                  Positioned(
-                    bottom: 12,
-                    right: 12,
-                    child: FloatingActionButton.small(
-                      heroTag: 'nav_recenter',
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF1565C0),
-                      elevation: 4,
-                      onPressed: _recenter,
-                      child: const Icon(Icons.my_location),
+                    // Botão centralizar
+                    Positioned(
+                      bottom: 12,
+                      right: 12,
+                      child: FloatingActionButton.small(
+                        heroTag: 'nav_recenter',
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF1565C0),
+                        elevation: 4,
+                        onPressed: _recenter,
+                        child: const Icon(Icons.my_location),
+                      ),
                     ),
-                  ),
+                  ],
+                  if (_markingMode) ...[
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: ColoredBox(color: Colors.black.withAlpha(25)),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0, left: 0, right: 0,
+                      child: SafeArea(
+                        child: Center(
+                          child: Container(
+                            margin: const EdgeInsets.only(top: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'Arraste o mapa até a restrição',
+                              style: TextStyle(color: Colors.white, fontSize: 13),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Center(
+                      child: IgnorePointer(child: MapCrosshair()),
+                    ),
+                    Positioned(
+                      bottom: 0, left: 0, right: 0,
+                      child: SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _exitMarkingMode,
+                                  icon: const Icon(Icons.close),
+                                  label: const Text('Cancelar'),
+                                  style: OutlinedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: Colors.grey.shade700,
+                                    side: BorderSide(color: Colors.grey.shade300),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: FilledButton.icon(
+                                  onPressed: _confirmMarkingPosition,
+                                  icon: const Icon(Icons.check),
+                                  label: const Text('Confirmar local'),
+                                  style: FilledButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
