@@ -6,14 +6,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/radar_point.dart';
 import '../models/route_maneuver.dart';
 import '../models/route_result.dart';
 import '../models/truck_profile.dart';
+import '../models/user_restriction.dart';
+import '../repositories/restriction_repository.dart';
+import '../services/auth_service.dart';
 import '../services/here_routing_service.dart';
 import '../services/radar_service.dart';
+import '../services/restriction_service.dart';
+import '../widgets/add_restriction_sheet.dart';
 
 class NavigationScreen extends StatefulWidget {
   final RouteResult result;
@@ -61,6 +67,9 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   // Cache de ícones para radares
   final _iconCache = <String, BitmapDescriptor>{};
+
+  final List<UserRestriction> _userRestrictions = [];
+  final _restrictionIconCache = <String, BitmapDescriptor>{};
   BitmapDescriptor? _userArrowIcon;
 
   static const _offRouteThresholdM = 80.0;
@@ -417,6 +426,82 @@ class _NavigationScreenState extends State<NavigationScreen>
     );
   }
 
+  // ── Ícone de restrição (badge colorido) ──────────────────────────────────────
+
+  static Future<BitmapDescriptor> _buildRestrictionIcon(UserRestriction r) async {
+    const iconH = 20.0;
+    final bgColor = switch (r.type) {
+      'maxheight' => Colors.red.shade700,
+      'maxweight' => Colors.brown.shade600,
+      _           => Colors.deepOrange.shade600,
+    };
+    final text = switch (r.type) {
+      'maxheight' => '${r.value.toStringAsFixed(1)}m',
+      'maxweight' => '${r.value.toStringAsFixed(0)}t',
+      _           => '${r.value.toStringAsFixed(1)}m',
+    };
+    final tp = TextPainter(textDirection: TextDirection.ltr)
+      ..text = TextSpan(
+        text: text,
+        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+      )
+      ..layout();
+    final iconW = (tp.width + 14).ceilToDouble();
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, iconW, iconH), const Radius.circular(4)),
+      Paint()..color = bgColor,
+    );
+    tp.paint(canvas, Offset(7, (iconH - tp.height) / 2));
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(iconW.toInt(), iconH.toInt());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+  }
+
+  // ── Marcar restrição na posição atual ─────────────────────────────────────────
+
+  Future<void> _markRestrictionAtCurrentPos() async {
+    final pos = _currentPos;
+    if (pos == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('GPS ainda não disponível')),
+        );
+      }
+      return;
+    }
+    final repo = context.read<RestrictionRepository>();
+    final r = await showModalBottomSheet<UserRestriction>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => AddRestrictionSheet(
+        position: pos,
+        saveLabel: 'Registrar restrição',
+      ),
+    );
+    if (r == null || !mounted) return;
+    await RestrictionService.add(r);
+    () async {
+      try {
+        final uid = await AuthService.getUid();
+        await repo.add(r, uid);
+      } catch (_) {}
+    }();
+    final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+    final icon = await _buildRestrictionIcon(r);
+    if (!mounted) return;
+    _restrictionIconCache[key] = icon;
+    setState(() => _userRestrictions.add(r));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Restrição registrada. Obrigado!')),
+    );
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────────
 
   @override
@@ -508,6 +593,24 @@ class _NavigationScreenState extends State<NavigationScreen>
                           ));
                         }
                       }
+                      for (final r in _userRestrictions) {
+                        final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+                        final icon = _restrictionIconCache[key];
+                        if (icon != null) {
+                          markers.add(Marker(
+                            markerId: MarkerId(key),
+                            position: LatLng(r.lat, r.lng),
+                            icon: icon,
+                            infoWindow: InfoWindow(
+                              title: switch (r.type) {
+                                'maxheight' => 'Altura máx. ${r.value.toStringAsFixed(1)}m',
+                                'maxweight' => 'Peso máx. ${r.value.toStringAsFixed(0)}t',
+                                _           => 'Largura máx. ${r.value.toStringAsFixed(1)}m',
+                              },
+                            ),
+                          ));
+                        }
+                      }
                       return GoogleMap(
                         initialCameraPosition: CameraPosition(
                           target: _currentPos ?? widget.destination,
@@ -523,6 +626,20 @@ class _NavigationScreenState extends State<NavigationScreen>
                         compassEnabled: false,
                       );
                     },
+                  ),
+                  // Botão marcar restrição
+                  Positioned(
+                    bottom: 64,
+                    right: 12,
+                    child: FloatingActionButton.small(
+                      heroTag: 'nav_mark_restriction',
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.teal.shade700,
+                      elevation: 4,
+                      tooltip: 'Marcar restrição aqui',
+                      onPressed: _markRestrictionAtCurrentPos,
+                      child: const Icon(Icons.add_location_alt),
+                    ),
                   ),
                   // Botão centralizar
                   Positioned(
