@@ -354,23 +354,44 @@ class _NavigationScreenState extends State<NavigationScreen>
     final k500 = idx * 10 + 0;
     final k200 = idx * 10 + 1;
     final k50  = idx * 10 + 2;
-    // Turns e rotatórias têm aviso antecipado (500m/200m/50m).
-    // Manobras sem mudança de direção (keep, continue, etc.) só a 50m.
-    final isDirectional = m.action == 'turn' || m.action == 'roundaboutExit';
 
-    if (distM <= 50 && !_announced.contains(k50)) {
-      _announced.add(k50);
-      _announced.add(k200);
-      _announced.add(k500);
-      _speak(m.instruction);
-    } else if (isDirectional && distM <= 200 && !_announced.contains(k200)) {
-      _announced.add(k200);
-      _announced.add(k500);
-      _speak('Em 200 metros, ${m.instruction}');
-    } else if (isDirectional && _audioLevel == AudioLevel.completo && distM <= 500 && !_announced.contains(k500)) {
-      _announced.add(k500);
-      _speak('Em 500 metros, ${m.instruction}');
+    // Classificação por relevância de voz:
+    // isTurn    — curva / rotatória → aviso completo
+    // isExit    — saída de rodovia / rampa → aviso intermediário
+    // else      — continue/keep/straight → sem voz (só visual)
+    final isTurn = m.action == 'turn' || m.action == 'roundaboutExit';
+    final isExit = m.action == 'exit'  || m.action == 'ramp' ||
+                   m.action == 'keepLeft' || m.action == 'keepRight';
+
+    if (isTurn) {
+      // 500m só no nível completo
+      if (_audioLevel == AudioLevel.completo && distM <= 500 && !_announced.contains(k500)) {
+        _announced.add(k500);
+        _speak('Em 500 metros, ${m.instruction}');
+      } else if (distM <= 200 && !_announced.contains(k200)) {
+        _announced.add(k200);
+        _announced.add(k500);
+        _speak('Em 200 metros, ${m.instruction}');
+      } else if (distM <= 50 && !_announced.contains(k50)) {
+        _announced.add(k50);
+        _announced.add(k200);
+        _announced.add(k500);
+        _speak(m.instruction);
+      }
+    } else if (isExit) {
+      // Saídas: 200m no completo, 50m em ambos
+      if (_audioLevel == AudioLevel.completo && distM <= 200 && !_announced.contains(k200)) {
+        _announced.add(k200);
+        _announced.add(k500);
+        _speak('Em 200 metros, ${m.instruction}');
+      } else if (distM <= 50 && !_announced.contains(k50)) {
+        _announced.add(k50);
+        _announced.add(k200);
+        _announced.add(k500);
+        _speak(m.instruction);
+      }
     }
+    // continue/keep/straight: silêncio total — só aparece na _InstructionBar
   }
 
   // ── Alerta de restrição bloqueada ────────────────────────────────────────────
