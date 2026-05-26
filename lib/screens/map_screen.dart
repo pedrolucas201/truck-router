@@ -767,7 +767,29 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           );
         }
       } catch (_) {}
+    }
 
+    // Sheet de escolha quando rota com terra é significativamente mais rápida.
+    if (!mounted) return;
+    final finalResult = context.read<RouteProvider>().result;
+    if (finalResult?.dirtRoadAlternative != null) {
+      await showModalBottomSheet<void>(
+        context: context,
+        isDismissible: false,
+        enableDrag: false,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (ctx) => _DirtRoadChoiceSheet(
+          safeRoute: finalResult!,
+          dirtyRoute: finalResult.dirtRoadAlternative!,
+          onChooseDirty: () {
+            context.read<RouteProvider>().useDirtRoadRoute();
+            Navigator.pop(ctx);
+          },
+          onChooseSafe: () => Navigator.pop(ctx),
+        ),
+      );
     }
   }
 
@@ -1909,6 +1931,137 @@ class _RestrictionDetailSheet extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Colors.red),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Sheet de escolha: rota segura vs rota com estrada de terra ─────────────────
+
+class _DirtRoadChoiceSheet extends StatelessWidget {
+  final RouteResult safeRoute;
+  final RouteResult dirtyRoute;
+  final VoidCallback onChooseSafe;
+  final VoidCallback onChooseDirty;
+
+  const _DirtRoadChoiceSheet({
+    required this.safeRoute,
+    required this.dirtyRoute,
+    required this.onChooseSafe,
+    required this.onChooseDirty,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final savingMin = (safeRoute.durationSeconds - dirtyRoute.durationSeconds) ~/ 60;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.fork_right, size: 22),
+              const SizedBox(width: 8),
+              Text('Duas rotas disponíveis',
+                  style: Theme.of(context).textTheme.titleMedium),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _RouteOption(
+            icon: Icons.verified_outlined,
+            iconColor: Colors.green.shade700,
+            title: 'Rota pavimentada',
+            subtitle: '${safeRoute.durationText}  •  ${safeRoute.distanceText}',
+            note: null,
+          ),
+          const SizedBox(height: 10),
+          _RouteOption(
+            icon: Icons.warning_amber_rounded,
+            iconColor: Colors.orange.shade700,
+            title: 'Rota com estrada de terra',
+            subtitle: '${dirtyRoute.durationText}  •  ${dirtyRoute.distanceText}',
+            note: '$savingMin min mais rápida — pode ser intransitável para carretas',
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onChooseSafe,
+                  icon: const Icon(Icons.verified_outlined),
+                  label: const Text('Rota segura'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.orange.shade700,
+                  ),
+                  onPressed: onChooseDirty,
+                  icon: const Icon(Icons.warning_amber_rounded),
+                  label: const Text('Eu decido'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RouteOption extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final String? note;
+
+  const _RouteOption({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.note,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: iconColor, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14)),
+                Text(subtitle,
+                    style: TextStyle(
+                        fontSize: 13, color: Colors.grey.shade700)),
+                if (note != null) ...[
+                  const SizedBox(height: 4),
+                  Text(note!,
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.orange.shade800)),
+                ],
+              ],
             ),
           ),
         ],

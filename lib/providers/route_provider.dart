@@ -37,7 +37,7 @@ class RouteProvider extends ChangeNotifier {
     try {
       final deptTime = departureTime?.toIso8601String().split('.').first;
 
-      // TomTom roda em paralelo desde o início — não adiciona latência.
+      // TomTom e rota sem filtro de terra rodam em paralelo desde o início.
       final tomtomFuture = () async {
         try {
           return await TomTomRoutingService.calculateRoute(
@@ -46,6 +46,23 @@ class RouteProvider extends ChangeNotifier {
             truck:         truck,
             departureTime: deptTime,
             waypoints:     waypoints,
+          );
+        } catch (_) {
+          return null;
+        }
+      }();
+
+      // Rota B (sem evitar terra) para comparação de threshold.
+      final dirtRoadFuture = () async {
+        try {
+          return await HereRoutingService.calculateRoute(
+            origin:        origin,
+            destination:   destination,
+            truck:         truck,
+            departureTime: deptTime,
+            waypoints:     waypoints,
+            avoidAreas:    manualAvoidAreas,
+            avoidDirtRoad: false,
           );
         } catch (_) {
           return null;
@@ -108,6 +125,15 @@ class RouteProvider extends ChangeNotifier {
         );
       }
 
+      // 5. Rota com terra: oferece escolha se economizar ≥15min E ≥20% do tempo.
+      final dirtResult = await dirtRoadFuture;
+      if (dirtResult != null) {
+        final saving = result.durationSeconds - dirtResult.durationSeconds;
+        if (saving >= 15 * 60 && saving >= result.durationSeconds * 0.20) {
+          result = result.copyWith(dirtRoadAlternative: dirtResult);
+        }
+      }
+
       _result = result;
       _status = RouteStatus.success;
     } catch (e) {
@@ -115,6 +141,15 @@ class RouteProvider extends ChangeNotifier {
       _status = RouteStatus.error;
     }
 
+    notifyListeners();
+  }
+
+  void useDirtRoadRoute() {
+    if (_result?.dirtRoadAlternative == null) return;
+    _result = _result!.dirtRoadAlternative!.copyWith(
+      restrictionsAvoided: _result!.restrictionsAvoided,
+      restrictionsBlocked: _result!.restrictionsBlocked,
+    );
     notifyListeners();
   }
 

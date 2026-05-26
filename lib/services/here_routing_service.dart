@@ -13,17 +13,18 @@ class HereRoutingService {
     required LatLng destination,
     required TruckProfile truck,
     String? departureTime,
-    List<LatLng> waypoints  = const [],
-    List<String> avoidAreas = const [],
+    List<LatLng> waypoints   = const [],
+    List<String> avoidAreas  = const [],
+    bool avoidDirtRoad        = true,
   }) async {
     final params = <String, dynamic>{
       'transportMode':   'truck',
       'origin':          '${origin.latitude},${origin.longitude}',
       'destination':     '${destination.latitude},${destination.longitude}',
-      'return':          'polyline,summary,actions',
+      'return':          'polyline,summary,actions,notices',
       'lang':            'pt-BR',
       'apikey':          hereApiKey,
-      'avoid[features]': 'dirtRoad',
+      if (avoidDirtRoad) 'avoid[features]': 'dirtRoad',
       ...truck.toHereParams(),
       'departureTime': ?departureTime,
       if (waypoints.isNotEmpty)
@@ -57,7 +58,18 @@ class HereRoutingService {
     final routes = data['routes'] as List<dynamic>;
     if (routes.isEmpty) throw Exception('Nenhuma rota encontrada');
 
-    final sections = (routes[0] as Map<String, dynamic>)['sections'] as List<dynamic>;
+    final route0   = routes[0] as Map<String, dynamic>;
+    final sections = route0['sections'] as List<dynamic>;
+
+    // violatedVehicleRestriction inclui restrições de horário para caminhões.
+    final routeNotices = route0['notices'] as List<dynamic>? ?? [];
+    final sectionNotices = sections
+        .cast<Map<String, dynamic>>()
+        .expand((s) => s['notices'] as List<dynamic>? ?? [])
+        .toList();
+    final hasTimeRestriction = [...routeNotices, ...sectionNotices]
+        .cast<Map<String, dynamic>>()
+        .any((n) => n['code'] == 'violatedVehicleRestriction');
 
     final allPoints   = <LatLng>[];
     final allManeuvers = <RouteManeuver>[];
@@ -97,10 +109,11 @@ class HereRoutingService {
     }
 
     return RouteResult(
-      polylinePoints:  allPoints,
-      distanceMeters:  totalDistance,
-      durationSeconds: totalDuration,
-      maneuvers:       allManeuvers,
+      polylinePoints:    allPoints,
+      distanceMeters:    totalDistance,
+      durationSeconds:   totalDuration,
+      maneuvers:         allManeuvers,
+      hasTimeRestriction: hasTimeRestriction,
     );
   }
 }

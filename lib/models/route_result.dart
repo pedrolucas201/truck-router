@@ -10,15 +10,19 @@ class RouteResult {
   final List<BridgeRestriction> restrictionsAvoided;
   final List<BridgeRestriction> restrictionsBlocked;
   final bool usedTomTomData;
+  final bool hasTimeRestriction;
+  final RouteResult? dirtRoadAlternative;
 
   const RouteResult({
     required this.polylinePoints,
     required this.distanceMeters,
     required this.durationSeconds,
-    this.maneuvers           = const [],
-    this.restrictionsAvoided = const [],
-    this.restrictionsBlocked = const [],
-    this.usedTomTomData      = false,
+    this.maneuvers            = const [],
+    this.restrictionsAvoided  = const [],
+    this.restrictionsBlocked  = const [],
+    this.usedTomTomData       = false,
+    this.hasTimeRestriction   = false,
+    this.dirtRoadAlternative  ,
   });
 
   RouteResult copyWith({
@@ -29,6 +33,8 @@ class RouteResult {
     List<BridgeRestriction>? restrictionsAvoided,
     List<BridgeRestriction>? restrictionsBlocked,
     bool? usedTomTomData,
+    bool? hasTimeRestriction,
+    RouteResult? dirtRoadAlternative,
   }) => RouteResult(
     polylinePoints:      polylinePoints      ?? this.polylinePoints,
     distanceMeters:      distanceMeters      ?? this.distanceMeters,
@@ -37,6 +43,8 @@ class RouteResult {
     restrictionsAvoided: restrictionsAvoided ?? this.restrictionsAvoided,
     restrictionsBlocked: restrictionsBlocked ?? this.restrictionsBlocked,
     usedTomTomData:      usedTomTomData      ?? this.usedTomTomData,
+    hasTimeRestriction:  hasTimeRestriction  ?? this.hasTimeRestriction,
+    dirtRoadAlternative: dirtRoadAlternative ?? this.dirtRoadAlternative,
   );
 
   String get distanceText {

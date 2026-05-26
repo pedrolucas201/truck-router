@@ -31,6 +31,7 @@ class HereGeocodingService {
     final hereResults = await Future.wait([
       _autocomplete(query, bias: bias),
       _geocodePlaces(query, bias: bias),
+      _discoverPlaces(query, bias: bias),
     ]);
 
     final merged   = <GeocodingSuggestion>[];
@@ -103,6 +104,43 @@ class HereGeocodingService {
           return GeocodingSuggestion.place(
             title: i['address']?['label'] as String? ?? i['title'] as String,
             pos:   LatLng(
+              (pos['lat'] as num).toDouble(),
+              (pos['lng'] as num).toDouble(),
+            ),
+          );
+        })
+        .toList();
+  }
+
+  // Discover HERE: busca livre por nome de empresa, POI e endereço.
+  // Endpoint específico para texto livre — cobre o que /geocode não encontra por nome.
+  static Future<List<GeocodingSuggestion>> _discoverPlaces(
+      String query, {LatLng? bias}) async {
+    // /v1/discover exige 'at'; sem bias usa Brasília como âncora neutra para o Brasil.
+    final at = bias != null
+        ? '${bias.latitude},${bias.longitude}'
+        : '-15.7801,-47.9292';
+    final params = <String, String>{
+      'q':      query,
+      'lang':   'pt-BR',
+      'limit':  '5',
+      'in':     'countryCode:BRA',
+      'at':     at,
+      'apikey': hereApiKey,
+    };
+    final response = await http.get(
+        Uri.https('discover.search.hereapi.com', '/v1/discover', params));
+    if (response.statusCode != 200) return [];
+
+    final items = jsonDecode(response.body)['items'] as List<dynamic>? ?? [];
+    return items
+        .cast<Map<String, dynamic>>()
+        .where((i) => i['position'] != null)
+        .map((i) {
+          final pos = i['position'] as Map<String, dynamic>;
+          return GeocodingSuggestion.place(
+            title: i['address']?['label'] as String? ?? i['title'] as String,
+            pos: LatLng(
               (pos['lat'] as num).toDouble(),
               (pos['lng'] as num).toDouble(),
             ),

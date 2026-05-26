@@ -98,6 +98,8 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   BridgeRestriction? _nearbyBlockedRestriction;
   String? _lastRestrictionAlertKey;
+  bool _hasTimeRestrictionAlert  = false;
+  bool _timeRestrictionAlertSpoken = false;
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
 
@@ -410,17 +412,24 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   // ── Alerta de restrição bloqueada ────────────────────────────────────────────
 
+  void _updatePulse() {
+    final active = _nearbyBlockedRestriction != null || _hasTimeRestrictionAlert;
+    if (active) {
+      if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
+    } else {
+      _pulseController.stop();
+      _pulseController.reset();
+    }
+  }
+
   void _updateRestrictionAlert(BridgeRestriction? restriction) {
     final key = restriction != null ? '${restriction.lat}_${restriction.lng}' : null;
     if (key == _lastRestrictionAlertKey) return;
     _lastRestrictionAlertKey = key;
     if (restriction != null) {
       _speak('Atenção! ${restriction.label} à frente');
-      _pulseController.repeat(reverse: true);
-    } else {
-      _pulseController.stop();
-      _pulseController.reset();
     }
+    _updatePulse();
   }
 
   // ── Re-roteamento ─────────────────────────────────────────────────────────────
@@ -448,14 +457,22 @@ class _NavigationScreenState extends State<NavigationScreen>
       ).where((r) => !(r.type.toLowerCase().contains('lombada') && r.speedKmh == 0)).toList();
       if (!mounted) return;
       setState(() {
-        _result             = newResult;
-        _radares            = nearby;
-        _closestPolylineIdx = 0;
-        _maneuverIndex      = 0;
-        _distToNextManeuver = double.infinity;
+        _result                  = newResult;
+        _radares                 = nearby;
+        _closestPolylineIdx      = 0;
+        _maneuverIndex           = 0;
+        _distToNextManeuver      = double.infinity;
+        _hasTimeRestrictionAlert = newResult.hasTimeRestriction;
         _announced.clear();
         _iconCache.clear();
       });
+      if (newResult.hasTimeRestriction && !_timeRestrictionAlertSpoken) {
+        _timeRestrictionAlertSpoken = true;
+        _speak('Atenção! Restrição de horário para caminhões nesta via');
+      } else if (!newResult.hasTimeRestriction) {
+        _timeRestrictionAlertSpoken = false;
+      }
+      _updatePulse();
       // Só anuncia se nível completo e rota mudou significativamente (>500m)
       if (_audioLevel == AudioLevel.completo &&
           (newResult.distanceMeters - prevDistM).abs() > 500) {
@@ -819,8 +836,8 @@ class _NavigationScreenState extends State<NavigationScreen>
                       );
                     },
                   ),
-                  // ── Alerta restrição bloqueada ──────────────────────────
-                  if (_nearbyBlockedRestriction != null && !_markingMode) ...[
+                  // ── Alerta restrição bloqueada / horário ────────────────
+                  if ((_nearbyBlockedRestriction != null || _hasTimeRestrictionAlert) && !_markingMode) ...[
                     Positioned.fill(
                       child: IgnorePointer(
                         child: AnimatedBuilder(
@@ -848,12 +865,19 @@ class _NavigationScreenState extends State<NavigationScreen>
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.warning_amber_rounded,
-                                  color: Colors.white, size: 24),
+                              Icon(
+                                _nearbyBlockedRestriction != null
+                                    ? Icons.warning_amber_rounded
+                                    : Icons.schedule,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  _nearbyBlockedRestriction!.label,
+                                  _nearbyBlockedRestriction != null
+                                      ? _nearbyBlockedRestriction!.label
+                                      : 'Restrição de horário para caminhões nesta via',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 15,
