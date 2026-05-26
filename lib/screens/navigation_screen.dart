@@ -147,7 +147,18 @@ class _NavigationScreenState extends State<NavigationScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
-    if (!_markingMode) _recenter();
+    // moveCamera (instantâneo) evita giros: animateCamera competia com
+    // os primeiros updates de GPS no resume e causava rotações bruscas.
+    if (!_markingMode && _currentPos != null && _mapController != null) {
+      _mapController!.moveCamera(
+        CameraUpdate.newCameraPosition(CameraPosition(
+          target:  _currentPos!,
+          zoom:    _zoom,
+          tilt:    45,
+          bearing: _bearing,
+        )),
+      );
+    }
     if (!_hasFirstFix) return;
     if (_audioLevel == AudioLevel.silencioso) return;
     final maneuvers = _result.maneuvers;
