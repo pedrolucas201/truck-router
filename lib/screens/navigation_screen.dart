@@ -92,6 +92,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   final _restrictionIconCache = <String, BitmapDescriptor>{};
 
   bool _markingMode = false;
+  bool _hasFirstFix = false;
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
   BitmapDescriptor? _userArrowIcon;
 
@@ -147,6 +148,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     if (!_markingMode) _recenter();
+    if (!_hasFirstFix) return;
     if (_audioLevel == AudioLevel.silencioso) return;
     final maneuvers = _result.maneuvers;
     if (_maneuverIndex >= maneuvers.length) return;
@@ -253,6 +255,7 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   void _onPositionUpdate(Position pos) {
     if (!mounted) return;
+    _hasFirstFix = true;
     final latLng = LatLng(pos.latitude, pos.longitude);
 
     // 1. Ponto mais próximo na polyline (busca a partir do índice atual)
