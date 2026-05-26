@@ -7,6 +7,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -24,7 +25,20 @@ import '../services/restriction_service.dart';
 import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
 
+@pragma('vm:entry-point')
+void _navForegroundCallback() {
+  FlutterForegroundTask.setTaskHandler(_NavTaskHandler());
+}
+
+class _NavTaskHandler extends TaskHandler {
+  @override Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
+  @override void onRepeatEvent(DateTime timestamp) {}
+  @override Future<void> onDestroy(DateTime timestamp) async {}
+}
+
 enum AudioLevel { completo, essencial, silencioso }
+
+enum ZoomLevel { recuado, medio, aproximado }
 
 class NavigationScreen extends StatefulWidget {
   final RouteResult result;
@@ -64,6 +78,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   int _maneuverIndex = 0;
   double _distToNextManeuver = double.infinity;
   AudioLevel _audioLevel = AudioLevel.completo;
+  ZoomLevel _zoomLevel = ZoomLevel.medio;
   bool _isRerouting = false;
   Timer? _refreshTimer;
   int _offRouteCount = 0;
@@ -90,6 +105,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   static const _radarAlertM = 400.0;
   static const _restrictionAlertM = 300.0;
   static const _prefAudioLevel = 'nav_audio_level';
+  static const _prefZoomLevel  = 'nav_zoom_level';
 
   @override
   void initState() {
@@ -104,6 +120,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     _pulseAnimation = Tween<double>(begin: 0.12, end: 0.48)
         .animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
     _loadAudioLevel();
+    _loadZoomLevel();
+    _startForegroundService();
     _initTts();
     _startGps();
     _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
@@ -120,6 +138,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _posSub?.cancel();
     _tts.stop();
     _pulseController.dispose();
+    FlutterForegroundTask.stopService();
     WakelockPlus.disable();
     super.dispose();
   }
@@ -149,6 +168,32 @@ class _NavigationScreenState extends State<NavigationScreen>
     _tts.setVolume(1.0);
   }
 
+  Future<void> _startForegroundService() async {
+    FlutterForegroundTask.init(
+      androidNotificationOptions: AndroidNotificationOptions(
+        channelId: 'nav_service',
+        channelName: 'Navegação ativa',
+        channelDescription: 'GPS ativo em segundo plano',
+        channelImportance: NotificationChannelImportance.LOW,
+        priority: NotificationPriority.LOW,
+      ),
+      iosNotificationOptions: const IOSNotificationOptions(showNotification: false),
+      foregroundTaskOptions: ForegroundTaskOptions(
+        eventAction: ForegroundTaskEventAction.nothing(),
+        autoRunOnBoot: false,
+        allowWifiLock: false,
+      ),
+    );
+    await FlutterForegroundTask.startService(
+      serviceId: 256,
+      notificationTitle: 'Navegando',
+      notificationText: widget.destinationLabel.isNotEmpty
+          ? 'Destino: ${widget.destinationLabel}'
+          : 'GPS ativo',
+      callback: _navForegroundCallback,
+    );
+  }
+
   Future<void> _loadAudioLevel() async {
     final prefs = await SharedPreferences.getInstance();
     final idx = prefs.getInt(_prefAudioLevel) ?? 0;
@@ -165,6 +210,30 @@ class _NavigationScreenState extends State<NavigationScreen>
     setState(() => _audioLevel = next);
     _saveAudioLevel(next);
   }
+
+  Future<void> _loadZoomLevel() async {
+    final prefs = await SharedPreferences.getInstance();
+    final idx = prefs.getInt(_prefZoomLevel) ?? 1;
+    if (mounted) setState(() => _zoomLevel = ZoomLevel.values[idx.clamp(0, 2)]);
+  }
+
+  Future<void> _saveZoomLevel(ZoomLevel level) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefZoomLevel, level.index);
+  }
+
+  void _cycleZoomLevel() {
+    final next = ZoomLevel.values[(_zoomLevel.index + 1) % ZoomLevel.values.length];
+    setState(() => _zoomLevel = next);
+    _saveZoomLevel(next);
+    _recenter();
+  }
+
+  double get _zoom => switch (_zoomLevel) {
+    ZoomLevel.recuado    => 15.0,
+    ZoomLevel.medio      => 17.0,
+    ZoomLevel.aproximado => 19.0,
+  };
 
   void _speak(String text) {
     if (_audioLevel == AudioLevel.silencioso) return;
@@ -270,7 +339,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
           target:  latLng,
-          zoom:    17,
+          zoom:    _zoom,
           tilt:    45,
           bearing: pos.heading,
         )),
@@ -499,7 +568,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _mapController!.animateCamera(
       CameraUpdate.newCameraPosition(CameraPosition(
         target:  _currentPos!,
-        zoom:    17,
+        zoom:    _zoom,
         tilt:    45,
         bearing: _bearing,
       )),
@@ -763,6 +832,28 @@ class _NavigationScreenState extends State<NavigationScreen>
                     ),
                   ],
                   if (!_markingMode) ...[
+                    // Botão zoom
+                    Positioned(
+                      bottom: 116,
+                      right: 12,
+                      child: FloatingActionButton.small(
+                        heroTag: 'nav_zoom',
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.grey.shade800,
+                        elevation: 4,
+                        tooltip: switch (_zoomLevel) {
+                          ZoomLevel.recuado    => 'Zoom: Recuado',
+                          ZoomLevel.medio      => 'Zoom: Médio',
+                          ZoomLevel.aproximado => 'Zoom: Aproximado',
+                        },
+                        onPressed: _cycleZoomLevel,
+                        child: Icon(switch (_zoomLevel) {
+                          ZoomLevel.recuado    => Icons.zoom_out_map,
+                          ZoomLevel.medio      => Icons.map_outlined,
+                          ZoomLevel.aproximado => Icons.zoom_in_map,
+                        }),
+                      ),
+                    ),
                     // Botão marcar restrição
                     Positioned(
                       bottom: 64,
