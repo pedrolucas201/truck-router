@@ -26,6 +26,7 @@ class BridgeRestriction {
         'maxheight' => truck.heightCm / 100.0 >= value,
         'maxweight' => truck.weightKg / 1000.0 >= value,
         'maxwidth'  => truck.widthCm  / 100.0 >= value,
+        'dirtroad'  => true,  // todo caminhão evita estrada de terra não-mapeada
         _           => false,
       };
 
@@ -33,7 +34,8 @@ class BridgeRestriction {
         'maxheight' => 'Altura máx. ${value.toStringAsFixed(1)} m',
         'maxweight' => 'Peso máx. ${value.toStringAsFixed(0)} t',
         'maxwidth'  => 'Largura máx. ${value.toStringAsFixed(1)} m',
-        _           => 'Restrição ${value.toStringAsFixed(1)}',
+        'dirtroad'  => 'Estrada de terra / sem pavimento',
+        _           => 'Restrição',
       };
 
   // Gera um bbox ~100m ao redor da restrição para o parâmetro avoid[areas] do HERE.

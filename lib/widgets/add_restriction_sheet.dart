@@ -28,14 +28,21 @@ class _AddRestrictionSheetState extends State<AddRestrictionSheet> {
   }
 
   String get _unit => _type == 'maxweight' ? 't' : 'm';
+  bool get _needsValue => _type != 'dirtroad';
 
   void _save() {
-    final raw = double.tryParse(_ctrl.text.replaceAll(',', '.'));
-    if (raw == null || raw <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe um valor válido')),
-      );
-      return;
+    final double value;
+    if (_type == 'dirtroad') {
+      value = 0;
+    } else {
+      final raw = double.tryParse(_ctrl.text.replaceAll(',', '.'));
+      if (raw == null || raw <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Informe um valor válido')),
+        );
+        return;
+      }
+      value = raw;
     }
     Navigator.pop(
       context,
@@ -43,7 +50,7 @@ class _AddRestrictionSheetState extends State<AddRestrictionSheet> {
         lat: widget.position.latitude,
         lng: widget.position.longitude,
         type: _type,
-        value: raw,
+        value: value,
         createdAt: DateTime.now(),
       ),
     );
@@ -68,6 +75,7 @@ class _AddRestrictionSheetState extends State<AddRestrictionSheet> {
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
+            runSpacing: 8,
             children: [
               RestrictionTypeChip(
                 label: 'Altura',
@@ -87,34 +95,42 @@ class _AddRestrictionSheetState extends State<AddRestrictionSheet> {
                 selected: _type == 'maxwidth',
                 onTap: () => setState(() => _type = 'maxwidth'),
               ),
+              RestrictionTypeChip(
+                label: 'Estrada de terra',
+                icon: Icons.terrain,
+                selected: _type == 'dirtroad',
+                onTap: () => setState(() => _type = 'dirtroad'),
+              ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            _type == 'maxheight'
-                ? 'Altura máxima permitida'
-                : _type == 'maxweight'
-                    ? 'Peso máximo permitido'
-                    : 'Largura máxima permitida',
-            style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade500,
-                fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _ctrl,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              hintText: _type == 'maxweight' ? 'ex: 20' : 'ex: 4.2',
-              suffixText: _unit,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          if (_needsValue) ...[
+            const SizedBox(height: 16),
+            Text(
+              _type == 'maxheight'
+                  ? 'Altura máxima permitida'
+                  : _type == 'maxweight'
+                      ? 'Peso máximo permitido'
+                      : 'Largura máxima permitida',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade500,
+                  fontWeight: FontWeight.w600),
             ),
-            onSubmitted: (_) => _save(),
-          ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _ctrl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                hintText: _type == 'maxweight' ? 'ex: 20' : 'ex: 4.2',
+                suffixText: _unit,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              onSubmitted: (_) => _save(),
+            ),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
