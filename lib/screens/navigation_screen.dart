@@ -275,7 +275,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     // 2. Desvio de rota
     if (bestDist > _offRouteThresholdM) {
       _offRouteCount++;
-      if (_offRouteCount >= _offRouteCountLimit) _reroute();
+      if (_offRouteCount >= _offRouteCountLimit) _reroute(latLng);
     } else {
       _offRouteCount = 0;
     }
@@ -337,7 +337,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     });
     _updateRestrictionAlert(nearestBlocked);
 
-    // 5. Câmera segue o usuário (pausada no modo crosshair)
+    // 6. Câmera segue o usuário (pausada no modo crosshair)
     if (!_markingMode) {
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
@@ -419,13 +419,14 @@ class _NavigationScreenState extends State<NavigationScreen>
     await _reroute();
   }
 
-  Future<void> _reroute() async {
-    if (_isRerouting || _currentPos == null) return;
+  Future<void> _reroute([LatLng? fromPos]) async {
+    final origin = fromPos ?? _currentPos;
+    if (_isRerouting || origin == null) return;
     setState(() { _isRerouting = true; _offRouteCount = 0; });
     try {
       final prevDistM = _result.distanceMeters;
       final newResult = await HereRoutingService.calculateRoute(
-        origin:      _currentPos!,
+        origin:      origin,
         destination: widget.destination,
         truck:       widget.truck,
         waypoints:   widget.waypoints,
