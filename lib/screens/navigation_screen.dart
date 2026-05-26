@@ -7,6 +7,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/bridge_restriction.dart';
@@ -22,6 +23,8 @@ import '../services/radar_service.dart';
 import '../services/restriction_service.dart';
 import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
+
+enum AudioLevel { completo, essencial, silencioso }
 
 class NavigationScreen extends StatefulWidget {
   final RouteResult result;
@@ -60,7 +63,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   int _closestPolylineIdx = 0;
   int _maneuverIndex = 0;
   double _distToNextManeuver = double.infinity;
-  bool _muted = false;
+  AudioLevel _audioLevel = AudioLevel.completo;
   bool _isRerouting = false;
   Timer? _refreshTimer;
   int _offRouteCount = 0;
@@ -86,6 +89,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   static const _offRouteCountLimit = 4;
   static const _radarAlertM = 400.0;
   static const _restrictionAlertM = 300.0;
+  static const _prefAudioLevel = 'nav_audio_level';
 
   @override
   void initState() {
@@ -99,6 +103,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     );
     _pulseAnimation = Tween<double>(begin: 0.12, end: 0.48)
         .animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
+    _loadAudioLevel();
     _initTts();
     _startGps();
     _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
@@ -123,7 +128,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     if (!_markingMode) _recenter();
-    if (_muted) return;
+    if (_audioLevel == AudioLevel.silencioso) return;
     final maneuvers = _result.maneuvers;
     if (_maneuverIndex >= maneuvers.length) return;
     final m = maneuvers[_maneuverIndex];
@@ -144,8 +149,25 @@ class _NavigationScreenState extends State<NavigationScreen>
     _tts.setVolume(1.0);
   }
 
+  Future<void> _loadAudioLevel() async {
+    final prefs = await SharedPreferences.getInstance();
+    final idx = prefs.getInt(_prefAudioLevel) ?? 0;
+    if (mounted) setState(() => _audioLevel = AudioLevel.values[idx.clamp(0, 2)]);
+  }
+
+  Future<void> _saveAudioLevel(AudioLevel level) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefAudioLevel, level.index);
+  }
+
+  void _cycleAudioLevel() {
+    final next = AudioLevel.values[(_audioLevel.index + 1) % AudioLevel.values.length];
+    setState(() => _audioLevel = next);
+    _saveAudioLevel(next);
+  }
+
   void _speak(String text) {
-    if (_muted) return;
+    if (_audioLevel == AudioLevel.silencioso) return;
     _tts.speak(text);
   }
 
@@ -276,7 +298,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       _announced.add(k200);
       _announced.add(k500);
       _speak('Em 200 metros, ${m.instruction}');
-    } else if (isDirectional && distM <= 500 && !_announced.contains(k500)) {
+    } else if (isDirectional && _audioLevel == AudioLevel.completo && distM <= 500 && !_announced.contains(k500)) {
       _announced.add(k500);
       _speak('Em 500 metros, ${m.instruction}');
     }
@@ -329,8 +351,9 @@ class _NavigationScreenState extends State<NavigationScreen>
         _announced.clear();
         _iconCache.clear();
       });
-      // Só anuncia se a rota mudou significativamente (>500m de diferença)
-      if ((newResult.distanceMeters - prevDistM).abs() > 500) {
+      // Só anuncia se nível completo e rota mudou significativamente (>500m)
+      if (_audioLevel == AudioLevel.completo &&
+          (newResult.distanceMeters - prevDistM).abs() > 500) {
         _speak('Rota recalculada');
       }
     } catch (_) {
@@ -624,14 +647,14 @@ class _NavigationScreenState extends State<NavigationScreen>
           children: [
             // ── Barra de instrução ──────────────────────────────────────────
             _InstructionBar(
-              maneuver:   nextM,
-              distance:   _distToNextManeuver,
-              dirIcon:    nextM != null ? _dirIcon(nextM) : Icons.straight,
-              muted:      _muted,
-              rerouting:  _isRerouting,
-              onMute:     () => setState(() => _muted = !_muted),
-              onClose:    () => Navigator.of(context).pop(),
-              fmtDist:    _fmtDist,
+              maneuver:     nextM,
+              distance:     _distToNextManeuver,
+              dirIcon:      nextM != null ? _dirIcon(nextM) : Icons.straight,
+              audioLevel:   _audioLevel,
+              rerouting:    _isRerouting,
+              onAudioCycle: _cycleAudioLevel,
+              onClose:      () => Navigator.of(context).pop(),
+              fmtDist:      _fmtDist,
             ),
 
             // ── Mapa ────────────────────────────────────────────────────────
@@ -858,9 +881,9 @@ class _InstructionBar extends StatelessWidget {
   final RouteManeuver? maneuver;
   final double distance;
   final IconData dirIcon;
-  final bool muted;
+  final AudioLevel audioLevel;
   final bool rerouting;
-  final VoidCallback onMute;
+  final VoidCallback onAudioCycle;
   final VoidCallback onClose;
   final String Function(double) fmtDist;
 
@@ -868,9 +891,9 @@ class _InstructionBar extends StatelessWidget {
     required this.maneuver,
     required this.distance,
     required this.dirIcon,
-    required this.muted,
+    required this.audioLevel,
     required this.rerouting,
-    required this.onMute,
+    required this.onAudioCycle,
     required this.onClose,
     required this.fmtDist,
   });
@@ -925,11 +948,22 @@ class _InstructionBar extends StatelessWidget {
                     ],
                   ),
           ),
-          // Mudo
+          // Nível de áudio
           IconButton(
-            icon: Icon(muted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
-            onPressed: onMute,
-            tooltip: muted ? 'Ativar voz' : 'Silenciar',
+            icon: Icon(
+              switch (audioLevel) {
+                AudioLevel.completo   => Icons.volume_up,
+                AudioLevel.essencial  => Icons.volume_down,
+                AudioLevel.silencioso => Icons.volume_off,
+              },
+              color: Colors.white,
+            ),
+            onPressed: onAudioCycle,
+            tooltip: switch (audioLevel) {
+              AudioLevel.completo   => 'Áudio: Completo',
+              AudioLevel.essencial  => 'Áudio: Essencial',
+              AudioLevel.silencioso => 'Áudio: Silencioso',
+            },
           ),
         ],
       ),
