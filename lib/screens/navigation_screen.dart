@@ -146,7 +146,6 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   void _speak(String text) {
     if (_muted) return;
-    _tts.stop();
     _tts.speak(text);
   }
 
@@ -264,17 +263,20 @@ class _NavigationScreenState extends State<NavigationScreen>
     final k500 = idx * 10 + 0;
     final k200 = idx * 10 + 1;
     final k50  = idx * 10 + 2;
+    // Turns e rotatórias têm aviso antecipado (500m/200m/50m).
+    // Manobras sem mudança de direção (keep, continue, etc.) só a 50m.
+    final isDirectional = m.action == 'turn' || m.action == 'roundaboutExit';
 
     if (distM <= 50 && !_announced.contains(k50)) {
       _announced.add(k50);
       _announced.add(k200);
       _announced.add(k500);
       _speak(m.instruction);
-    } else if (distM <= 200 && !_announced.contains(k200)) {
+    } else if (isDirectional && distM <= 200 && !_announced.contains(k200)) {
       _announced.add(k200);
       _announced.add(k500);
       _speak('Em 200 metros, ${m.instruction}');
-    } else if (distM <= 500 && !_announced.contains(k500)) {
+    } else if (isDirectional && distM <= 500 && !_announced.contains(k500)) {
       _announced.add(k500);
       _speak('Em 500 metros, ${m.instruction}');
     }
@@ -306,6 +308,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (_isRerouting || _currentPos == null) return;
     setState(() { _isRerouting = true; _offRouteCount = 0; });
     try {
+      final prevDistM = _result.distanceMeters;
       final newResult = await HereRoutingService.calculateRoute(
         origin:      _currentPos!,
         destination: widget.destination,
@@ -326,7 +329,10 @@ class _NavigationScreenState extends State<NavigationScreen>
         _announced.clear();
         _iconCache.clear();
       });
-      _speak('Rota recalculada');
+      // Só anuncia se a rota mudou significativamente (>500m de diferença)
+      if ((newResult.distanceMeters - prevDistM).abs() > 500) {
+        _speak('Rota recalculada');
+      }
     } catch (_) {
     } finally {
       if (mounted) setState(() => _isRerouting = false);
