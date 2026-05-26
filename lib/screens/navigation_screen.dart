@@ -510,7 +510,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     final key = isPedagio ? 'p' : '${isLombada ? 'l' : 'r'}_${r.speedKmh}';
     if (_iconCache.containsKey(key)) return _iconCache[key]!;
 
-    const size = 20.0;
+    const size = 40.0;
     final bgColor = isPedagio
         ? Colors.blue.shade700
         : isLombada
@@ -520,8 +520,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     final canvas = Canvas(recorder);
     canvas.drawCircle(const Offset(size / 2, size / 2), size / 2, Paint()..color = bgColor);
     canvas.drawCircle(
-      const Offset(size / 2, size / 2), size / 2 - 1.5,
-      Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 1.5,
+      const Offset(size / 2, size / 2), size / 2 - 3.0,
+      Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 3.0,
     );
     final IconData displayIcon = isPedagio
         ? Icons.toll
@@ -533,12 +533,12 @@ class _NavigationScreenState extends State<NavigationScreen>
             : String.fromCharCode(displayIcon.codePoint),
         style: (!isPedagio && r.speedKmh > 0)
             ? TextStyle(
-                fontSize: r.speedKmh >= 100 ? 6.0 : 7.5,
+                fontSize: r.speedKmh >= 100 ? 13.0 : 16.0,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               )
             : TextStyle(
-                fontSize: 10,
+                fontSize: 22,
                 fontFamily: displayIcon.fontFamily,
                 color: Colors.white,
               ),
