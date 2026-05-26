@@ -2,10 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/bridge_restriction.dart';
 import '../models/user_restriction.dart';
+import 'radar_service.dart';
 
 class FirestoreRestrictionService {
   static final _db = FirebaseFirestore.instance;
   static const _col = 'restrictions';
+  static const _corridorM = 80.0;
 
   // Busca restrições num bounding box ao redor da rota.
   // Filtra lat via Firestore; lng filtrado client-side (limitação do Firestore).
@@ -34,11 +36,27 @@ class FirestoreRestrictionService {
           .map(_fromDoc)
           .where((r) =>
               r.lng >= minLng - pad &&
-              r.lng <= maxLng + pad)
+              r.lng <= maxLng + pad &&
+              _isNearRoute(r.lat, r.lng, points))
           .toList();
     } catch (_) {
       return [];
     }
+  }
+
+  static bool _isNearRoute(double lat, double lng, List<LatLng> polyline) {
+    for (var i = 0; i < polyline.length; i += 5) {
+      if (RadarService.haversine(lat, lng, polyline[i].latitude, polyline[i].longitude) <= _corridorM) {
+        return true;
+      }
+    }
+    if (polyline.isNotEmpty) {
+      final last = polyline.last;
+      if (RadarService.haversine(lat, lng, last.latitude, last.longitude) <= _corridorM) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static BridgeRestriction _fromDoc(QueryDocumentSnapshot doc) {
