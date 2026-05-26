@@ -17,12 +17,13 @@ class HereRoutingService {
     List<String> avoidAreas = const [],
   }) async {
     final params = <String, dynamic>{
-      'transportMode': 'truck',
-      'origin':      '${origin.latitude},${origin.longitude}',
-      'destination': '${destination.latitude},${destination.longitude}',
-      'return':      'polyline,summary,actions',
-      'lang':        'pt-BR',
-      'apikey':      hereApiKey,
+      'transportMode':   'truck',
+      'origin':          '${origin.latitude},${origin.longitude}',
+      'destination':     '${destination.latitude},${destination.longitude}',
+      'return':          'polyline,summary,actions',
+      'lang':            'pt-BR',
+      'apikey':          hereApiKey,
+      'avoid[features]': 'dirtRoad',
       ...truck.toHereParams(),
       'departureTime': ?departureTime,
       if (waypoints.isNotEmpty)
