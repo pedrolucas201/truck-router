@@ -9,6 +9,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../models/bridge_restriction.dart';
 import '../models/radar_point.dart';
 import '../models/route_maneuver.dart';
 import '../models/route_result.dart';
@@ -45,7 +46,7 @@ class NavigationScreen extends StatefulWidget {
 }
 
 class _NavigationScreenState extends State<NavigationScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   GoogleMapController? _mapController;
   StreamSubscription<Position>? _posSub;
   late final FlutterTts _tts;
@@ -76,9 +77,15 @@ class _NavigationScreenState extends State<NavigationScreen>
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
   BitmapDescriptor? _userArrowIcon;
 
+  BridgeRestriction? _nearbyBlockedRestriction;
+  String? _lastRestrictionAlertKey;
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
+
   static const _offRouteThresholdM = 80.0;
   static const _offRouteCountLimit = 4;
   static const _radarAlertM = 400.0;
+  static const _restrictionAlertM = 300.0;
 
   @override
   void initState() {
@@ -86,6 +93,12 @@ class _NavigationScreenState extends State<NavigationScreen>
     _result  = widget.result;
     _radares = List.of(widget.initialRadares);
     WidgetsBinding.instance.addObserver(this);
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _pulseAnimation = Tween<double>(begin: 0.12, end: 0.48)
+        .animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
     _initTts();
     _startGps();
     _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
@@ -101,6 +114,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _refreshTimer?.cancel();
     _posSub?.cancel();
     _tts.stop();
+    _pulseController.dispose();
     WakelockPlus.disable();
     super.dispose();
   }
@@ -204,15 +218,31 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
 
+    // 5. Restrição bloqueada à frente
+    final userBlocked = _userRestrictions
+        .map((r) => r.toBridgeRestriction())
+        .where((b) => b.conflictsWith(widget.truck));
+    BridgeRestriction? nearestBlocked;
+    double nearestBlockedDist = double.infinity;
+    for (final b in [..._result.restrictionsBlocked, ...userBlocked]) {
+      final d = RadarService.haversine(latLng.latitude, latLng.longitude, b.lat, b.lng);
+      if (d < _restrictionAlertM && d < nearestBlockedDist) {
+        nearestBlockedDist = d;
+        nearestBlocked = b;
+      }
+    }
+
     setState(() {
-      _currentPos           = latLng;
-      _bearing              = pos.heading;
-      _speedKmh             = (pos.speed * 3.6).clamp(0, 300);
-      _closestPolylineIdx   = bestIdx;
-      _maneuverIndex        = nextIdx;
-      _distToNextManeuver   = distToNext;
-      _upcomingRadar        = upcoming;
+      _currentPos                 = latLng;
+      _bearing                    = pos.heading;
+      _speedKmh                   = (pos.speed * 3.6).clamp(0, 300);
+      _closestPolylineIdx         = bestIdx;
+      _maneuverIndex              = nextIdx;
+      _distToNextManeuver         = distToNext;
+      _upcomingRadar              = upcoming;
+      _nearbyBlockedRestriction   = nearestBlocked;
     });
+    _updateRestrictionAlert(nearestBlocked);
 
     // 5. Câmera segue o usuário (pausada no modo crosshair)
     if (!_markingMode) {
@@ -247,6 +277,21 @@ class _NavigationScreenState extends State<NavigationScreen>
     } else if (distM <= 500 && !_announced.contains(k500)) {
       _announced.add(k500);
       _speak('Em 500 metros, ${m.instruction}');
+    }
+  }
+
+  // ── Alerta de restrição bloqueada ────────────────────────────────────────────
+
+  void _updateRestrictionAlert(BridgeRestriction? restriction) {
+    final key = restriction != null ? '${restriction.lat}_${restriction.lng}' : null;
+    if (key == _lastRestrictionAlertKey) return;
+    _lastRestrictionAlertKey = key;
+    if (restriction != null) {
+      _speak('Atenção! ${restriction.label} à frente');
+      _pulseController.repeat(reverse: true);
+    } else {
+      _pulseController.stop();
+      _pulseController.reset();
     }
   }
 
@@ -640,6 +685,54 @@ class _NavigationScreenState extends State<NavigationScreen>
                       );
                     },
                   ),
+                  // ── Alerta restrição bloqueada ──────────────────────────
+                  if (_nearbyBlockedRestriction != null && !_markingMode) ...[
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: AnimatedBuilder(
+                          animation: _pulseAnimation,
+                          builder: (context, child) => ColoredBox(
+                            color: Colors.red.withValues(alpha: _pulseAnimation.value),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      right: 12,
+                      child: IgnorePointer(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade800,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black54, blurRadius: 8)
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.warning_amber_rounded,
+                                  color: Colors.white, size: 24),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _nearbyBlockedRestriction!.label,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   if (!_markingMode) ...[
                     // Botão marcar restrição
                     Positioned(
