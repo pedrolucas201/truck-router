@@ -274,7 +274,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _hasFirstFix = true;
     if (firstFix && _hasTimeRestrictionAlert && !_timeRestrictionAlertSpoken) {
       _timeRestrictionAlertSpoken = true;
-      _speak('Atenção! Restrição de horário para caminhões nesta via');
+      _speak('Atenção! Restrição para caminhões nesta via');
       _updatePulse();
     }
     final latLng = LatLng(pos.latitude, pos.longitude);
@@ -496,7 +496,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       });
       if (newResult.hasTimeRestriction && !_timeRestrictionAlertSpoken) {
         _timeRestrictionAlertSpoken = true;
-        _speak('Atenção! Restrição de horário para caminhões nesta via');
+        _speak('Atenção! Restrição para caminhões nesta via');
       } else if (!newResult.hasTimeRestriction) {
         _timeRestrictionAlertSpoken = false;
       }
@@ -920,7 +920,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                                 child: Text(
                                   _nearbyBlockedRestriction != null
                                       ? _nearbyBlockedRestriction!.label
-                                      : 'Restrição de horário para caminhões nesta via',
+                                      : 'Restrição para caminhões nesta via',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 15,
