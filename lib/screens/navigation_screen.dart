@@ -275,6 +275,8 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   void _speak(String text) {
     if (_audioLevel == AudioLevel.silencioso) return;
+    if (_resumedAt != null &&
+        DateTime.now().difference(_resumedAt!).inMilliseconds < 4000) { return; }
     _tts.speak(text);
   }
 
@@ -409,8 +411,6 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   void _checkTts(int idx, double distM, RouteManeuver m) {
     if (m.action == 'depart' || m.action == 'arrive') return;
-    if (_resumedAt != null &&
-        DateTime.now().difference(_resumedAt!).inMilliseconds < 3000) { return; }
     final k500 = idx * 10 + 0;
     final k200 = idx * 10 + 1;
     final k50  = idx * 10 + 2;
