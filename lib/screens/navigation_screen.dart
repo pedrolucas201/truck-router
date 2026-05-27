@@ -6,14 +6,39 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../models/bridge_restriction.dart';
 import '../models/radar_point.dart';
 import '../models/route_maneuver.dart';
 import '../models/route_result.dart';
 import '../models/truck_profile.dart';
+import '../models/user_restriction.dart';
+import '../repositories/restriction_repository.dart';
+import '../services/auth_service.dart';
 import '../services/here_routing_service.dart';
 import '../services/radar_service.dart';
+import '../services/restriction_service.dart';
+import '../widgets/add_restriction_sheet.dart';
+import '../widgets/crosshair.dart';
+
+@pragma('vm:entry-point')
+void _navForegroundCallback() {
+  FlutterForegroundTask.setTaskHandler(_NavTaskHandler());
+}
+
+class _NavTaskHandler extends TaskHandler {
+  @override Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
+  @override void onRepeatEvent(DateTime timestamp) {}
+  @override Future<void> onDestroy(DateTime timestamp) async {}
+}
+
+enum AudioLevel { completo, essencial, silencioso }
+
+enum ZoomLevel { recuado, medio, aproximado }
 
 class NavigationScreen extends StatefulWidget {
   final RouteResult result;
@@ -37,7 +62,8 @@ class NavigationScreen extends StatefulWidget {
   State<NavigationScreen> createState() => _NavigationScreenState();
 }
 
-class _NavigationScreenState extends State<NavigationScreen> {
+class _NavigationScreenState extends State<NavigationScreen>
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   GoogleMapController? _mapController;
   StreamSubscription<Position>? _posSub;
   late final FlutterTts _tts;
@@ -51,27 +77,59 @@ class _NavigationScreenState extends State<NavigationScreen> {
   int _closestPolylineIdx = 0;
   int _maneuverIndex = 0;
   double _distToNextManeuver = double.infinity;
-  bool _muted = false;
+  AudioLevel _audioLevel = AudioLevel.completo;
+  ZoomLevel _zoomLevel = ZoomLevel.medio;
   bool _isRerouting = false;
+  Timer? _refreshTimer;
   int _offRouteCount = 0;
   RadarPoint? _upcomingRadar;
   final Set<int> _announced = {};
 
   // Cache de ícones para radares
   final _iconCache = <String, BitmapDescriptor>{};
+
+  final List<UserRestriction> _userRestrictions = [];
+  final _restrictionIconCache = <String, BitmapDescriptor>{};
+
+  bool _markingMode = false;
+  bool _hasFirstFix = false;
+  LatLng _cameraTarget = const LatLng(-15.788, -47.879);
   BitmapDescriptor? _userArrowIcon;
+
+  BridgeRestriction? _nearbyBlockedRestriction;
+  String? _lastRestrictionAlertKey;
+  bool _hasTimeRestrictionAlert  = false;
+  bool _timeRestrictionAlertSpoken = false;
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
 
   static const _offRouteThresholdM = 80.0;
   static const _offRouteCountLimit = 4;
   static const _radarAlertM = 400.0;
+  static const _restrictionAlertM = 300.0;
+  static const _prefAudioLevel = 'nav_audio_level';
+  static const _prefZoomLevel  = 'nav_zoom_level';
 
   @override
   void initState() {
     super.initState();
     _result  = widget.result;
     _radares = List.of(widget.initialRadares);
+    _hasTimeRestrictionAlert = widget.result.hasTimeRestriction;
+    WidgetsBinding.instance.addObserver(this);
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _pulseAnimation = Tween<double>(begin: 0.12, end: 0.48)
+        .animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
+    _loadAudioLevel();
+    _loadZoomLevel();
+    _loadUserRestrictions();
+    _startForegroundService();
     _initTts();
     _startGps();
+    _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
     WakelockPlus.enable();
     _buildUserArrow().then((icon) {
       if (mounted) setState(() => _userArrowIcon = icon);
@@ -80,10 +138,42 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshTimer?.cancel();
     _posSub?.cancel();
     _tts.stop();
+    _pulseController.dispose();
+    FlutterForegroundTask.stopService();
     WakelockPlus.disable();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // moveCamera (instantâneo) evita giros: animateCamera competia com
+    // os primeiros updates de GPS no resume e causava rotações bruscas.
+    if (!_markingMode && _currentPos != null && _mapController != null) {
+      _mapController!.moveCamera(
+        CameraUpdate.newCameraPosition(CameraPosition(
+          target:  _currentPos!,
+          zoom:    _zoom,
+          tilt:    45,
+          bearing: _bearing,
+        )),
+      );
+    }
+    if (!_hasFirstFix) return;
+    if (_audioLevel == AudioLevel.silencioso) return;
+    final maneuvers = _result.maneuvers;
+    if (_maneuverIndex >= maneuvers.length) return;
+    final m = maneuvers[_maneuverIndex];
+    if (m.action == 'depart' || m.action == 'arrive') return;
+    final dist = _distToNextManeuver;
+    final text = dist.isFinite && dist < 50000
+        ? 'Em ${_fmtDist(dist)}, ${m.instruction}'
+        : m.instruction;
+    _speak(text);
   }
 
   // ── TTS ──────────────────────────────────────────────────────────────────────
@@ -95,9 +185,75 @@ class _NavigationScreenState extends State<NavigationScreen> {
     _tts.setVolume(1.0);
   }
 
+  Future<void> _startForegroundService() async {
+    FlutterForegroundTask.init(
+      androidNotificationOptions: AndroidNotificationOptions(
+        channelId: 'nav_service',
+        channelName: 'Navegação ativa',
+        channelDescription: 'GPS ativo em segundo plano',
+        channelImportance: NotificationChannelImportance.LOW,
+        priority: NotificationPriority.LOW,
+      ),
+      iosNotificationOptions: const IOSNotificationOptions(showNotification: false),
+      foregroundTaskOptions: ForegroundTaskOptions(
+        eventAction: ForegroundTaskEventAction.nothing(),
+        autoRunOnBoot: false,
+        allowWifiLock: false,
+      ),
+    );
+    await FlutterForegroundTask.startService(
+      serviceId: 256,
+      notificationTitle: 'Navegando',
+      notificationText: widget.destinationLabel.isNotEmpty
+          ? 'Destino: ${widget.destinationLabel}'
+          : 'GPS ativo',
+      callback: _navForegroundCallback,
+    );
+  }
+
+  Future<void> _loadAudioLevel() async {
+    final prefs = await SharedPreferences.getInstance();
+    final idx = prefs.getInt(_prefAudioLevel) ?? 0;
+    if (mounted) setState(() => _audioLevel = AudioLevel.values[idx.clamp(0, 2)]);
+  }
+
+  Future<void> _saveAudioLevel(AudioLevel level) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefAudioLevel, level.index);
+  }
+
+  void _cycleAudioLevel() {
+    final next = AudioLevel.values[(_audioLevel.index + 1) % AudioLevel.values.length];
+    setState(() => _audioLevel = next);
+    _saveAudioLevel(next);
+  }
+
+  Future<void> _loadZoomLevel() async {
+    final prefs = await SharedPreferences.getInstance();
+    final idx = prefs.getInt(_prefZoomLevel) ?? 1;
+    if (mounted) setState(() => _zoomLevel = ZoomLevel.values[idx.clamp(0, 2)]);
+  }
+
+  Future<void> _saveZoomLevel(ZoomLevel level) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefZoomLevel, level.index);
+  }
+
+  void _cycleZoomLevel() {
+    final next = ZoomLevel.values[(_zoomLevel.index + 1) % ZoomLevel.values.length];
+    setState(() => _zoomLevel = next);
+    _saveZoomLevel(next);
+    _recenter();
+  }
+
+  double get _zoom => switch (_zoomLevel) {
+    ZoomLevel.recuado    => 15.0,
+    ZoomLevel.medio      => 17.0,
+    ZoomLevel.aproximado => 19.0,
+  };
+
   void _speak(String text) {
-    if (_muted) return;
-    _tts.stop();
+    if (_audioLevel == AudioLevel.silencioso) return;
     _tts.speak(text);
   }
 
@@ -114,6 +270,13 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
   void _onPositionUpdate(Position pos) {
     if (!mounted) return;
+    final firstFix = !_hasFirstFix;
+    _hasFirstFix = true;
+    if (firstFix && _hasTimeRestrictionAlert && !_timeRestrictionAlertSpoken) {
+      _timeRestrictionAlertSpoken = true;
+      _speak('Atenção! Restrição de horário para caminhões nesta via');
+      _updatePulse();
+    }
     final latLng = LatLng(pos.latitude, pos.longitude);
 
     // 1. Ponto mais próximo na polyline (busca a partir do índice atual)
@@ -133,7 +296,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
     // 2. Desvio de rota
     if (bestDist > _offRouteThresholdM) {
       _offRouteCount++;
-      if (_offRouteCount >= _offRouteCountLimit) _reroute();
+      if (_offRouteCount >= _offRouteCountLimit) _reroute(latLng);
     } else {
       _offRouteCount = 0;
     }
@@ -169,25 +332,43 @@ class _NavigationScreenState extends State<NavigationScreen> {
       }
     }
 
-    setState(() {
-      _currentPos           = latLng;
-      _bearing              = pos.heading;
-      _speedKmh             = (pos.speed * 3.6).clamp(0, 300);
-      _closestPolylineIdx   = bestIdx;
-      _maneuverIndex        = nextIdx;
-      _distToNextManeuver   = distToNext;
-      _upcomingRadar        = upcoming;
-    });
+    // 5. Restrição bloqueada à frente
+    final userBlocked = _userRestrictions
+        .map((r) => r.toBridgeRestriction())
+        .where((b) => b.conflictsWith(widget.truck));
+    BridgeRestriction? nearestBlocked;
+    double nearestBlockedDist = double.infinity;
+    for (final b in [..._result.restrictionsBlocked, ...userBlocked]) {
+      final d = RadarService.haversine(latLng.latitude, latLng.longitude, b.lat, b.lng);
+      if (d < _restrictionAlertM && d < nearestBlockedDist) {
+        nearestBlockedDist = d;
+        nearestBlocked = b;
+      }
+    }
 
-    // 5. Câmera segue o usuário
-    _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(CameraPosition(
-        target:  latLng,
-        zoom:    17,
-        tilt:    45,
-        bearing: pos.heading,
-      )),
-    );
+    setState(() {
+      _currentPos                 = latLng;
+      _bearing                    = pos.heading;
+      _speedKmh                   = (pos.speed * 3.6).clamp(0, 300);
+      _closestPolylineIdx         = bestIdx;
+      _maneuverIndex              = nextIdx;
+      _distToNextManeuver         = distToNext;
+      _upcomingRadar              = upcoming;
+      _nearbyBlockedRestriction   = nearestBlocked;
+    });
+    _updateRestrictionAlert(nearestBlocked);
+
+    // 6. Câmera segue o usuário (pausada no modo crosshair)
+    if (!_markingMode) {
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(CameraPosition(
+          target:  latLng,
+          zoom:    _zoom,
+          tilt:    45,
+          bearing: pos.heading,
+        )),
+      );
+    }
   }
 
   // ── TTS por threshold de distância ───────────────────────────────────────────
@@ -198,29 +379,82 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final k200 = idx * 10 + 1;
     final k50  = idx * 10 + 2;
 
-    if (distM <= 50 && !_announced.contains(k50)) {
-      _announced.add(k50);
-      _announced.add(k200);
-      _announced.add(k500);
-      _speak(m.instruction);
-    } else if (distM <= 200 && !_announced.contains(k200)) {
-      _announced.add(k200);
-      _announced.add(k500);
-      _speak('Em 200 metros, ${m.instruction}');
-    } else if (distM <= 500 && !_announced.contains(k500)) {
-      _announced.add(k500);
-      _speak('Em 500 metros, ${m.instruction}');
+    // Classificação por relevância de voz:
+    // isTurn    — curva / rotatória → aviso completo
+    // isExit    — saída de rodovia / rampa → aviso intermediário
+    // else      — continue/keep/straight → sem voz (só visual)
+    final isTurn = m.action == 'turn' || m.action == 'roundaboutExit';
+    final isExit = m.action == 'exit'  || m.action == 'ramp' ||
+                   m.action == 'keepLeft' || m.action == 'keepRight';
+
+    if (isTurn) {
+      // 500m só no nível completo
+      if (_audioLevel == AudioLevel.completo && distM <= 500 && !_announced.contains(k500)) {
+        _announced.add(k500);
+        _speak('Em 500 metros, ${m.instruction}');
+      } else if (distM <= 200 && !_announced.contains(k200)) {
+        _announced.add(k200);
+        _announced.add(k500);
+        _speak('Em 200 metros, ${m.instruction}');
+      } else if (distM <= 50 && !_announced.contains(k50)) {
+        _announced.add(k50);
+        _announced.add(k200);
+        _announced.add(k500);
+        _speak(m.instruction);
+      }
+    } else if (isExit) {
+      // Saídas: 200m no completo, 50m em ambos
+      if (_audioLevel == AudioLevel.completo && distM <= 200 && !_announced.contains(k200)) {
+        _announced.add(k200);
+        _announced.add(k500);
+        _speak('Em 200 metros, ${m.instruction}');
+      } else if (distM <= 50 && !_announced.contains(k50)) {
+        _announced.add(k50);
+        _announced.add(k200);
+        _announced.add(k500);
+        _speak(m.instruction);
+      }
     }
+    // continue/keep/straight: silêncio total — só aparece na _InstructionBar
+  }
+
+  // ── Alerta de restrição bloqueada ────────────────────────────────────────────
+
+  void _updatePulse() {
+    final active = _nearbyBlockedRestriction != null || _hasTimeRestrictionAlert;
+    if (active) {
+      if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
+    } else {
+      _pulseController.stop();
+      _pulseController.reset();
+    }
+  }
+
+  void _updateRestrictionAlert(BridgeRestriction? restriction) {
+    final key = restriction != null ? '${restriction.lat}_${restriction.lng}' : null;
+    if (key == _lastRestrictionAlertKey) return;
+    _lastRestrictionAlertKey = key;
+    if (restriction != null) {
+      _speak('Atenção! ${restriction.label} à frente');
+    }
+    _updatePulse();
   }
 
   // ── Re-roteamento ─────────────────────────────────────────────────────────────
 
-  Future<void> _reroute() async {
+  Future<void> _periodicRefresh() async {
     if (_isRerouting || _currentPos == null) return;
+    await _reroute();
+  }
+
+  Future<void> _reroute([LatLng? fromPos]) async {
+    final origin = fromPos ?? _currentPos;
+    if (_isRerouting || origin == null) return;
     setState(() { _isRerouting = true; _offRouteCount = 0; });
     try {
+      final prevDistM = _result.distanceMeters;
       final newResult = await HereRoutingService.calculateRoute(
-        origin:      _currentPos!,
+        origin:      origin,
         destination: widget.destination,
         truck:       widget.truck,
         waypoints:   widget.waypoints,
@@ -231,15 +465,27 @@ class _NavigationScreenState extends State<NavigationScreen> {
       ).where((r) => !(r.type.toLowerCase().contains('lombada') && r.speedKmh == 0)).toList();
       if (!mounted) return;
       setState(() {
-        _result             = newResult;
-        _radares            = nearby;
-        _closestPolylineIdx = 0;
-        _maneuverIndex      = 0;
-        _distToNextManeuver = double.infinity;
+        _result                  = newResult;
+        _radares                 = nearby;
+        _closestPolylineIdx      = 0;
+        _maneuverIndex           = 0;
+        _distToNextManeuver      = double.infinity;
+        _hasTimeRestrictionAlert = newResult.hasTimeRestriction;
         _announced.clear();
         _iconCache.clear();
       });
-      _speak('Rota recalculada');
+      if (newResult.hasTimeRestriction && !_timeRestrictionAlertSpoken) {
+        _timeRestrictionAlertSpoken = true;
+        _speak('Atenção! Restrição de horário para caminhões nesta via');
+      } else if (!newResult.hasTimeRestriction) {
+        _timeRestrictionAlertSpoken = false;
+      }
+      _updatePulse();
+      // Só anuncia se nível completo e rota mudou significativamente (>500m)
+      if (_audioLevel == AudioLevel.completo &&
+          (newResult.distanceMeters - prevDistM).abs() > 500) {
+        _speak('Rota recalculada');
+      }
     } catch (_) {
     } finally {
       if (mounted) setState(() => _isRerouting = false);
@@ -300,7 +546,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final key = isPedagio ? 'p' : '${isLombada ? 'l' : 'r'}_${r.speedKmh}';
     if (_iconCache.containsKey(key)) return _iconCache[key]!;
 
-    const size = 20.0;
+    const size = 40.0;
     final bgColor = isPedagio
         ? Colors.blue.shade700
         : isLombada
@@ -310,8 +556,8 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final canvas = Canvas(recorder);
     canvas.drawCircle(const Offset(size / 2, size / 2), size / 2, Paint()..color = bgColor);
     canvas.drawCircle(
-      const Offset(size / 2, size / 2), size / 2 - 1.5,
-      Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 1.5,
+      const Offset(size / 2, size / 2), size / 2 - 3.0,
+      Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 3.0,
     );
     final IconData displayIcon = isPedagio
         ? Icons.toll
@@ -323,12 +569,12 @@ class _NavigationScreenState extends State<NavigationScreen> {
             : String.fromCharCode(displayIcon.codePoint),
         style: (!isPedagio && r.speedKmh > 0)
             ? TextStyle(
-                fontSize: r.speedKmh >= 100 ? 6.0 : 7.5,
+                fontSize: r.speedKmh >= 100 ? 13.0 : 16.0,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               )
             : TextStyle(
-                fontSize: 10,
+                fontSize: 22,
                 fontFamily: displayIcon.fontFamily,
                 color: Colors.white,
               ),
@@ -383,11 +629,105 @@ class _NavigationScreenState extends State<NavigationScreen> {
     _mapController!.animateCamera(
       CameraUpdate.newCameraPosition(CameraPosition(
         target:  _currentPos!,
-        zoom:    17,
+        zoom:    _zoom,
         tilt:    45,
         bearing: _bearing,
       )),
     );
+  }
+
+  // ── Ícone de restrição (badge colorido) ──────────────────────────────────────
+
+  static Future<BitmapDescriptor> _buildRestrictionIcon(UserRestriction r) async {
+    const iconH = 20.0;
+    final bgColor = switch (r.type) {
+      'maxheight' => Colors.red.shade700,
+      'maxweight' => Colors.brown.shade600,
+      _           => Colors.deepOrange.shade600,
+    };
+    final text = switch (r.type) {
+      'maxheight' => '${r.value.toStringAsFixed(1)}m',
+      'maxweight' => '${r.value.toStringAsFixed(0)}t',
+      _           => '${r.value.toStringAsFixed(1)}m',
+    };
+    final tp = TextPainter(textDirection: TextDirection.ltr)
+      ..text = TextSpan(
+        text: text,
+        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+      )
+      ..layout();
+    final iconW = (tp.width + 14).ceilToDouble();
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, iconW, iconH), const Radius.circular(4)),
+      Paint()..color = bgColor,
+    );
+    tp.paint(canvas, Offset(7, (iconH - tp.height) / 2));
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(iconW.toInt(), iconH.toInt());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+  }
+
+  // ── Marcar restrição — fluxo crosshair ───────────────────────────────────────
+
+  void _enterMarkingMode() {
+    final pos = _currentPos ?? widget.destination;
+    _cameraTarget = pos;
+    setState(() => _markingMode = true);
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(CameraPosition(
+        target: pos,
+        zoom: 17,
+        tilt: 0,
+      )),
+    );
+  }
+
+  void _exitMarkingMode() {
+    setState(() => _markingMode = false);
+    _recenter();
+  }
+
+  Future<void> _loadUserRestrictions() async {
+    final restrictions = await RestrictionService.load();
+    for (final r in restrictions) {
+      final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+      if (!_restrictionIconCache.containsKey(key)) {
+        _restrictionIconCache[key] = await _buildRestrictionIcon(r);
+      }
+    }
+    if (mounted) setState(() => _userRestrictions.addAll(restrictions));
+  }
+
+  Future<void> _confirmMarkingPosition() async {
+    final pos = _cameraTarget;
+    setState(() => _markingMode = false);
+    final repo = context.read<RestrictionRepository>();
+    final r = await showModalBottomSheet<UserRestriction>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => AddRestrictionSheet(position: pos),
+    );
+    if (r == null || !mounted) { _recenter(); return; }
+    await RestrictionService.add(r);
+    () async {
+      try {
+        final uid = await AuthService.getUid();
+        await repo.add(r, uid);
+      } catch (_) {}
+    }();
+    final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+    final icon = await _buildRestrictionIcon(r);
+    if (!mounted) return;
+    _restrictionIconCache[key] = icon;
+    setState(() => _userRestrictions.add(r));
+    _recenter();
+    if (_currentPos != null) await _reroute(_currentPos);
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
@@ -404,13 +744,23 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final fraction  = totalM > 0 ? (remaining / totalM).clamp(0.0, 1.0) : 0.0;
     final remSec    = (_result.durationSeconds * fraction).round();
 
+    final pts = _result.polylinePoints;
+    final splitIdx = _closestPolylineIdx.clamp(0, pts.length - 1);
     final polylines = <Polyline>{
-      Polyline(
-        polylineId: const PolylineId('nav_route'),
-        points: _result.polylinePoints,
-        color: const Color(0xFF1565C0),
-        width: 7,
-      ),
+      if (splitIdx >= 1)
+        Polyline(
+          polylineId: const PolylineId('nav_traveled'),
+          points: pts.sublist(0, splitIdx + 1),
+          color: Colors.blueGrey.shade300,
+          width: 5,
+        ),
+      if (splitIdx < pts.length - 1)
+        Polyline(
+          polylineId: const PolylineId('nav_remaining'),
+          points: pts.sublist(splitIdx),
+          color: const Color(0xFF1565C0),
+          width: 7,
+        ),
     };
 
     final markers = <Marker>{
@@ -439,14 +789,14 @@ class _NavigationScreenState extends State<NavigationScreen> {
           children: [
             // ── Barra de instrução ──────────────────────────────────────────
             _InstructionBar(
-              maneuver:   nextM,
-              distance:   _distToNextManeuver,
-              dirIcon:    nextM != null ? _dirIcon(nextM) : Icons.straight,
-              muted:      _muted,
-              rerouting:  _isRerouting,
-              onMute:     () => setState(() => _muted = !_muted),
-              onClose:    () => Navigator.of(context).pop(),
-              fmtDist:    _fmtDist,
+              maneuver:     nextM,
+              distance:     _distToNextManeuver,
+              dirIcon:      nextM != null ? _dirIcon(nextM) : Icons.straight,
+              audioLevel:   _audioLevel,
+              rerouting:    _isRerouting,
+              onAudioCycle: _cycleAudioLevel,
+              onClose:      () => Navigator.of(context).pop(),
+              fmtDist:      _fmtDist,
             ),
 
             // ── Mapa ────────────────────────────────────────────────────────
@@ -471,6 +821,24 @@ class _NavigationScreenState extends State<NavigationScreen> {
                           ));
                         }
                       }
+                      for (final r in _userRestrictions) {
+                        final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+                        final icon = _restrictionIconCache[key];
+                        if (icon != null) {
+                          markers.add(Marker(
+                            markerId: MarkerId(key),
+                            position: LatLng(r.lat, r.lng),
+                            icon: icon,
+                            infoWindow: InfoWindow(
+                              title: switch (r.type) {
+                                'maxheight' => 'Altura máx. ${r.value.toStringAsFixed(1)}m',
+                                'maxweight' => 'Peso máx. ${r.value.toStringAsFixed(0)}t',
+                                _           => 'Largura máx. ${r.value.toStringAsFixed(1)}m',
+                              },
+                            ),
+                          ));
+                        }
+                      }
                       return GoogleMap(
                         initialCameraPosition: CameraPosition(
                           target: _currentPos ?? widget.destination,
@@ -478,6 +846,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                           tilt: 45,
                         ),
                         onMapCreated: (c) => _mapController = c,
+                        onCameraMove: (pos) => _cameraTarget = pos.target,
                         polylines: polylines,
                         markers: markers,
                         trafficEnabled: true,
@@ -487,19 +856,178 @@ class _NavigationScreenState extends State<NavigationScreen> {
                       );
                     },
                   ),
-                  // Botão centralizar
-                  Positioned(
-                    bottom: 12,
-                    right: 12,
-                    child: FloatingActionButton.small(
-                      heroTag: 'nav_recenter',
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF1565C0),
-                      elevation: 4,
-                      onPressed: _recenter,
-                      child: const Icon(Icons.my_location),
+                  // ── Alerta restrição bloqueada / horário ────────────────
+                  if ((_nearbyBlockedRestriction != null || _hasTimeRestrictionAlert) && !_markingMode) ...[
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: AnimatedBuilder(
+                          animation: _pulseAnimation,
+                          builder: (context, child) => ColoredBox(
+                            color: Colors.red.withValues(alpha: _pulseAnimation.value),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      right: 12,
+                      child: IgnorePointer(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade800,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black54, blurRadius: 8)
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _nearbyBlockedRestriction != null
+                                    ? Icons.warning_amber_rounded
+                                    : Icons.schedule,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _nearbyBlockedRestriction != null
+                                      ? _nearbyBlockedRestriction!.label
+                                      : 'Restrição de horário para caminhões nesta via',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (!_markingMode) ...[
+                    // Botão zoom
+                    Positioned(
+                      bottom: 116,
+                      right: 12,
+                      child: FloatingActionButton.small(
+                        heroTag: 'nav_zoom',
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.grey.shade800,
+                        elevation: 4,
+                        tooltip: switch (_zoomLevel) {
+                          ZoomLevel.recuado    => 'Zoom: Recuado',
+                          ZoomLevel.medio      => 'Zoom: Médio',
+                          ZoomLevel.aproximado => 'Zoom: Aproximado',
+                        },
+                        onPressed: _cycleZoomLevel,
+                        child: Icon(switch (_zoomLevel) {
+                          ZoomLevel.recuado    => Icons.zoom_out_map,
+                          ZoomLevel.medio      => Icons.map_outlined,
+                          ZoomLevel.aproximado => Icons.zoom_in_map,
+                        }),
+                      ),
+                    ),
+                    // Botão marcar restrição
+                    Positioned(
+                      bottom: 64,
+                      right: 12,
+                      child: FloatingActionButton.small(
+                        heroTag: 'nav_mark_restriction',
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.teal.shade700,
+                        elevation: 4,
+                        tooltip: 'Marcar restrição',
+                        onPressed: _enterMarkingMode,
+                        child: const Icon(Icons.add_location_alt),
+                      ),
+                    ),
+                    // Botão centralizar
+                    Positioned(
+                      bottom: 12,
+                      right: 12,
+                      child: FloatingActionButton.small(
+                        heroTag: 'nav_recenter',
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF1565C0),
+                        elevation: 4,
+                        onPressed: _recenter,
+                        child: const Icon(Icons.my_location),
+                      ),
+                    ),
+                  ],
+                  if (_markingMode) ...[
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: ColoredBox(color: Colors.black.withAlpha(25)),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0, left: 0, right: 0,
+                      child: SafeArea(
+                        child: Center(
+                          child: Container(
+                            margin: const EdgeInsets.only(top: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'Arraste o mapa até a restrição',
+                              style: TextStyle(color: Colors.white, fontSize: 13),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Center(
+                      child: IgnorePointer(child: MapCrosshair()),
+                    ),
+                    Positioned(
+                      bottom: 0, left: 0, right: 0,
+                      child: SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _exitMarkingMode,
+                                  icon: const Icon(Icons.close),
+                                  label: const Text('Cancelar'),
+                                  style: OutlinedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: Colors.grey.shade700,
+                                    side: BorderSide(color: Colors.grey.shade300),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: FilledButton.icon(
+                                  onPressed: _confirmMarkingPosition,
+                                  icon: const Icon(Icons.check),
+                                  label: const Text('Confirmar local'),
+                                  style: FilledButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -524,9 +1052,9 @@ class _InstructionBar extends StatelessWidget {
   final RouteManeuver? maneuver;
   final double distance;
   final IconData dirIcon;
-  final bool muted;
+  final AudioLevel audioLevel;
   final bool rerouting;
-  final VoidCallback onMute;
+  final VoidCallback onAudioCycle;
   final VoidCallback onClose;
   final String Function(double) fmtDist;
 
@@ -534,9 +1062,9 @@ class _InstructionBar extends StatelessWidget {
     required this.maneuver,
     required this.distance,
     required this.dirIcon,
-    required this.muted,
+    required this.audioLevel,
     required this.rerouting,
-    required this.onMute,
+    required this.onAudioCycle,
     required this.onClose,
     required this.fmtDist,
   });
@@ -591,11 +1119,22 @@ class _InstructionBar extends StatelessWidget {
                     ],
                   ),
           ),
-          // Mudo
+          // Nível de áudio
           IconButton(
-            icon: Icon(muted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
-            onPressed: onMute,
-            tooltip: muted ? 'Ativar voz' : 'Silenciar',
+            icon: Icon(
+              switch (audioLevel) {
+                AudioLevel.completo   => Icons.volume_up,
+                AudioLevel.essencial  => Icons.volume_down,
+                AudioLevel.silencioso => Icons.volume_off,
+              },
+              color: Colors.white,
+            ),
+            onPressed: onAudioCycle,
+            tooltip: switch (audioLevel) {
+              AudioLevel.completo   => 'Áudio: Completo',
+              AudioLevel.essencial  => 'Áudio: Essencial',
+              AudioLevel.silencioso => 'Áudio: Silencioso',
+            },
           ),
         ],
       ),
@@ -625,43 +1164,73 @@ class _BottomBar extends StatelessWidget {
 
     return Container(
       color: const Color(0xFF212121),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Velocidade atual
-          _BarItem(
-            top: '${speedKmh.round()}',
-            bottom: 'km/h',
-            topStyle: const TextStyle(
-                color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          // Alerta de radar (se houver) ou distância restante
-          if (radarAlert != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: isLombada ? Colors.orange.shade700 : Colors.red.shade700,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.speed, color: Colors.white, size: 18),
-                  Text(
-                    radarAlert!.speedKmh > 0
-                        ? '${radarAlert!.speedKmh} km/h'
-                        : isLombada ? 'Lombada' : 'Radar',
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+          // Velocímetro circular
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF2C2C2C),
+              border: Border.all(color: Colors.white24, width: 2),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${speedKmh.round()}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                    height: 1.0,
                   ),
-                ],
-              ),
-            )
-          else
-            _BarItem(top: remainingDist, bottom: 'restante'),
-          // Tempo restante
-          _BarItem(top: remainingTime, bottom: 'restante'),
+                ),
+                Text(
+                  'km/h',
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Alerta de radar (se houver) ou distância + tempo
+          Expanded(
+            child: radarAlert != null
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isLombada ? Colors.orange.shade700 : Colors.red.shade700,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.speed, color: Colors.white, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          radarAlert!.speedKmh > 0
+                              ? '${radarAlert!.speedKmh} km/h'
+                              : isLombada ? 'Lombada' : 'Radar',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _BarItem(top: remainingDist, bottom: 'restante'),
+                      _BarItem(top: remainingTime, bottom: 'chegada'),
+                    ],
+                  ),
+          ),
         ],
       ),
     );
@@ -671,9 +1240,8 @@ class _BottomBar extends StatelessWidget {
 class _BarItem extends StatelessWidget {
   final String top;
   final String bottom;
-  final TextStyle? topStyle;
 
-  const _BarItem({required this.top, required this.bottom, this.topStyle});
+  const _BarItem({required this.top, required this.bottom});
 
   @override
   Widget build(BuildContext context) {
@@ -681,9 +1249,8 @@ class _BarItem extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(top,
-            style: topStyle ??
-                const TextStyle(
-                    color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+            style: const TextStyle(
+                color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
         Text(bottom,
             style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
       ],
