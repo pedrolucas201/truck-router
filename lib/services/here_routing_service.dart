@@ -21,7 +21,7 @@ class HereRoutingService {
       'transportMode':   'truck',
       'origin':          '${origin.latitude},${origin.longitude}',
       'destination':     '${destination.latitude},${destination.longitude}',
-      'return':          'polyline,summary,actions,notices',
+      'return':          'polyline,summary,actions',
       'lang':            'pt-BR',
       'apikey':          hereApiKey,
       if (avoidDirtRoad) 'avoid[features]': 'dirtRoad',
