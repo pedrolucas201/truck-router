@@ -21,11 +21,11 @@ class TomTomRoutingService {
     ].join(':');
 
     final params = <String, String>{
-      'travelMode':       'truck',
-      'vehicleMaxHeight': truck.heightCm.toString(),
-      'vehicleWeight':    truck.weightKg.toString(),
-      'vehicleLength':    truck.lengthCm.toString(),
-      'vehicleMaxWidth':  truck.widthCm.toString(),
+      'travelMode':    'truck',
+      'vehicleHeight': (truck.heightCm / 100).toStringAsFixed(2),
+      'vehicleWeight': truck.weightKg.toString(),
+      'vehicleLength': (truck.lengthCm / 100).toStringAsFixed(2),
+      'vehicleWidth':  (truck.widthCm  / 100).toStringAsFixed(2),
       'instructionsType': 'text',
       'language':         'pt-BR',
       'key':              tomTomApiKey,
