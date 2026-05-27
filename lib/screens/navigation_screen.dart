@@ -98,6 +98,7 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   BridgeRestriction? _nearbyBlockedRestriction;
   String? _lastRestrictionAlertKey;
+  String? _lastRadarAlertKey;
   bool _hasTimeRestrictionAlert  = false;
   bool _timeRestrictionAlertSpoken = false;
   late final AnimationController _pulseController;
@@ -357,6 +358,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       _nearbyBlockedRestriction   = nearestBlocked;
     });
     _updateRestrictionAlert(nearestBlocked);
+    _updateRadarAlert(upcoming);
 
     // 6. Câmera segue o usuário (pausada no modo crosshair)
     if (!_markingMode) {
@@ -438,6 +440,23 @@ class _NavigationScreenState extends State<NavigationScreen>
       _speak('Atenção! ${restriction.label} à frente');
     }
     _updatePulse();
+  }
+
+  void _updateRadarAlert(RadarPoint? radar) {
+    final key = radar != null ? '${radar.lat}_${radar.lng}' : null;
+    if (key == _lastRadarAlertKey) return;
+    _lastRadarAlertKey = key;
+    if (radar == null) return;
+    final isLombada = radar.type.toLowerCase().contains('lombada');
+    final isPedagio = radar.type.toLowerCase().contains('pedagio');
+    if (isLombada) {
+      _speak('Lombada à frente');
+    } else if (isPedagio) {
+      _speak('Pedágio à frente');
+    } else {
+      final speed = radar.speedKmh > 0 ? ', ${radar.speedKmh} quilômetros por hora' : '';
+      _speak('Radar à frente$speed');
+    }
   }
 
   // ── Re-roteamento ─────────────────────────────────────────────────────────────
@@ -534,11 +553,9 @@ class _NavigationScreenState extends State<NavigationScreen>
     return '${m.round()} m';
   }
 
-  String _fmtTime(int seconds) {
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    if (h > 0) return '${h}h ${m}min';
-    return '${m}min';
+  String _fmtEta(int seconds) {
+    final eta = DateTime.now().add(Duration(seconds: seconds));
+    return '${eta.hour.toString().padLeft(2, '0')}:${eta.minute.toString().padLeft(2, '0')}';
   }
 
   // ── Ícone de direção ─────────────────────────────────────────────────────────
@@ -1059,7 +1076,7 @@ class _NavigationScreenState extends State<NavigationScreen>
             _BottomBar(
               speedKmh:      _speedKmh,
               remainingDist: _fmtDist(remaining),
-              remainingTime: _fmtTime(remSec),
+              eta:           _fmtEta(remSec),
               radarAlert:    _upcomingRadar,
             ),
           ],
@@ -1170,13 +1187,13 @@ class _InstructionBar extends StatelessWidget {
 class _BottomBar extends StatelessWidget {
   final double speedKmh;
   final String remainingDist;
-  final String remainingTime;
+  final String eta;
   final RadarPoint? radarAlert;
 
   const _BottomBar({
     required this.speedKmh,
     required this.remainingDist,
-    required this.remainingTime,
+    required this.eta,
     required this.radarAlert,
   });
 
@@ -1250,7 +1267,7 @@ class _BottomBar extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _BarItem(top: remainingDist, bottom: 'restante'),
-                      _BarItem(top: remainingTime, bottom: 'chegada'),
+                      _BarItem(top: eta, bottom: 'chegada'),
                     ],
                   ),
           ),

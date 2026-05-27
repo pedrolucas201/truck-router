@@ -1447,6 +1447,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                 ? const SizedBox.shrink()
                 : _ResultCard(
                     result: routeProvider.result!,
+                    departureTime: _departureTime,
                     onStartNavigation: _startNavigation,
                     onOpenExternal: _launchNavigation,
                     onShare: () => _shareRoute(
@@ -1467,6 +1468,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
 class _ResultCard extends StatelessWidget {
   final RouteResult result;
+  final DateTime? departureTime;
   final VoidCallback onStartNavigation;
   final VoidCallback onOpenExternal;
   final VoidCallback onShare;
@@ -1474,15 +1476,23 @@ class _ResultCard extends StatelessWidget {
 
   const _ResultCard({
     required this.result,
+    required this.departureTime,
     required this.onStartNavigation,
     required this.onOpenExternal,
     required this.onShare,
     required this.onCopy,
   });
 
+  static String _etaString(DateTime? departureTime, int durationSeconds) {
+    final base = departureTime ?? DateTime.now();
+    final eta  = base.add(Duration(seconds: durationSeconds));
+    return '${eta.hour.toString().padLeft(2, '0')}:${eta.minute.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
+    final primary  = Theme.of(context).colorScheme.primary;
+    final etaLabel = _etaString(departureTime, result.durationSeconds);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1514,7 +1524,7 @@ class _ResultCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _InfoItem(icon: Icons.straighten, label: 'Distância', value: result.distanceText, color: primary),
-              _InfoItem(icon: Icons.schedule, label: 'Tempo', value: result.durationText, color: primary),
+              _InfoItem(icon: Icons.schedule, label: result.durationText, value: etaLabel, color: primary),
               Consumer<TruckProfileProvider>(
                 builder: (context, p, child) => _InfoItem(
                   icon: Icons.local_shipping,
