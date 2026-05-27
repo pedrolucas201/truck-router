@@ -70,6 +70,7 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   late RouteResult _result;
   List<RadarPoint> _radares = [];
+  List<RadarPoint> _visibleRadares = [];
 
   LatLng? _currentPos;
   double _bearing = 0;
@@ -105,10 +106,12 @@ class _NavigationScreenState extends State<NavigationScreen>
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
 
-  static const _offRouteThresholdM = 80.0;
-  static const _offRouteCountLimit = 4;
-  static const _radarAlertM = 400.0;
-  static const _restrictionAlertM = 300.0;
+  static const _offRouteThresholdM  = 80.0;
+  static const _offRouteCountLimit  = 4;
+  static const _radarAlertM         = 400.0;
+  static const _restrictionAlertM   = 300.0;
+  static const _radarLookAheadM     = 1500.0;
+  static const _radarCorridorM      = 100.0;
   static const _prefAudioLevel = 'nav_audio_level';
   static const _prefZoomLevel  = 'nav_zoom_level';
 
@@ -116,7 +119,8 @@ class _NavigationScreenState extends State<NavigationScreen>
   void initState() {
     super.initState();
     _result  = widget.result;
-    _radares = List.of(widget.initialRadares);
+    _radares        = List.of(widget.initialRadares);
+    _visibleRadares = List.of(widget.initialRadares);
     _hasTimeRestrictionAlert = widget.result.hasTimeRestriction;
     WidgetsBinding.instance.addObserver(this);
     _pulseController = AnimationController(
@@ -363,6 +367,17 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
 
+    // 6. Radares visíveis: próximos 1500m da polyline com corredor de 100m
+    final aheadPts = <LatLng>[];
+    for (var i = bestIdx; i < pts.length; i++) {
+      if (RadarService.haversine(latLng.latitude, latLng.longitude,
+              pts[i].latitude, pts[i].longitude) > _radarLookAheadM) { break; }
+      aheadPts.add(pts[i]);
+    }
+    final visibleRadares = _radares.where((r) => aheadPts.any((p) =>
+        RadarService.haversine(r.lat, r.lng, p.latitude, p.longitude) <=
+            _radarCorridorM)).toList();
+
     setState(() {
       _currentPos                 = latLng;
       _bearing                    = pos.heading;
@@ -372,11 +387,12 @@ class _NavigationScreenState extends State<NavigationScreen>
       _distToNextManeuver         = distToNext;
       _upcomingRadar              = upcoming;
       _nearbyBlockedRestriction   = nearestBlocked;
+      _visibleRadares             = visibleRadares;
     });
     _updateRestrictionAlert(nearestBlocked);
     _updateRadarAlert(upcoming);
 
-    // 6. Câmera segue o usuário (pausada no modo crosshair)
+    // 7. Câmera segue o usuário (pausada no modo crosshair)
     if (!_markingMode) {
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
@@ -861,19 +877,19 @@ class _NavigationScreenState extends State<NavigationScreen>
               child: Stack(
                 children: [
                   FutureBuilder<List<BitmapDescriptor>>(
-                    future: Future.wait(_radares.map(_radarIcon)),
+                    future: Future.wait(_visibleRadares.map(_radarIcon)),
                     builder: (context, snap) {
                       if (snap.hasData) {
-                        for (var i = 0; i < _radares.length; i++) {
+                        for (var i = 0; i < _visibleRadares.length; i++) {
                           markers.add(Marker(
-                            markerId: MarkerId('r_${_radares[i].lat}_${_radares[i].lng}'),
-                            position: LatLng(_radares[i].lat, _radares[i].lng),
+                            markerId: MarkerId('r_${_visibleRadares[i].lat}_${_visibleRadares[i].lng}'),
+                            position: LatLng(_visibleRadares[i].lat, _visibleRadares[i].lng),
                             icon: snap.data![i],
                             infoWindow: InfoWindow(
-                              title: _radares[i].speedKmh > 0
-                                  ? '${_radares[i].speedKmh} km/h'
-                                  : _radares[i].type,
-                              snippet: _radares[i].type,
+                              title: _visibleRadares[i].speedKmh > 0
+                                  ? '${_visibleRadares[i].speedKmh} km/h'
+                                  : _visibleRadares[i].type,
+                              snippet: _visibleRadares[i].type,
                             ),
                           ));
                         }
