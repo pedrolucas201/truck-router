@@ -121,7 +121,8 @@ class RouteProvider extends ChangeNotifier {
           tomtomResult.distanceMeters > result.distanceMeters * 1.10) {
         result = tomtomResult.copyWith(
           restrictionsAvoided: result.restrictionsAvoided,
-          restrictionsBlocked: result.restrictionsBlocked,
+          // restrictionsBlocked zerado: enrichment rodou sobre a polyline HERE,
+          // não sobre a TomTom — herdar geraria alertas de proximidade errados.
         );
       }
 
@@ -148,7 +149,7 @@ class RouteProvider extends ChangeNotifier {
     if (_result?.dirtRoadAlternative == null) return;
     _result = _result!.dirtRoadAlternative!.copyWith(
       restrictionsAvoided: _result!.restrictionsAvoided,
-      restrictionsBlocked: _result!.restrictionsBlocked,
+      // restrictionsBlocked zerado: rota de terra tem polyline diferente da pavimentada.
     );
     notifyListeners();
   }
