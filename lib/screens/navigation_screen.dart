@@ -453,12 +453,32 @@ class _NavigationScreenState extends State<NavigationScreen>
     setState(() { _isRerouting = true; _offRouteCount = 0; });
     try {
       final prevDistM = _result.distanceMeters;
-      final newResult = await HereRoutingService.calculateRoute(
+      final repo = context.read<RestrictionRepository>();
+
+      final manualAvoidAreas = [
+        ..._userRestrictions
+            .where((r) => r.toBridgeRestriction().conflictsWith(widget.truck))
+            .map((r) => r.toBridgeRestriction().toAvoidArea()),
+        ..._result.restrictionsAvoided.map((r) => r.toAvoidArea()),
+      ];
+
+      var newResult = await HereRoutingService.calculateRoute(
         origin:      origin,
         destination: widget.destination,
         truck:       widget.truck,
         waypoints:   widget.waypoints,
+        avoidAreas:  manualAvoidAreas,
       );
+
+      // Enrichment Firestore — mantém alertas crowd-sourced vivos após recálculo.
+      final firestoreRestrictions = await repo.fetchNearRoute(newResult.polylinePoints);
+      final conflicts = firestoreRestrictions
+          .where((r) => r.conflictsWith(widget.truck))
+          .toList();
+      if (conflicts.isNotEmpty) {
+        newResult = newResult.copyWith(restrictionsBlocked: conflicts);
+      }
+
       final allRadares = await RadarService.load();
       final nearby = RadarService.deduplicateNearby(
         RadarService.filterNearRoute(allRadares, newResult.polylinePoints),
