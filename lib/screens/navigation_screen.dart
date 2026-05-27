@@ -99,6 +99,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   BridgeRestriction? _nearbyBlockedRestriction;
   String? _lastRestrictionAlertKey;
   String? _lastRadarAlertKey;
+  DateTime? _resumedAt;
   bool _hasTimeRestrictionAlert  = false;
   bool _timeRestrictionAlertSpoken = false;
   late final AnimationController _pulseController;
@@ -152,6 +153,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
+    _resumedAt = DateTime.now();
     // moveCamera (instantâneo) evita giros: animateCamera competia com
     // os primeiros updates de GPS no resume e causava rotações bruscas.
     if (!_markingMode && _currentPos != null && _mapController != null) {
@@ -164,6 +166,15 @@ class _NavigationScreenState extends State<NavigationScreen>
         )),
       );
     }
+    // Trava as chaves de alerta para o próximo GPS update não reanunciar
+    // o radar/restrição que já estava ativo antes de sair do app.
+    if (_upcomingRadar != null) {
+      _lastRadarAlertKey = '${_upcomingRadar!.lat}_${_upcomingRadar!.lng}';
+    }
+    if (_nearbyBlockedRestriction != null) {
+      _lastRestrictionAlertKey =
+          '${_nearbyBlockedRestriction!.lat}_${_nearbyBlockedRestriction!.lng}';
+    }
     if (!_hasFirstFix) return;
     if (_audioLevel == AudioLevel.silencioso) return;
     final maneuvers = _result.maneuvers;
@@ -175,6 +186,11 @@ class _NavigationScreenState extends State<NavigationScreen>
         ? 'Em ${_fmtDist(dist)}, ${m.instruction}'
         : m.instruction;
     _speak(text);
+    // Marca os thresholds já anunciados para _checkTts não repetir no próximo GPS update.
+    final idx = _maneuverIndex;
+    _announced.add(idx * 10 + 0);
+    if (dist.isFinite && dist <= 200) _announced.add(idx * 10 + 1);
+    if (dist.isFinite && dist <= 50)  _announced.add(idx * 10 + 2);
   }
 
   // ── TTS ──────────────────────────────────────────────────────────────────────
@@ -377,6 +393,8 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   void _checkTts(int idx, double distM, RouteManeuver m) {
     if (m.action == 'depart' || m.action == 'arrive') return;
+    if (_resumedAt != null &&
+        DateTime.now().difference(_resumedAt!).inMilliseconds < 3000) { return; }
     final k500 = idx * 10 + 0;
     final k200 = idx * 10 + 1;
     final k50  = idx * 10 + 2;
