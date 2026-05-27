@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -57,6 +58,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   double                   _currentZoom = 11.0;
   bool                     _markingMode = false;
   bool                     _panelCollapsed = false;
+  bool                     _showDirtAlternative = false;
+  String?                  _selectedRoute; // 'paved' | 'dirt'
+  Timer?                   _routeSelectionTimer;
   LatLng                   _cameraTarget = const LatLng(-23.5505, -46.6333);
   DateTime?                _routeCalculatedAt;
 
@@ -77,6 +81,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _routeSelectionTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -112,6 +117,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             await _buildPoiIcon(color, _poiIconData(category));
       }
     }
+    _poiIconCache['label_paved'] = await _buildRouteLabelIcon(
+      'Pavimentada', const Color(0xFF1565C0), Icons.verified_outlined);
+    _poiIconCache['label_dirt'] = await _buildRouteLabelIcon(
+      'Estrada de terra', Colors.orange.shade700, Icons.warning_amber_rounded);
     if (mounted) setState(() {});
   }
 
@@ -214,6 +223,62 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
+  static Future<BitmapDescriptor> _buildRouteLabelIcon(
+      String text, Color bgColor, IconData icon) async {
+    const h = 34.0;
+    const iconPx = 13.0;
+    const fontPx = 11.5;
+    const padH = 9.0;
+    const gap = 4.0;
+
+    final iconTp = TextPainter(textDirection: TextDirection.ltr)
+      ..text = TextSpan(
+        text: String.fromCharCode(icon.codePoint),
+        style: TextStyle(
+          fontSize: iconPx,
+          fontFamily: icon.fontFamily,
+          package: icon.fontPackage,
+          color: Colors.white,
+        ),
+      )
+      ..layout();
+
+    final textTp = TextPainter(textDirection: TextDirection.ltr)
+      ..text = TextSpan(
+        text: text,
+        style: const TextStyle(
+          fontSize: fontPx,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      )
+      ..layout();
+
+    final w = padH + iconTp.width + gap + textTp.width + padH;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    final rRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, w, h),
+      const Radius.circular(h / 2),
+    );
+    canvas.drawRRect(rRect, Paint()..color = bgColor);
+    canvas.drawRRect(
+      rRect,
+      Paint()
+        ..color = Colors.white.withAlpha(180)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    iconTp.paint(canvas, Offset(padH, (h - iconTp.height) / 2));
+    textTp.paint(canvas, Offset(padH + iconTp.width + gap, (h - textTp.height) / 2));
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(w.ceil(), h.toInt());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+  }
+
   Future<void> _loadUserRestrictions() async {
     final restrictions = await RestrictionService.load();
     for (final r in restrictions) {
@@ -285,6 +350,35 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     if (_origin != null && _destination != null) {
       await _calculate();
     }
+  }
+
+  void _choosePaved() {
+    _routeSelectionTimer?.cancel();
+    _routeSelectionTimer = null;
+    setState(() { _showDirtAlternative = false; _selectedRoute = null; });
+  }
+
+  void _chooseDirt() {
+    _routeSelectionTimer?.cancel();
+    _routeSelectionTimer = null;
+    context.read<RouteProvider>().useDirtRoadRoute();
+    setState(() { _showDirtAlternative = false; _selectedRoute = null; });
+  }
+
+  void _tapPavedRoute() {
+    _routeSelectionTimer?.cancel();
+    setState(() => _selectedRoute = 'paved');
+    _routeSelectionTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) _choosePaved();
+    });
+  }
+
+  void _tapDirtRoute() {
+    _routeSelectionTimer?.cancel();
+    setState(() => _selectedRoute = 'dirt');
+    _routeSelectionTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) _chooseDirt();
+    });
   }
 
   Future<void> _enterMarkingMode() async {
@@ -738,7 +832,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final routeResult = result;
     if (routeResult != null && routeResult.polylinePoints.isNotEmpty && _mapController != null) {
       try {
-        final pts = routeResult.polylinePoints;
+        final allPts = [
+          ...routeResult.polylinePoints,
+          if (routeResult.dirtRoadAlternative != null)
+            ...routeResult.dirtRoadAlternative!.polylinePoints,
+        ];
+        final pts = allPts;
         double minLat = pts[0].latitude, maxLat = pts[0].latitude;
         double minLng = pts[0].longitude, maxLng = pts[0].longitude;
         for (final p in pts) {
@@ -773,23 +872,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     if (!mounted) return;
     final finalResult = context.read<RouteProvider>().result;
     if (finalResult?.dirtRoadAlternative != null) {
-      await showModalBottomSheet<void>(
-        context: context,
-        isDismissible: false,
-        enableDrag: false,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        builder: (ctx) => _DirtRoadChoiceSheet(
-          safeRoute: finalResult!,
-          dirtyRoute: finalResult.dirtRoadAlternative!,
-          onChooseDirty: () {
-            context.read<RouteProvider>().useDirtRoadRoute();
-            Navigator.pop(ctx);
-          },
-          onChooseSafe: () => Navigator.pop(ctx),
-        ),
-      );
+      setState(() => _showDirtAlternative = true);
     }
   }
 
@@ -855,17 +938,51 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final truckProvider  = context.watch<TruckProfileProvider>();
 
     final polylines = <Polyline>{};
-    final pts = routeProvider.result?.polylinePoints;
+    final markers = <Marker>{};
+    final result = routeProvider.result;
+    final pts = result?.polylinePoints;
+    if (_showDirtAlternative && result?.dirtRoadAlternative != null) {
+      final dirtPts = result!.dirtRoadAlternative!.polylinePoints;
+      final dirtDimmed = _selectedRoute == 'paved';
+      polylines.add(Polyline(
+        polylineId: const PolylineId('route_dirt'),
+        points: dirtPts,
+        color: Colors.orange.shade700.withAlpha(dirtDimmed ? 60 : 255),
+        width: dirtDimmed ? 4 : 6,
+        patterns: [PatternItem.dash(24), PatternItem.gap(12)],
+        zIndex: 0,
+        onTap: _tapDirtRoute,
+      ));
+      if (dirtPts.isNotEmpty && _poiIconCache.containsKey('label_dirt') && !dirtDimmed) {
+        final mid = dirtPts[dirtPts.length ~/ 2];
+        markers.add(Marker(
+          markerId: const MarkerId('label_dirt'),
+          position: mid,
+          icon: _poiIconCache['label_dirt']!,
+          anchor: const Offset(0.5, 0.5),
+        ));
+      }
+    }
     if (pts != null && pts.isNotEmpty) {
+      final pavedDimmed = _selectedRoute == 'dirt';
       polylines.add(Polyline(
         polylineId: const PolylineId('route'),
         points: pts,
-        color: const Color(0xFF1565C0),
-        width: 6,
+        color: const Color(0xFF1565C0).withAlpha(pavedDimmed ? 60 : 255),
+        width: pavedDimmed ? 4 : 6,
+        zIndex: 1,
+        onTap: _showDirtAlternative ? _tapPavedRoute : null,
       ));
+      if (_showDirtAlternative && _poiIconCache.containsKey('label_paved') && !pavedDimmed) {
+        final mid = pts[pts.length ~/ 2];
+        markers.add(Marker(
+          markerId: const MarkerId('label_paved'),
+          position: mid,
+          icon: _poiIconCache['label_paved']!,
+          anchor: const Offset(0.5, 0.5),
+        ));
+      }
     }
-
-    final markers = <Marker>{};
     if (_origin != null) {
       markers.add(Marker(
         markerId: const MarkerId('origin'),
@@ -1233,6 +1350,22 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 ],
+                if (_showDirtAlternative && result?.dirtRoadAlternative != null)
+                  Positioned(
+                    bottom: 0, left: 0, right: 0,
+                    child: Material(
+                      elevation: 8,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                      color: Colors.white,
+                      child: _DirtRoadChoiceSheet(
+                        safeRoute: result!,
+                        dirtyRoute: result.dirtRoadAlternative!,
+                        selectedRoute: _selectedRoute,
+                        onChooseSafe: _choosePaved,
+                        onChooseDirty: _chooseDirt,
+                      ),
+                    ),
+                  ),
                 if (_markingMode) ...[
                   Positioned.fill(
                     child: IgnorePointer(
@@ -1944,12 +2077,14 @@ class _RestrictionDetailSheet extends StatelessWidget {
 class _DirtRoadChoiceSheet extends StatelessWidget {
   final RouteResult safeRoute;
   final RouteResult dirtyRoute;
+  final String? selectedRoute;
   final VoidCallback onChooseSafe;
   final VoidCallback onChooseDirty;
 
   const _DirtRoadChoiceSheet({
     required this.safeRoute,
     required this.dirtyRoute,
+    required this.selectedRoute,
     required this.onChooseSafe,
     required this.onChooseDirty,
   });
@@ -1957,6 +2092,8 @@ class _DirtRoadChoiceSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final savingMin = (safeRoute.durationSeconds - dirtyRoute.durationSeconds) ~/ 60;
+    final pavedSelected = selectedRoute == 'paved';
+    final dirtSelected  = selectedRoute == 'dirt';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
       child: Column(
@@ -1967,8 +2104,13 @@ class _DirtRoadChoiceSheet extends StatelessWidget {
             children: [
               const Icon(Icons.fork_right, size: 22),
               const SizedBox(width: 8),
-              Text('Duas rotas disponíveis',
-                  style: Theme.of(context).textTheme.titleMedium),
+              Expanded(
+                child: Text('Duas rotas disponíveis',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ),
+              if (selectedRoute == null)
+                Text('Toque na rota no mapa',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
             ],
           ),
           const SizedBox(height: 16),
@@ -1978,6 +2120,8 @@ class _DirtRoadChoiceSheet extends StatelessWidget {
             title: 'Rota pavimentada',
             subtitle: '${safeRoute.durationText}  •  ${safeRoute.distanceText}',
             note: null,
+            highlighted: pavedSelected,
+            highlightColor: const Color(0xFF1565C0),
           ),
           const SizedBox(height: 10),
           _RouteOption(
@@ -1986,8 +2130,35 @@ class _DirtRoadChoiceSheet extends StatelessWidget {
             title: 'Rota com estrada de terra',
             subtitle: '${dirtyRoute.durationText}  •  ${dirtyRoute.distanceText}',
             note: '$savingMin min mais rápida — pode ser intransitável para carretas',
+            highlighted: dirtSelected,
+            highlightColor: Colors.orange.shade700,
           ),
           const SizedBox(height: 20),
+          if (selectedRoute != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 14, height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: pavedSelected ? const Color(0xFF1565C0) : Colors.orange.shade700,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    pavedSelected ? 'Confirmando rota pavimentada…' : 'Confirmando rota com terra…',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: pavedSelected ? const Color(0xFF1565C0) : Colors.orange.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Row(
             children: [
               Expanded(
@@ -2022,6 +2193,8 @@ class _RouteOption extends StatelessWidget {
   final String title;
   final String subtitle;
   final String? note;
+  final bool highlighted;
+  final Color highlightColor;
 
   const _RouteOption({
     required this.icon,
@@ -2029,6 +2202,8 @@ class _RouteOption extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.note,
+    this.highlighted = false,
+    required this.highlightColor,
   });
 
   @override
@@ -2036,9 +2211,12 @@ class _RouteOption extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: highlighted ? highlightColor.withAlpha(18) : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(
+          color: highlighted ? highlightColor : Colors.grey.shade300,
+          width: highlighted ? 2 : 1,
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
