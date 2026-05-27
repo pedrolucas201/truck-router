@@ -952,6 +952,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         patterns: [PatternItem.dash(24), PatternItem.gap(12)],
         zIndex: 0,
         onTap: _tapDirtRoute,
+        consumeTapEvents: true,
       ));
       if (dirtPts.isNotEmpty && _poiIconCache.containsKey('label_dirt') && !dirtDimmed) {
         final mid = dirtPts[dirtPts.length ~/ 2];
@@ -972,6 +973,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         width: pavedDimmed ? 4 : 6,
         zIndex: 1,
         onTap: _showDirtAlternative ? _tapPavedRoute : null,
+        consumeTapEvents: _showDirtAlternative,
       ));
       if (_showDirtAlternative && _poiIconCache.containsKey('label_paved') && !pavedDimmed) {
         final mid = pts[pts.length ~/ 2];

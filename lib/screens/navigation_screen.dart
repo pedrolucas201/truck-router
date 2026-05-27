@@ -115,6 +115,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     super.initState();
     _result  = widget.result;
     _radares = List.of(widget.initialRadares);
+    _hasTimeRestrictionAlert = widget.result.hasTimeRestriction;
     WidgetsBinding.instance.addObserver(this);
     _pulseController = AnimationController(
       vsync: this,
@@ -124,6 +125,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         .animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
     _loadAudioLevel();
     _loadZoomLevel();
+    _loadUserRestrictions();
     _startForegroundService();
     _initTts();
     _startGps();
@@ -268,7 +270,13 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   void _onPositionUpdate(Position pos) {
     if (!mounted) return;
+    final firstFix = !_hasFirstFix;
     _hasFirstFix = true;
+    if (firstFix && _hasTimeRestrictionAlert && !_timeRestrictionAlertSpoken) {
+      _timeRestrictionAlertSpoken = true;
+      _speak('Atenção! Restrição de horário para caminhões nesta via');
+      _updatePulse();
+    }
     final latLng = LatLng(pos.latitude, pos.longitude);
 
     // 1. Ponto mais próximo na polyline (busca a partir do índice atual)
@@ -682,6 +690,17 @@ class _NavigationScreenState extends State<NavigationScreen>
     _recenter();
   }
 
+  Future<void> _loadUserRestrictions() async {
+    final restrictions = await RestrictionService.load();
+    for (final r in restrictions) {
+      final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+      if (!_restrictionIconCache.containsKey(key)) {
+        _restrictionIconCache[key] = await _buildRestrictionIcon(r);
+      }
+    }
+    if (mounted) setState(() => _userRestrictions.addAll(restrictions));
+  }
+
   Future<void> _confirmMarkingPosition() async {
     final pos = _cameraTarget;
     setState(() => _markingMode = false);
@@ -708,6 +727,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _restrictionIconCache[key] = icon;
     setState(() => _userRestrictions.add(r));
     _recenter();
+    if (_currentPos != null) await _reroute(_currentPos);
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
