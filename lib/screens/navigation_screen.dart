@@ -274,7 +274,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _hasFirstFix = true;
     if (firstFix && _hasTimeRestrictionAlert && !_timeRestrictionAlertSpoken) {
       _timeRestrictionAlertSpoken = true;
-      _speak('Atenção! Restrição de horário para caminhões nesta via');
+      _speak('Atenção! Restrição para caminhões nesta via');
       _updatePulse();
     }
     final latLng = LatLng(pos.latitude, pos.longitude);
@@ -453,12 +453,32 @@ class _NavigationScreenState extends State<NavigationScreen>
     setState(() { _isRerouting = true; _offRouteCount = 0; });
     try {
       final prevDistM = _result.distanceMeters;
-      final newResult = await HereRoutingService.calculateRoute(
+      final repo = context.read<RestrictionRepository>();
+
+      final manualAvoidAreas = [
+        ..._userRestrictions
+            .where((r) => r.toBridgeRestriction().conflictsWith(widget.truck))
+            .map((r) => r.toBridgeRestriction().toAvoidArea()),
+        ..._result.restrictionsAvoided.map((r) => r.toAvoidArea()),
+      ];
+
+      var newResult = await HereRoutingService.calculateRoute(
         origin:      origin,
         destination: widget.destination,
         truck:       widget.truck,
         waypoints:   widget.waypoints,
+        avoidAreas:  manualAvoidAreas,
       );
+
+      // Enrichment Firestore — mantém alertas crowd-sourced vivos após recálculo.
+      final firestoreRestrictions = await repo.fetchNearRoute(newResult.polylinePoints);
+      final conflicts = firestoreRestrictions
+          .where((r) => r.conflictsWith(widget.truck))
+          .toList();
+      if (conflicts.isNotEmpty) {
+        newResult = newResult.copyWith(restrictionsBlocked: conflicts);
+      }
+
       final allRadares = await RadarService.load();
       final nearby = RadarService.deduplicateNearby(
         RadarService.filterNearRoute(allRadares, newResult.polylinePoints),
@@ -476,7 +496,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       });
       if (newResult.hasTimeRestriction && !_timeRestrictionAlertSpoken) {
         _timeRestrictionAlertSpoken = true;
-        _speak('Atenção! Restrição de horário para caminhões nesta via');
+        _speak('Atenção! Restrição para caminhões nesta via');
       } else if (!newResult.hasTimeRestriction) {
         _timeRestrictionAlertSpoken = false;
       }
@@ -643,11 +663,13 @@ class _NavigationScreenState extends State<NavigationScreen>
     final bgColor = switch (r.type) {
       'maxheight' => Colors.red.shade700,
       'maxweight' => Colors.brown.shade600,
+      'dirtroad'  => Colors.green.shade700,
       _           => Colors.deepOrange.shade600,
     };
     final text = switch (r.type) {
       'maxheight' => '${r.value.toStringAsFixed(1)}m',
       'maxweight' => '${r.value.toStringAsFixed(0)}t',
+      'dirtroad'  => 'Terra',
       _           => '${r.value.toStringAsFixed(1)}m',
     };
     final tp = TextPainter(textDirection: TextDirection.ltr)
@@ -833,6 +855,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                               title: switch (r.type) {
                                 'maxheight' => 'Altura máx. ${r.value.toStringAsFixed(1)}m',
                                 'maxweight' => 'Peso máx. ${r.value.toStringAsFixed(0)}t',
+                                'dirtroad'  => 'Estrada de terra',
                                 _           => 'Largura máx. ${r.value.toStringAsFixed(1)}m',
                               },
                             ),
@@ -897,7 +920,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                                 child: Text(
                                   _nearbyBlockedRestriction != null
                                       ? _nearbyBlockedRestriction!.label
-                                      : 'Restrição de horário para caminhões nesta via',
+                                      : 'Restrição para caminhões nesta via',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 15,
