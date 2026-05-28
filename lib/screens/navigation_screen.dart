@@ -1061,8 +1061,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                                         side: const BorderSide(
                                             color: Colors.white54),
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 6),
-                                        visualDensity: VisualDensity.compact,
+                                            vertical: 12),
                                         textStyle:
                                             const TextStyle(fontSize: 13),
                                       ),
@@ -1080,8 +1079,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                                         side: const BorderSide(
                                             color: Colors.white30),
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 6),
-                                        visualDensity: VisualDensity.compact,
+                                            vertical: 12),
                                         textStyle:
                                             const TextStyle(fontSize: 13),
                                       ),
