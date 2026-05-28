@@ -93,6 +93,8 @@ class _NavigationScreenState extends State<NavigationScreen>
   final _restrictionIconCache = <String, BitmapDescriptor>{};
 
   bool _markingMode = false;
+  bool _paused = false;
+  LatLng? _snappedPos;
   bool _hasFirstFix = false;
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
   BitmapDescriptor? _userArrowIcon;
@@ -160,15 +162,18 @@ class _NavigationScreenState extends State<NavigationScreen>
     _resumedAt = DateTime.now();
     // moveCamera (instantâneo) evita giros: animateCamera competia com
     // os primeiros updates de GPS no resume e causava rotações bruscas.
-    if (!_markingMode && _currentPos != null && _mapController != null) {
-      _mapController!.moveCamera(
-        CameraUpdate.newCameraPosition(CameraPosition(
-          target:  _currentPos!,
-          zoom:    _zoom,
-          tilt:    45,
-          bearing: _bearing,
-        )),
-      );
+    if (!_markingMode && _mapController != null) {
+      final pos = _snappedPos ?? _currentPos;
+      if (pos != null) {
+        _mapController!.moveCamera(
+          CameraUpdate.newCameraPosition(CameraPosition(
+            target:  pos,
+            zoom:    _zoom,
+            tilt:    45,
+            bearing: _bearing,
+          )),
+        );
+      }
     }
     // Trava as chaves de alerta para o próximo GPS update não reanunciar
     // o radar/restrição que já estava ativo antes de sair do app.
@@ -273,7 +278,18 @@ class _NavigationScreenState extends State<NavigationScreen>
     ZoomLevel.aproximado => 19.0,
   };
 
+  void _togglePause() {
+    setState(() => _paused = !_paused);
+    if (_paused) {
+      _tts.stop();
+    } else {
+      _resumedAt = DateTime.now();
+      _recenter();
+    }
+  }
+
   void _speak(String text) {
+    if (_paused) return;
     if (_audioLevel == AudioLevel.silencioso) return;
     if (_resumedAt != null &&
         DateTime.now().difference(_resumedAt!).inMilliseconds < 4000) { return; }
@@ -301,6 +317,25 @@ class _NavigationScreenState extends State<NavigationScreen>
       _updatePulse();
     }
     final latLng = LatLng(pos.latitude, pos.longitude);
+
+    if (_paused) {
+      final pts2 = _result.polylinePoints;
+      final s2 = (_closestPolylineIdx - 5).clamp(0, pts2.length - 1);
+      var bi2 = _closestPolylineIdx;
+      var bd2 = double.infinity;
+      for (var i = s2; i < min(s2 + 200, pts2.length); i++) {
+        final d = RadarService.haversine(
+            latLng.latitude, latLng.longitude, pts2[i].latitude, pts2[i].longitude);
+        if (d < bd2) { bd2 = d; bi2 = i; }
+      }
+      setState(() {
+        _currentPos = latLng;
+        _snappedPos = pts2.isNotEmpty ? pts2[bi2] : latLng;
+        _bearing    = pos.heading;
+        _speedKmh   = (pos.speed * 3.6).clamp(0, 300);
+      });
+      return;
+    }
 
     // 1. Ponto mais próximo na polyline (busca a partir do índice atual)
     final pts  = _result.polylinePoints;
@@ -382,6 +417,7 @@ class _NavigationScreenState extends State<NavigationScreen>
 
     setState(() {
       _currentPos                 = latLng;
+      _snappedPos                 = pts.isNotEmpty ? pts[bestIdx] : latLng;
       _bearing                    = pos.heading;
       _speedKmh                   = (pos.speed * 3.6).clamp(0, 300);
       _closestPolylineIdx         = bestIdx;
@@ -395,10 +431,13 @@ class _NavigationScreenState extends State<NavigationScreen>
     _updateRadarAlert(upcoming);
 
     // 7. Câmera segue o usuário (pausada no modo crosshair)
+    // Usa pts[bestIdx] (snapped) em vez do GPS bruto — evita que a seta
+    // apareça fora da via no zoom aproximado por drift de GPS.
     if (!_markingMode) {
+      final camTarget = pts.isNotEmpty ? pts[bestIdx] : latLng;
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
-          target:  latLng,
+          target:  camTarget,
           zoom:    _zoom,
           tilt:    45,
           bearing: pos.heading,
@@ -496,7 +535,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   // ── Re-roteamento ─────────────────────────────────────────────────────────────
 
   Future<void> _periodicRefresh() async {
-    if (_isRerouting || _currentPos == null) return;
+    if (_isRerouting || _paused || _currentPos == null) return;
     await _reroute();
   }
 
@@ -696,10 +735,11 @@ class _NavigationScreenState extends State<NavigationScreen>
   // ── Centralizar câmera ────────────────────────────────────────────────────────
 
   void _recenter() {
-    if (_currentPos == null || _mapController == null) return;
+    final pos = _snappedPos ?? _currentPos;
+    if (pos == null || _mapController == null) return;
     _mapController!.animateCamera(
       CameraUpdate.newCameraPosition(CameraPosition(
-        target:  _currentPos!,
+        target:  pos,
         zoom:    _zoom,
         tilt:    45,
         bearing: _bearing,
@@ -846,7 +886,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (_currentPos != null)
         Marker(
           markerId: const MarkerId('user'),
-          position: _currentPos!,
+          position: _snappedPos ?? _currentPos!,
           icon: _userArrowIcon ??
               BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
           flat: true,
@@ -986,6 +1026,20 @@ class _NavigationScreenState extends State<NavigationScreen>
                     ),
                   ],
                   if (!_markingMode) ...[
+                    // Botão pausar/retomar
+                    Positioned(
+                      bottom: 168,
+                      right: 12,
+                      child: FloatingActionButton.small(
+                        heroTag: 'nav_pause',
+                        backgroundColor: _paused ? Colors.amber.shade700 : Colors.white,
+                        foregroundColor: _paused ? Colors.white : Colors.grey.shade800,
+                        elevation: 4,
+                        tooltip: _paused ? 'Retomar navegação' : 'Pausar navegação',
+                        onPressed: _togglePause,
+                        child: Icon(_paused ? Icons.play_arrow : Icons.pause),
+                      ),
+                    ),
                     // Botão zoom
                     Positioned(
                       bottom: 116,
