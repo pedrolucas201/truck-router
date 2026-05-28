@@ -2,6 +2,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'truck_profile.dart';
 
 class BridgeRestriction {
+  final String? id;
   final double lat;
   final double lng;
   final String type;   // 'maxheight' | 'maxweight' | 'maxwidth'
@@ -10,6 +11,7 @@ class BridgeRestriction {
   final int confirmedBy;
 
   const BridgeRestriction({
+    this.id,
     required this.lat,
     required this.lng,
     required this.type,

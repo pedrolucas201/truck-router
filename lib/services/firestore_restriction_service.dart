@@ -62,6 +62,7 @@ class FirestoreRestrictionService {
   static BridgeRestriction _fromDoc(QueryDocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>;
     return BridgeRestriction(
+      id:          doc.id,
       lat:         (d['lat']   as num).toDouble(),
       lng:         (d['lng']   as num).toDouble(),
       type:        d['type']   as String,

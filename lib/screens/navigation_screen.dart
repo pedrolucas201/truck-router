@@ -94,6 +94,7 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   bool _markingMode = false;
   bool _paused = false;
+  final Set<String> _actionedRestrictions = {};
   LatLng? _snappedPos;
   bool _hasFirstFix = false;
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
@@ -427,7 +428,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       _nearbyBlockedRestriction   = nearestBlocked;
       _visibleRadares             = visibleRadares;
     });
-    _updateRestrictionAlert(nearestBlocked);
+    _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
 
     // 7. Câmera segue o usuário (pausada no modo crosshair)
@@ -505,14 +506,34 @@ class _NavigationScreenState extends State<NavigationScreen>
     }
   }
 
-  void _updateRestrictionAlert(BridgeRestriction? restriction) {
+  void _updateRestrictionAlert(BridgeRestriction? restriction, double dist) {
     final key = restriction != null ? '${restriction.lat}_${restriction.lng}' : null;
     if (key == _lastRestrictionAlertKey) return;
     _lastRestrictionAlertKey = key;
     if (restriction != null) {
-      _speak('Atenção! ${restriction.label} à frente');
+      _speak('Atenção! ${restriction.label} a ${dist.round()} metros à frente');
     }
     _updatePulse();
+  }
+
+  Future<void> _confirmRestriction(String id) async {
+    setState(() => _actionedRestrictions.add(id));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Restrição confirmada. Obrigado!'),
+      duration: Duration(seconds: 2),
+    ));
+    try { await context.read<RestrictionRepository>().confirm(id); } catch (_) {}
+  }
+
+  Future<void> _reportRestriction(String id) async {
+    setState(() => _actionedRestrictions.add(id));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Restrição reportada como incorreta.'),
+      duration: Duration(seconds: 2),
+    ));
+    try { await context.read<RestrictionRepository>().report(id); } catch (_) {}
   }
 
   void _updateRadarAlert(RadarPoint? radar) {
@@ -986,41 +1007,90 @@ class _NavigationScreenState extends State<NavigationScreen>
                       top: 12,
                       left: 12,
                       right: 12,
-                      child: IgnorePointer(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade800,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black54, blurRadius: 8)
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _nearbyBlockedRestriction != null
-                                    ? Icons.warning_amber_rounded
-                                    : Icons.schedule,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade800,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black54, blurRadius: 8)
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
                                   _nearbyBlockedRestriction != null
-                                      ? _nearbyBlockedRestriction!.label
-                                      : 'Restrição para caminhões nesta via',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
+                                      ? Icons.warning_amber_rounded
+                                      : Icons.schedule,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _nearbyBlockedRestriction != null
+                                        ? _nearbyBlockedRestriction!.label
+                                        : 'Restrição para caminhões nesta via',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
+                              ],
+                            ),
+                            if (_nearbyBlockedRestriction?.id != null &&
+                                !_actionedRestrictions.contains(
+                                    _nearbyBlockedRestriction!.id)) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _confirmRestriction(
+                                          _nearbyBlockedRestriction!.id!),
+                                      icon: const Icon(Icons.check, size: 16),
+                                      label: const Text('Confirmar'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        side: const BorderSide(
+                                            color: Colors.white54),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 6),
+                                        visualDensity: VisualDensity.compact,
+                                        textStyle:
+                                            const TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _reportRestriction(
+                                          _nearbyBlockedRestriction!.id!),
+                                      icon: const Icon(Icons.close, size: 16),
+                                      label: const Text('Não existe'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.white70,
+                                        side: const BorderSide(
+                                            color: Colors.white30),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 6),
+                                        visualDensity: VisualDensity.compact,
+                                        textStyle:
+                                            const TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
-                          ),
+                          ],
                         ),
                       ),
                     ),
