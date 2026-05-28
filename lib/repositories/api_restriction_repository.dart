@@ -33,6 +33,7 @@ class ApiRestrictionRepository implements RestrictionRepository {
       return list.map((e) {
         final m = e as Map<String, dynamic>;
         return BridgeRestriction(
+          id:          m['id'] as String?,
           lat:         (m['lat']   as num).toDouble(),
           lng:         (m['lng']   as num).toDouble(),
           type:        m['type']   as String,

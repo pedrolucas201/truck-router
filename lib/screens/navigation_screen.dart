@@ -70,6 +70,7 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   late RouteResult _result;
   List<RadarPoint> _radares = [];
+  List<RadarPoint> _visibleRadares = [];
 
   LatLng? _currentPos;
   double _bearing = 0;
@@ -92,6 +93,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   final _restrictionIconCache = <String, BitmapDescriptor>{};
 
   bool _markingMode = false;
+  bool _paused = false;
+  final Set<String> _actionedRestrictions = {};
+  LatLng? _snappedPos;
   bool _hasFirstFix = false;
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
   BitmapDescriptor? _userArrowIcon;
@@ -99,15 +103,18 @@ class _NavigationScreenState extends State<NavigationScreen>
   BridgeRestriction? _nearbyBlockedRestriction;
   String? _lastRestrictionAlertKey;
   String? _lastRadarAlertKey;
+  DateTime? _resumedAt;
   bool _hasTimeRestrictionAlert  = false;
   bool _timeRestrictionAlertSpoken = false;
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
 
-  static const _offRouteThresholdM = 80.0;
-  static const _offRouteCountLimit = 4;
-  static const _radarAlertM = 400.0;
-  static const _restrictionAlertM = 300.0;
+  static const _offRouteThresholdM  = 80.0;
+  static const _offRouteCountLimit  = 4;
+  static const _radarAlertM         = 400.0;
+  static const _restrictionAlertM   = 300.0;
+  static const _radarLookAheadM     = 1500.0;
+  static const _radarCorridorM      = 100.0;
   static const _prefAudioLevel = 'nav_audio_level';
   static const _prefZoomLevel  = 'nav_zoom_level';
 
@@ -115,7 +122,8 @@ class _NavigationScreenState extends State<NavigationScreen>
   void initState() {
     super.initState();
     _result  = widget.result;
-    _radares = List.of(widget.initialRadares);
+    _radares        = List.of(widget.initialRadares);
+    _visibleRadares = List.of(widget.initialRadares);
     _hasTimeRestrictionAlert = widget.result.hasTimeRestriction;
     WidgetsBinding.instance.addObserver(this);
     _pulseController = AnimationController(
@@ -152,17 +160,30 @@ class _NavigationScreenState extends State<NavigationScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
+    _resumedAt = DateTime.now();
     // moveCamera (instantâneo) evita giros: animateCamera competia com
     // os primeiros updates de GPS no resume e causava rotações bruscas.
-    if (!_markingMode && _currentPos != null && _mapController != null) {
-      _mapController!.moveCamera(
-        CameraUpdate.newCameraPosition(CameraPosition(
-          target:  _currentPos!,
-          zoom:    _zoom,
-          tilt:    45,
-          bearing: _bearing,
-        )),
-      );
+    if (!_markingMode && _mapController != null) {
+      final pos = _snappedPos ?? _currentPos;
+      if (pos != null) {
+        _mapController!.moveCamera(
+          CameraUpdate.newCameraPosition(CameraPosition(
+            target:  pos,
+            zoom:    _zoom,
+            tilt:    45,
+            bearing: _bearing,
+          )),
+        );
+      }
+    }
+    // Trava as chaves de alerta para o próximo GPS update não reanunciar
+    // o radar/restrição que já estava ativo antes de sair do app.
+    if (_upcomingRadar != null) {
+      _lastRadarAlertKey = '${_upcomingRadar!.lat}_${_upcomingRadar!.lng}';
+    }
+    if (_nearbyBlockedRestriction != null) {
+      _lastRestrictionAlertKey =
+          '${_nearbyBlockedRestriction!.lat}_${_nearbyBlockedRestriction!.lng}';
     }
     if (!_hasFirstFix) return;
     if (_audioLevel == AudioLevel.silencioso) return;
@@ -175,6 +196,11 @@ class _NavigationScreenState extends State<NavigationScreen>
         ? 'Em ${_fmtDist(dist)}, ${m.instruction}'
         : m.instruction;
     _speak(text);
+    // Marca os thresholds já anunciados para _checkTts não repetir no próximo GPS update.
+    final idx = _maneuverIndex;
+    _announced.add(idx * 10 + 0);
+    if (dist.isFinite && dist <= 200) _announced.add(idx * 10 + 1);
+    if (dist.isFinite && dist <= 50)  _announced.add(idx * 10 + 2);
   }
 
   // ── TTS ──────────────────────────────────────────────────────────────────────
@@ -253,8 +279,21 @@ class _NavigationScreenState extends State<NavigationScreen>
     ZoomLevel.aproximado => 19.0,
   };
 
+  void _togglePause() {
+    setState(() => _paused = !_paused);
+    if (_paused) {
+      _tts.stop();
+    } else {
+      _resumedAt = DateTime.now();
+      _recenter();
+    }
+  }
+
   void _speak(String text) {
+    if (_paused) return;
     if (_audioLevel == AudioLevel.silencioso) return;
+    if (_resumedAt != null &&
+        DateTime.now().difference(_resumedAt!).inMilliseconds < 4000) { return; }
     _tts.speak(text);
   }
 
@@ -279,6 +318,25 @@ class _NavigationScreenState extends State<NavigationScreen>
       _updatePulse();
     }
     final latLng = LatLng(pos.latitude, pos.longitude);
+
+    if (_paused) {
+      final pts2 = _result.polylinePoints;
+      final s2 = (_closestPolylineIdx - 5).clamp(0, pts2.length - 1);
+      var bi2 = _closestPolylineIdx;
+      var bd2 = double.infinity;
+      for (var i = s2; i < min(s2 + 200, pts2.length); i++) {
+        final d = RadarService.haversine(
+            latLng.latitude, latLng.longitude, pts2[i].latitude, pts2[i].longitude);
+        if (d < bd2) { bd2 = d; bi2 = i; }
+      }
+      setState(() {
+        _currentPos = latLng;
+        _snappedPos = pts2.isNotEmpty ? pts2[bi2] : latLng;
+        _bearing    = pos.heading;
+        _speedKmh   = (pos.speed * 3.6).clamp(0, 300);
+      });
+      return;
+    }
 
     // 1. Ponto mais próximo na polyline (busca a partir do índice atual)
     final pts  = _result.polylinePoints;
@@ -347,8 +405,20 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
 
+    // 6. Radares visíveis: próximos 1500m da polyline com corredor de 100m
+    final aheadPts = <LatLng>[];
+    for (var i = bestIdx; i < pts.length; i++) {
+      if (RadarService.haversine(latLng.latitude, latLng.longitude,
+              pts[i].latitude, pts[i].longitude) > _radarLookAheadM) { break; }
+      aheadPts.add(pts[i]);
+    }
+    final visibleRadares = _radares.where((r) => aheadPts.any((p) =>
+        RadarService.haversine(r.lat, r.lng, p.latitude, p.longitude) <=
+            _radarCorridorM)).toList();
+
     setState(() {
       _currentPos                 = latLng;
+      _snappedPos                 = pts.isNotEmpty ? pts[bestIdx] : latLng;
       _bearing                    = pos.heading;
       _speedKmh                   = (pos.speed * 3.6).clamp(0, 300);
       _closestPolylineIdx         = bestIdx;
@@ -356,15 +426,19 @@ class _NavigationScreenState extends State<NavigationScreen>
       _distToNextManeuver         = distToNext;
       _upcomingRadar              = upcoming;
       _nearbyBlockedRestriction   = nearestBlocked;
+      _visibleRadares             = visibleRadares;
     });
-    _updateRestrictionAlert(nearestBlocked);
+    _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
 
-    // 6. Câmera segue o usuário (pausada no modo crosshair)
+    // 7. Câmera segue o usuário (pausada no modo crosshair)
+    // Usa pts[bestIdx] (snapped) em vez do GPS bruto — evita que a seta
+    // apareça fora da via no zoom aproximado por drift de GPS.
     if (!_markingMode) {
+      final camTarget = pts.isNotEmpty ? pts[bestIdx] : latLng;
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
-          target:  latLng,
+          target:  camTarget,
           zoom:    _zoom,
           tilt:    45,
           bearing: pos.heading,
@@ -432,14 +506,34 @@ class _NavigationScreenState extends State<NavigationScreen>
     }
   }
 
-  void _updateRestrictionAlert(BridgeRestriction? restriction) {
+  void _updateRestrictionAlert(BridgeRestriction? restriction, double dist) {
     final key = restriction != null ? '${restriction.lat}_${restriction.lng}' : null;
     if (key == _lastRestrictionAlertKey) return;
     _lastRestrictionAlertKey = key;
     if (restriction != null) {
-      _speak('Atenção! ${restriction.label} à frente');
+      _speak('Atenção! ${restriction.label} a ${dist.round()} metros à frente');
     }
     _updatePulse();
+  }
+
+  Future<void> _confirmRestriction(String id) async {
+    setState(() => _actionedRestrictions.add(id));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Restrição confirmada. Obrigado!'),
+      duration: Duration(seconds: 2),
+    ));
+    try { await context.read<RestrictionRepository>().confirm(id); } catch (_) {}
+  }
+
+  Future<void> _reportRestriction(String id) async {
+    setState(() => _actionedRestrictions.add(id));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Restrição reportada como incorreta.'),
+      duration: Duration(seconds: 2),
+    ));
+    try { await context.read<RestrictionRepository>().report(id); } catch (_) {}
   }
 
   void _updateRadarAlert(RadarPoint? radar) {
@@ -462,7 +556,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   // ── Re-roteamento ─────────────────────────────────────────────────────────────
 
   Future<void> _periodicRefresh() async {
-    if (_isRerouting || _currentPos == null) return;
+    if (_isRerouting || _paused || _currentPos == null) return;
     await _reroute();
   }
 
@@ -662,10 +756,11 @@ class _NavigationScreenState extends State<NavigationScreen>
   // ── Centralizar câmera ────────────────────────────────────────────────────────
 
   void _recenter() {
-    if (_currentPos == null || _mapController == null) return;
+    final pos = _snappedPos ?? _currentPos;
+    if (pos == null || _mapController == null) return;
     _mapController!.animateCamera(
       CameraUpdate.newCameraPosition(CameraPosition(
-        target:  _currentPos!,
+        target:  pos,
         zoom:    _zoom,
         tilt:    45,
         bearing: _bearing,
@@ -812,7 +907,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (_currentPos != null)
         Marker(
           markerId: const MarkerId('user'),
-          position: _currentPos!,
+          position: _snappedPos ?? _currentPos!,
           icon: _userArrowIcon ??
               BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
           flat: true,
@@ -843,19 +938,19 @@ class _NavigationScreenState extends State<NavigationScreen>
               child: Stack(
                 children: [
                   FutureBuilder<List<BitmapDescriptor>>(
-                    future: Future.wait(_radares.map(_radarIcon)),
+                    future: Future.wait(_visibleRadares.map(_radarIcon)),
                     builder: (context, snap) {
                       if (snap.hasData) {
-                        for (var i = 0; i < _radares.length; i++) {
+                        for (var i = 0; i < _visibleRadares.length; i++) {
                           markers.add(Marker(
-                            markerId: MarkerId('r_${_radares[i].lat}_${_radares[i].lng}'),
-                            position: LatLng(_radares[i].lat, _radares[i].lng),
+                            markerId: MarkerId('r_${_visibleRadares[i].lat}_${_visibleRadares[i].lng}'),
+                            position: LatLng(_visibleRadares[i].lat, _visibleRadares[i].lng),
                             icon: snap.data![i],
                             infoWindow: InfoWindow(
-                              title: _radares[i].speedKmh > 0
-                                  ? '${_radares[i].speedKmh} km/h'
-                                  : _radares[i].type,
-                              snippet: _radares[i].type,
+                              title: _visibleRadares[i].speedKmh > 0
+                                  ? '${_visibleRadares[i].speedKmh} km/h'
+                                  : _visibleRadares[i].type,
+                              snippet: _visibleRadares[i].type,
                             ),
                           ));
                         }
@@ -912,46 +1007,109 @@ class _NavigationScreenState extends State<NavigationScreen>
                       top: 12,
                       left: 12,
                       right: 12,
-                      child: IgnorePointer(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade800,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black54, blurRadius: 8)
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _nearbyBlockedRestriction != null
-                                    ? Icons.warning_amber_rounded
-                                    : Icons.schedule,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade800,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black54, blurRadius: 8)
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
                                   _nearbyBlockedRestriction != null
-                                      ? _nearbyBlockedRestriction!.label
-                                      : 'Restrição para caminhões nesta via',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
+                                      ? Icons.warning_amber_rounded
+                                      : Icons.schedule,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _nearbyBlockedRestriction != null
+                                        ? _nearbyBlockedRestriction!.label
+                                        : 'Restrição para caminhões nesta via',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
+                              ],
+                            ),
+                            if (_nearbyBlockedRestriction?.id != null &&
+                                !_actionedRestrictions.contains(
+                                    _nearbyBlockedRestriction!.id)) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _confirmRestriction(
+                                          _nearbyBlockedRestriction!.id!),
+                                      icon: const Icon(Icons.check, size: 16),
+                                      label: const Text('Confirmar'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        side: const BorderSide(
+                                            color: Colors.white54),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 6),
+                                        visualDensity: VisualDensity.compact,
+                                        textStyle:
+                                            const TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _reportRestriction(
+                                          _nearbyBlockedRestriction!.id!),
+                                      icon: const Icon(Icons.close, size: 16),
+                                      label: const Text('Não existe'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.white70,
+                                        side: const BorderSide(
+                                            color: Colors.white30),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 6),
+                                        visualDensity: VisualDensity.compact,
+                                        textStyle:
+                                            const TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
-                          ),
+                          ],
                         ),
                       ),
                     ),
                   ],
                   if (!_markingMode) ...[
+                    // Botão pausar/retomar
+                    Positioned(
+                      bottom: 168,
+                      right: 12,
+                      child: FloatingActionButton.small(
+                        heroTag: 'nav_pause',
+                        backgroundColor: _paused ? Colors.amber.shade700 : Colors.white,
+                        foregroundColor: _paused ? Colors.white : Colors.grey.shade800,
+                        elevation: 4,
+                        tooltip: _paused ? 'Retomar navegação' : 'Pausar navegação',
+                        onPressed: _togglePause,
+                        child: Icon(_paused ? Icons.play_arrow : Icons.pause),
+                      ),
+                    ),
                     // Botão zoom
                     Positioned(
                       bottom: 116,
