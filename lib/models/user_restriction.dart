@@ -7,6 +7,7 @@ class UserRestriction {
   final String type; // 'maxheight' | 'maxweight' | 'maxwidth'
   final double value; // metros (height/width) | toneladas (weight)
   final DateTime createdAt;
+  final int confirmedBy;
 
   const UserRestriction({
     required this.lat,
@@ -14,7 +15,10 @@ class UserRestriction {
     required this.type,
     required this.value,
     required this.createdAt,
+    this.confirmedBy = 0,
   });
+
+  bool get isVerified => confirmedBy >= 3;
 
   LatLng get position => LatLng(lat, lng);
 
@@ -39,6 +43,7 @@ class UserRestriction {
         'type': type,
         'value': value,
         'createdAt': createdAt.toIso8601String(),
+        'confirmedBy': confirmedBy,
       };
 
   factory UserRestriction.fromJson(Map<String, dynamic> json) => UserRestriction(
@@ -47,5 +52,6 @@ class UserRestriction {
         type: json['type'] as String,
         value: (json['value'] as num).toDouble(),
         createdAt: DateTime.parse(json['createdAt'] as String),
+        confirmedBy: (json['confirmedBy'] as num?)?.toInt() ?? 0,
       );
 }

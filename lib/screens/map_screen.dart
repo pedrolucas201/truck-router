@@ -282,7 +282,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   Future<void> _loadUserRestrictions() async {
     final restrictions = await RestrictionService.load();
     for (final r in restrictions) {
-      final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+      final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}_${r.isVerified}';
       if (!_poiIconCache.containsKey(key)) {
         _poiIconCache[key] = await _buildRestrictionIcon(r);
       }
@@ -313,10 +313,20 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final iconW = (tp.width + 14).ceilToDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, iconW, iconH), const Radius.circular(4)),
-      Paint()..color = bgColor,
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, iconW, iconH),
+      const Radius.circular(4),
     );
+    canvas.drawRRect(rrect, Paint()..color = bgColor);
+    if (r.isVerified) {
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = Colors.amber.shade300
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+    }
     tp.paint(canvas, Offset(7, (iconH - tp.height) / 2));
     final picture = recorder.endRecording();
     final img = await picture.toImage(iconW.toInt(), iconH.toInt());
@@ -344,7 +354,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       } catch (_) {}
     }();
 
-    final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+    final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}_${r.isVerified}';
     final icon = await _buildRestrictionIcon(r);
     if (!mounted) return;
     _poiIconCache[key] = icon;
@@ -1045,7 +1055,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
 
     for (final r in _userRestrictions) {
-      final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+      final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}_${r.isVerified}';
       final icon = _poiIconCache[key];
       if (icon == null) continue;
       markers.add(Marker(
