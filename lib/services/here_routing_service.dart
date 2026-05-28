@@ -23,7 +23,6 @@ class HereRoutingService {
       'destination':     '${destination.latitude},${destination.longitude}',
       'return':          'polyline,summary,actions',
       'lang':            'pt-BR',
-      'apikey':          hereApiKey,
       if (avoidDirtRoad) 'avoid[features]': 'dirtRoad',
       ...truck.toHereParams(),
       'departureTime': ?departureTime,
@@ -47,7 +46,7 @@ class HereRoutingService {
     if (avoidAreas.isNotEmpty) {
       parts.add('avoid[areas]=${avoidAreas.join('|')}');
     }
-    final uri = Uri.parse('https://router.hereapi.com/v8/routes?${parts.join('&')}');
+    final uri = Uri.parse('$backendUrl/route/here?${parts.join('&')}');
     final response = await http.get(uri);
 
     if (response.statusCode != 200) {

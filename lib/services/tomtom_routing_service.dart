@@ -28,15 +28,11 @@ class TomTomRoutingService {
       'vehicleWidth':  (truck.widthCm  / 100).toStringAsFixed(2),
       'instructionsType': 'text',
       'language':         'pt-BR',
-      'key':              tomTomApiKey,
     };
     if (departureTime != null) params['departAt'] = departureTime;
 
-    final uri = Uri.https(
-      'api.tomtom.com',
-      '/routing/1/calculateRoute/$locs/json',
-      params,
-    );
+    final uri = Uri.parse('$backendUrl/route/tomtom/$locs')
+        .replace(queryParameters: params);
     final response = await http.get(uri).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
       throw Exception('TomTom ${response.statusCode}: ${response.body}');

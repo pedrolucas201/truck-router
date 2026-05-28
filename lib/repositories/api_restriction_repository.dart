@@ -65,14 +65,14 @@ class ApiRestrictionRepository implements RestrictionRepository {
   @override
   Future<void> confirm(String id) async {
     await http
-        .post(Uri.parse('$baseUrl/restrictions/$id/confirm'))
+        .post(Uri.parse('$baseUrl/restrictions/$id/confirm'), body: '')
         .timeout(const Duration(seconds: 10));
   }
 
   @override
   Future<void> report(String id) async {
     await http
-        .post(Uri.parse('$baseUrl/restrictions/$id/report'))
+        .post(Uri.parse('$baseUrl/restrictions/$id/report'), body: '')
         .timeout(const Duration(seconds: 10));
   }
 }

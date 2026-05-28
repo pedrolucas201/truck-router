@@ -62,11 +62,10 @@ class HereGeocodingService {
       'lang':   'pt-BR',
       'limit':  '4',
       'in':     'countryCode:BRA',
-      'apikey': hereApiKey,
       if (bias != null) 'at': '${bias.latitude},${bias.longitude}',
     };
     final response = await http.get(
-        Uri.https('autocomplete.search.hereapi.com', '/v1/autocomplete', params));
+        Uri.parse('$backendUrl/here/autocomplete').replace(queryParameters: params));
     if (response.statusCode != 200) return [];
 
     final items = jsonDecode(response.body)['items'] as List<dynamic>? ?? [];
@@ -88,11 +87,10 @@ class HereGeocodingService {
       'lang':   'pt-BR',
       'limit':  '3',
       'in':     'countryCode:BRA',
-      'apikey': hereApiKey,
       if (bias != null) 'at': '${bias.latitude},${bias.longitude}',
     };
     final response = await http.get(
-        Uri.https('geocode.search.hereapi.com', '/v1/geocode', params));
+        Uri.parse('$backendUrl/here/geocode').replace(queryParameters: params));
     if (response.statusCode != 200) return [];
 
     final items = jsonDecode(response.body)['items'] as List<dynamic>? ?? [];
@@ -126,10 +124,9 @@ class HereGeocodingService {
       'limit':  '5',
       'in':     'countryCode:BRA',
       'at':     at,
-      'apikey': hereApiKey,
     };
     final response = await http.get(
-        Uri.https('discover.search.hereapi.com', '/v1/discover', params));
+        Uri.parse('$backendUrl/here/discover').replace(queryParameters: params));
     if (response.statusCode != 200) return [];
 
     final items = jsonDecode(response.body)['items'] as List<dynamic>? ?? [];
@@ -239,9 +236,8 @@ class HereGeocodingService {
               'country=Brazil',
             ];
             try {
-              final resp = await http.get(Uri.https(
-                'geocode.search.hereapi.com', '/v1/geocode',
-                {'qq': qqParts.join(';'), 'in': 'countryCode:BRA', 'lang': 'pt-BR', 'limit': '5', 'apikey': hereApiKey},
+              final resp = await http.get(Uri.parse('$backendUrl/here/geocode').replace(
+                queryParameters: {'qq': qqParts.join(';'), 'in': 'countryCode:BRA', 'lang': 'pt-BR', 'limit': '5'},
               ));
               if (resp.statusCode == 200) {
                 final cidadeN = _norm(cidade);
@@ -378,9 +374,8 @@ class HereGeocodingService {
 
     // Passo 5: HERE postalCode qq (fallback se ViaCEP falhar).
     try {
-      final resp = await http.get(Uri.https(
-        'geocode.search.hereapi.com', '/v1/geocode',
-        {'qq': 'postalCode=$cep;country=Brazil', 'in': 'countryCode:BRA', 'lang': 'pt-BR', 'limit': '3', 'apikey': hereApiKey},
+      final resp = await http.get(Uri.parse('$backendUrl/here/geocode').replace(
+        queryParameters: {'qq': 'postalCode=$cep;country=Brazil', 'in': 'countryCode:BRA', 'lang': 'pt-BR', 'limit': '3'},
       ));
       if (resp.statusCode == 200) {
         final items = (jsonDecode(resp.body)['items'] as List<dynamic>? ?? [])
@@ -413,7 +408,6 @@ class HereGeocodingService {
     String state = '',
   }) async {
     final params = <String, String>{
-      'key':          tomTomApiKey,
       'countryCode':  'BR',
       'streetName':   street,
       'municipality': city,
@@ -422,7 +416,7 @@ class HereGeocodingService {
       if (district.isNotEmpty) 'municipalitySubdivision': district,
       if (state.isNotEmpty)    'countrySubdivision': state,
     };
-    final uri = Uri.https('api.tomtom.com', '/search/2/structuredGeocode.json', params);
+    final uri = Uri.parse('$backendUrl/tomtom/geocode').replace(queryParameters: params);
     final resp = await http.get(uri).timeout(const Duration(seconds: 8));
     if (resp.statusCode != 200) return null;
 
@@ -459,10 +453,9 @@ class HereGeocodingService {
   // Lookup HERE: ID do autocomplete → coordenadas precisas.
   static Future<LatLng?> lookup(String hereId) async {
     final response = await http.get(
-        Uri.https('lookup.search.hereapi.com', '/v1/lookup', {
-      'id':     hereId,
-      'lang':   'pt-BR',
-      'apikey': hereApiKey,
+        Uri.parse('$backendUrl/here/lookup').replace(queryParameters: {
+      'id':   hereId,
+      'lang': 'pt-BR',
     }));
     if (response.statusCode != 200) return null;
 
@@ -476,11 +469,10 @@ class HereGeocodingService {
 
   static Future<String> reverseGeocode(LatLng position) async {
     final response = await http.get(
-        Uri.https('revgeocode.search.hereapi.com', '/v1/revgeocode', {
-      'at':     '${position.latitude},${position.longitude}',
-      'lang':   'pt-BR',
-      'limit':  '1',
-      'apikey': hereApiKey,
+        Uri.parse('$backendUrl/here/revgeocode').replace(queryParameters: {
+      'at':    '${position.latitude},${position.longitude}',
+      'lang':  'pt-BR',
+      'limit': '1',
     }));
     if (response.statusCode != 200) {
       return '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
