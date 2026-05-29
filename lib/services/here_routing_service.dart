@@ -47,7 +47,7 @@ class HereRoutingService {
       parts.add('avoid[areas]=${avoidAreas.join('|')}');
     }
     final uri = Uri.parse('$backendUrl/route/here?${parts.join('&')}');
-    final response = await http.get(uri);
+    final response = await http.get(uri, headers: backendHeaders);
 
     if (response.statusCode != 200) {
       throw Exception('HERE API error ${response.statusCode}: ${response.body}');

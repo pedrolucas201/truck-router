@@ -1,0 +1,4 @@
+.gcloudignore
+.git
+/server
+*.exe

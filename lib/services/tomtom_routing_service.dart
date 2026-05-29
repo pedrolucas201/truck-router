@@ -33,7 +33,7 @@ class TomTomRoutingService {
 
     final uri = Uri.parse('$backendUrl/route/tomtom/$locs')
         .replace(queryParameters: params);
-    final response = await http.get(uri).timeout(const Duration(seconds: 20));
+    final response = await http.get(uri, headers: backendHeaders).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
       throw Exception('TomTom ${response.statusCode}: ${response.body}');
     }

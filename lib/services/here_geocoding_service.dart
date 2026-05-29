@@ -65,7 +65,8 @@ class HereGeocodingService {
       if (bias != null) 'at': '${bias.latitude},${bias.longitude}',
     };
     final response = await http.get(
-        Uri.parse('$backendUrl/here/autocomplete').replace(queryParameters: params));
+        Uri.parse('$backendUrl/here/autocomplete').replace(queryParameters: params),
+        headers: backendHeaders);
     if (response.statusCode != 200) return [];
 
     final items = jsonDecode(response.body)['items'] as List<dynamic>? ?? [];
@@ -90,7 +91,8 @@ class HereGeocodingService {
       if (bias != null) 'at': '${bias.latitude},${bias.longitude}',
     };
     final response = await http.get(
-        Uri.parse('$backendUrl/here/geocode').replace(queryParameters: params));
+        Uri.parse('$backendUrl/here/geocode').replace(queryParameters: params),
+        headers: backendHeaders);
     if (response.statusCode != 200) return [];
 
     final items = jsonDecode(response.body)['items'] as List<dynamic>? ?? [];
@@ -126,7 +128,8 @@ class HereGeocodingService {
       'at':     at,
     };
     final response = await http.get(
-        Uri.parse('$backendUrl/here/discover').replace(queryParameters: params));
+        Uri.parse('$backendUrl/here/discover').replace(queryParameters: params),
+        headers: backendHeaders);
     if (response.statusCode != 200) return [];
 
     final items = jsonDecode(response.body)['items'] as List<dynamic>? ?? [];
@@ -238,7 +241,7 @@ class HereGeocodingService {
             try {
               final resp = await http.get(Uri.parse('$backendUrl/here/geocode').replace(
                 queryParameters: {'qq': qqParts.join(';'), 'in': 'countryCode:BRA', 'lang': 'pt-BR', 'limit': '5'},
-              ));
+              ), headers: backendHeaders);
               if (resp.statusCode == 200) {
                 final cidadeN = _norm(cidade);
                 final ruaN    = _norm(logradouro);
@@ -376,7 +379,7 @@ class HereGeocodingService {
     try {
       final resp = await http.get(Uri.parse('$backendUrl/here/geocode').replace(
         queryParameters: {'qq': 'postalCode=$cep;country=Brazil', 'in': 'countryCode:BRA', 'lang': 'pt-BR', 'limit': '3'},
-      ));
+      ), headers: backendHeaders);
       if (resp.statusCode == 200) {
         final items = (jsonDecode(resp.body)['items'] as List<dynamic>? ?? [])
             .cast<Map<String, dynamic>>()
@@ -417,7 +420,7 @@ class HereGeocodingService {
       if (state.isNotEmpty)    'countrySubdivision': state,
     };
     final uri = Uri.parse('$backendUrl/tomtom/geocode').replace(queryParameters: params);
-    final resp = await http.get(uri).timeout(const Duration(seconds: 8));
+    final resp = await http.get(uri, headers: backendHeaders).timeout(const Duration(seconds: 8));
     if (resp.statusCode != 200) return null;
 
     final results = (jsonDecode(resp.body)['results'] as List<dynamic>? ?? [])
@@ -454,9 +457,10 @@ class HereGeocodingService {
   static Future<LatLng?> lookup(String hereId) async {
     final response = await http.get(
         Uri.parse('$backendUrl/here/lookup').replace(queryParameters: {
-      'id':   hereId,
-      'lang': 'pt-BR',
-    }));
+          'id':   hereId,
+          'lang': 'pt-BR',
+        }),
+        headers: backendHeaders);
     if (response.statusCode != 200) return null;
 
     final pos = jsonDecode(response.body)['position'] as Map<String, dynamic>?;
@@ -470,10 +474,11 @@ class HereGeocodingService {
   static Future<String> reverseGeocode(LatLng position) async {
     final response = await http.get(
         Uri.parse('$backendUrl/here/revgeocode').replace(queryParameters: {
-      'at':    '${position.latitude},${position.longitude}',
-      'lang':  'pt-BR',
-      'limit': '1',
-    }));
+          'at':    '${position.latitude},${position.longitude}',
+          'lang':  'pt-BR',
+          'limit': '1',
+        }),
+        headers: backendHeaders);
     if (response.statusCode != 200) {
       return '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
     }
