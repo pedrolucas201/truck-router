@@ -123,6 +123,7 @@ class RouteProvider extends ChangeNotifier {
           restrictionsAvoided: result.restrictionsAvoided,
           // restrictionsBlocked zerado: enrichment rodou sobre a polyline HERE,
           // não sobre a TomTom — herdar geraria alertas de proximidade errados.
+          maxTruckSpeedKmh: result.maxTruckSpeedKmh,
         );
       }
 

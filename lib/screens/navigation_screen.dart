@@ -94,6 +94,8 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   bool _markingMode = false;
   bool _paused = false;
+  bool _arrived = false;
+  bool _ttsActive = false;
   final Set<String> _actionedRestrictions = {};
   LatLng? _snappedPos;
   bool _hasFirstFix = false;
@@ -151,6 +153,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _refreshTimer?.cancel();
     _posSub?.cancel();
     _tts.stop();
+    _ttsActive = false;
     _pulseController.dispose();
     FlutterForegroundTask.stopService();
     WakelockPlus.disable();
@@ -210,6 +213,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     _tts.setLanguage('pt-BR');
     _tts.setSpeechRate(0.9);
     _tts.setVolume(1.0);
+    _tts.setCompletionHandler(() => _ttsActive = false);
+    _tts.setCancelHandler(() => _ttsActive = false);
   }
 
   Future<void> _startForegroundService() async {
@@ -283,6 +288,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     setState(() => _paused = !_paused);
     if (_paused) {
       _tts.stop();
+      _ttsActive = false;
     } else {
       _resumedAt = DateTime.now();
       _recenter();
@@ -294,7 +300,23 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (_audioLevel == AudioLevel.silencioso) return;
     if (_resumedAt != null &&
         DateTime.now().difference(_resumedAt!).inMilliseconds < 4000) { return; }
+    if (_ttsActive) return;
+    _ttsActive = true;
     _tts.speak(text);
+  }
+
+  void _handleArrival() {
+    if (_arrived) return;
+    _arrived = true;
+    _posSub?.cancel();
+    _tts.stop();
+    _ttsActive = false;
+    if (_audioLevel != AudioLevel.silencioso) {
+      _tts.speak('Você chegou ao destino');
+    }
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) Navigator.of(context).pop();
+    });
   }
 
   // ── GPS ──────────────────────────────────────────────────────────────────────
@@ -352,7 +374,25 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (d < bestDist) { bestDist = d; bestIdx = i; }
     }
 
-    // 2. Desvio de rota
+    // 2. Arrival detection: distância restante na polyline < 30m E velocidade < 5 km/h.
+    // Remaining polyline (não linha reta ao destino) evita falso positivo em semáforos
+    // antes de curvas — a distância restante na rota ainda é alta nesses casos.
+    if (!_arrived && pos.speed * 3.6 < 5) {
+      var remaining = 0.0;
+      for (var i = bestIdx; i < pts.length - 1; i++) {
+        remaining += RadarService.haversine(
+          pts[i].latitude, pts[i].longitude,
+          pts[i + 1].latitude, pts[i + 1].longitude,
+        );
+        if (remaining > 60) break;
+      }
+      if (remaining < 30) {
+        _handleArrival();
+        return;
+      }
+    }
+
+    // 3. Desvio de rota
     if (bestDist > _offRouteThresholdM) {
       _offRouteCount++;
       if (_offRouteCount >= _offRouteCountLimit) _reroute(latLng);
@@ -360,13 +400,15 @@ class _NavigationScreenState extends State<NavigationScreen>
       _offRouteCount = 0;
     }
 
-    // 3. Manobra atual
+    // 4. Manobra atual — busca monotônica: mIdx só avança, nunca retrocede.
+    // GPS noise pode oscilar bestIdx ao redor do polylineOffset de uma manobra,
+    // fazendo nextIdx alternar entre N e N+1 e re-disparar os thresholds de TTS.
     final maneuvers = _result.maneuvers;
-    var mIdx = 0;
-    for (var i = 0; i < maneuvers.length; i++) {
+    final searchStart = _maneuverIndex > 0 ? _maneuverIndex - 1 : 0;
+    var mIdx = searchStart;
+    for (var i = searchStart; i < maneuvers.length; i++) {
       if (maneuvers[i].polylineOffset <= bestIdx) mIdx = i;
     }
-    // Avança se já passou desta manobra
     final nextIdx = (mIdx + 1 < maneuvers.length) ? mIdx + 1 : mIdx;
     final nextManeuver = maneuvers.isNotEmpty ? maneuvers[nextIdx] : null;
 
@@ -379,7 +421,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       _checkTts(nextIdx, distToNext, nextManeuver);
     }
 
-    // 4. Radar à frente
+    // 5. Radar à frente
     RadarPoint? upcoming;
     for (final r in _radares) {
       final d = RadarService.haversine(latLng.latitude, latLng.longitude, r.lat, r.lng);
@@ -391,7 +433,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
 
-    // 5. Restrição bloqueada à frente
+    // 6. Restrição bloqueada à frente
     final userBlocked = _userRestrictions
         .map((r) => r.toBridgeRestriction())
         .where((b) => b.conflictsWith(widget.truck));
@@ -405,7 +447,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
 
-    // 6. Radares visíveis: próximos 1500m da polyline com corredor de 100m
+    // 7. Radares visíveis: próximos 1500m da polyline com corredor de 100m
     final aheadPts = <LatLng>[];
     for (var i = bestIdx; i < pts.length; i++) {
       if (RadarService.haversine(latLng.latitude, latLng.longitude,
@@ -431,7 +473,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
 
-    // 7. Câmera segue o usuário (pausada no modo crosshair)
+    // 8. Câmera segue o usuário (pausada no modo crosshair)
     // Usa pts[bestIdx] (snapped) em vez do GPS bruto — evita que a seta
     // apareça fora da via no zoom aproximado por drift de GPS.
     if (!_markingMode) {

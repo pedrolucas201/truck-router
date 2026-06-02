@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config.dart';
@@ -74,6 +75,7 @@ class HereRoutingService {
     final allManeuvers = <RouteManeuver>[];
     var totalDistance = 0;
     var totalDuration = 0;
+    var maxTruckSpeed = 0;
 
     for (final s in sections) {
       final section      = s as Map<String, dynamic>;
@@ -105,6 +107,20 @@ class HereRoutingService {
           position:        pos,
         ));
       }
+
+      // CTB art. 61: caminhão = carLimit - 20, máx 90 km/h.
+      // Aplica apenas em vias de alta velocidade (carLimit >= 80 km/h).
+      // HERE retorna speedLimit em m/s.
+      final spans = section['spans'] as List<dynamic>? ?? [];
+      for (final sp in spans) {
+        final span = sp as Map<String, dynamic>;
+        final speedMs = (span['speedLimit'] as num?)?.toDouble();
+        if (speedMs == null || speedMs <= 0) continue;
+        final carKmh = (speedMs * 3.6).round();
+        if (carKmh < 80) continue;
+        final truckKmh = min(carKmh - 20, 90);
+        if (truckKmh > maxTruckSpeed) maxTruckSpeed = truckKmh;
+      }
     }
 
     return RouteResult(
@@ -113,6 +129,7 @@ class HereRoutingService {
       durationSeconds:   totalDuration,
       maneuvers:         allManeuvers,
       hasTimeRestriction: hasTimeRestriction,
+      maxTruckSpeedKmh:  maxTruckSpeed > 0 ? maxTruckSpeed : null,
     );
   }
 }

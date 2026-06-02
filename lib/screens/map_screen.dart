@@ -612,6 +612,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
     buf.writeln('Distância: ${result.distanceText}');
     buf.writeln('Duração: ${result.durationText}');
+    if (result.maxTruckSpeedKmh != null) {
+      buf.writeln('Vel. máx. caminhão: ${result.maxTruckSpeedKmh} km/h');
+    }
     buf.writeln();
     buf.write(
       'Caminhão: ${truck.heightCm}cm alt / ${truck.widthCm}cm larg / '
@@ -1688,6 +1691,8 @@ class _ResultCard extends StatelessWidget {
         ),
         if (result.usedTomTomData)
           const _TomTomBanner(),
+        if (result.maxTruckSpeedKmh != null)
+          _SpeedLimitBanner(speedKmh: result.maxTruckSpeedKmh!),
         if (result.restrictionsAvoided.isNotEmpty ||
             result.restrictionsBlocked.isNotEmpty)
           _RestrictionsBanner(
@@ -2005,6 +2010,39 @@ class _TomTomBanner extends StatelessWidget {
                     color: Colors.teal.shade800,
                     fontWeight: FontWeight.w500),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SpeedLimitBanner extends StatelessWidget {
+  final int speedKmh;
+  const _SpeedLimitBanner({required this.speedKmh});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.orange.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.speed, color: Colors.orange.shade700, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              'Vel. máx. para caminhão: $speedKmh km/h',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.orange.shade800,
+                  fontWeight: FontWeight.w500),
             ),
           ],
         ),
