@@ -3,6 +3,6 @@ import 'package:truck_router/main.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(const TruckRouterApp());
+    await tester.pumpWidget(const TruckRouterApp(onboardingDone: true));
   });
 }

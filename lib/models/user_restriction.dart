@@ -2,6 +2,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'bridge_restriction.dart';
 
 class UserRestriction {
+  final String? id;
   final double lat;
   final double lng;
   final String type; // 'maxheight' | 'maxweight' | 'maxwidth'
@@ -10,6 +11,7 @@ class UserRestriction {
   final int confirmedBy;
 
   const UserRestriction({
+    this.id,
     required this.lat,
     required this.lng,
     required this.type,
@@ -38,6 +40,7 @@ class UserRestriction {
       };
 
   Map<String, dynamic> toJson() => {
+        if (id != null) 'id': id,
         'lat': lat,
         'lng': lng,
         'type': type,
@@ -47,6 +50,7 @@ class UserRestriction {
       };
 
   factory UserRestriction.fromJson(Map<String, dynamic> json) => UserRestriction(
+        id: json['id'] as String?,
         lat: (json['lat'] as num).toDouble(),
         lng: (json['lng'] as num).toDouble(),
         type: json['type'] as String,

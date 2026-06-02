@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'providers/truck_profile_provider.dart';
 import 'providers/route_provider.dart';
@@ -8,12 +9,16 @@ import 'repositories/restriction_repository.dart';
 import 'repositories/firestore_restriction_repository.dart';
 import 'repositories/api_restriction_repository.dart';
 import 'screens/map_screen.dart';
+import 'screens/onboarding_screen.dart';
 
 const _backendUrl = String.fromEnvironment('BACKEND_URL');
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  final prefs = await SharedPreferences.getInstance();
+  final onboardingDone = prefs.getBool('onboarding_done') ?? false;
 
   final RestrictionRepository repo = _backendUrl.isNotEmpty
       ? ApiRestrictionRepository(_backendUrl)
@@ -26,13 +31,14 @@ void main() async {
         ChangeNotifierProvider(create: (_) => TruckProfileProvider()..load()),
         ChangeNotifierProvider(create: (ctx) => RouteProvider(ctx.read<RestrictionRepository>())),
       ],
-      child: const TruckRouterApp(),
+      child: TruckRouterApp(onboardingDone: onboardingDone),
     ),
   );
 }
 
 class TruckRouterApp extends StatelessWidget {
-  const TruckRouterApp({super.key});
+  final bool onboardingDone;
+  const TruckRouterApp({super.key, required this.onboardingDone});
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +57,7 @@ class TruckRouterApp extends StatelessWidget {
         useMaterial3: true,
       ),
       themeMode: ThemeMode.system,
-      home: const MapScreen(),
+      home: onboardingDone ? const MapScreen() : const OnboardingScreen(),
     );
   }
 }

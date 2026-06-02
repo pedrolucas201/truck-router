@@ -59,6 +59,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   bool                     _markingMode = false;
   bool                     _panelCollapsed = false;
   bool                     _showDirtAlternative = false;
+  bool                     _showTruckTip = false;
   String?                  _selectedRoute; // 'paved' | 'dirt'
   Timer?                   _routeSelectionTimer;
   LatLng                   _cameraTarget = const LatLng(-23.5505, -46.6333);
@@ -77,6 +78,23 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _loadPoiIcons();
     _loadUserRestrictions();
+    _loadTruckTip();
+  }
+
+  Future<void> _loadTruckTip() async {
+    final prefs = await SharedPreferences.getInstance();
+    final shown = prefs.getBool('truck_tip_shown') ?? false;
+    if (!shown && mounted) {
+      setState(() => _showTruckTip = true);
+      Future.delayed(const Duration(seconds: 5), _dismissTruckTip);
+    }
+  }
+
+  Future<void> _dismissTruckTip() async {
+    if (!mounted) return;
+    setState(() => _showTruckTip = false);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('truck_tip_shown', true);
   }
 
   @override
@@ -280,7 +298,42 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _loadUserRestrictions() async {
-    final restrictions = await RestrictionService.load();
+    final local = await RestrictionService.load();
+    var restrictions = local;
+
+    if (local.isNotEmpty && mounted) {
+      try {
+        var minLat = local[0].lat, maxLat = local[0].lat;
+        var minLng = local[0].lng, maxLng = local[0].lng;
+        for (final r in local) {
+          if (r.lat < minLat) minLat = r.lat;
+          if (r.lat > maxLat) maxLat = r.lat;
+          if (r.lng < minLng) minLng = r.lng;
+          if (r.lng > maxLng) maxLng = r.lng;
+        }
+        const pad = 0.01;
+        final remote = await context.read<RestrictionRepository>().fetchByBounds(
+          minLat - pad, maxLat + pad, minLng - pad, maxLng + pad,
+        );
+        if (remote.isNotEmpty) {
+          restrictions = local.map((r) {
+            BridgeRestriction? match;
+            for (final b in remote) {
+              if ((b.lat - r.lat).abs() < 0.0001 && (b.lng - r.lng).abs() < 0.0001) {
+                match = b;
+                break;
+              }
+            }
+            if (match == null || match.confirmedBy == r.confirmedBy) return r;
+            return UserRestriction(
+              id: r.id ?? match.id, lat: r.lat, lng: r.lng, type: r.type,
+              value: r.value, createdAt: r.createdAt, confirmedBy: match.confirmedBy,
+            );
+          }).toList();
+        }
+      } catch (_) {}
+    }
+
     for (final r in restrictions) {
       final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}_${r.isVerified}';
       if (!_poiIconCache.containsKey(key)) {
@@ -350,7 +403,21 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     () async {
       try {
         final uid = await AuthService.getUid();
-        await repo.add(r, uid);
+        final id = await repo.add(r, uid);
+        final rWithId = UserRestriction(
+          id: id, lat: r.lat, lng: r.lng, type: r.type,
+          value: r.value, createdAt: r.createdAt, confirmedBy: r.confirmedBy,
+        );
+        await RestrictionService.remove(r);
+        await RestrictionService.add(rWithId);
+        if (mounted) {
+          setState(() {
+            final idx = _userRestrictions.indexWhere(
+              (x) => x.lat == r.lat && x.lng == r.lng && x.createdAt == r.createdAt,
+            );
+            if (idx != -1) _userRestrictions[idx] = rWithId;
+          });
+        }
       } catch (_) {}
     }();
 
@@ -1363,6 +1430,105 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       child: const Icon(Icons.add_location_alt),
                     ),
                   ),
+                if (_showTruckTip)
+                  Positioned(
+                    top: 100,
+                    right: 12,
+                    child: GestureDetector(
+                      onTap: _dismissTruckTip,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 14),
+                            child: CustomPaint(
+                              size: const Size(12, 8),
+                              painter: _UpArrowPainter(
+                                  color: Theme.of(context).colorScheme.primary),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: const [
+                                BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 6,
+                                    offset: Offset(0, 2))
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.local_shipping_rounded,
+                                    color: Colors.white, size: 15),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Configure seu caminhão aqui',
+                                  style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onPrimary,
+                                      fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_origin == null && _destination == null)
+                  Center(
+                    child: IgnorePointer(
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 80),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2))],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.map_outlined, size: 16, color: Colors.grey.shade600),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Digite origem e destino para calcular a rota',
+                              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                if (routeProvider.status == RouteStatus.loading)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.all(Radius.circular(24)),
+                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2))],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 10),
+                          Text('Calculando rota...', style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
                 if (_showDirtAlternative && result?.dirtRoadAlternative != null)
                   Positioned(
@@ -2029,9 +2195,17 @@ class _OnboardingItem extends StatelessWidget {
 
 // ── _RestrictionDetailSheet ───────────────────────────────────────────────────
 
-class _RestrictionDetailSheet extends StatelessWidget {
+class _RestrictionDetailSheet extends StatefulWidget {
   final UserRestriction restriction;
   const _RestrictionDetailSheet({required this.restriction});
+
+  @override
+  State<_RestrictionDetailSheet> createState() => _RestrictionDetailSheetState();
+}
+
+class _RestrictionDetailSheetState extends State<_RestrictionDetailSheet> {
+  bool _confirming = false;
+  bool _reporting  = false;
 
   String _formatDate(DateTime dt) {
     final d   = dt.day.toString().padLeft(2, '0');
@@ -2041,9 +2215,39 @@ class _RestrictionDetailSheet extends StatelessWidget {
     return '$d/$m/${dt.year} ${h}h$min';
   }
 
+  Future<void> _confirm() async {
+    setState(() => _confirming = true);
+    try {
+      await context.read<RestrictionRepository>().confirm(widget.restriction.id!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Confirmação registrada!'), duration: Duration(seconds: 2)),
+        );
+        Navigator.pop(context);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _confirming = false);
+    }
+  }
+
+  Future<void> _report() async {
+    setState(() => _reporting = true);
+    try {
+      await context.read<RestrictionRepository>().report(widget.restriction.id!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reporte enviado. Obrigado!'), duration: Duration(seconds: 2)),
+        );
+        Navigator.pop(context);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _reporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final r = restriction;
+    final r = widget.restriction;
     final iconData = switch (r.type) {
       'maxheight' => Icons.height,
       'maxweight' => Icons.monitor_weight,
@@ -2054,6 +2258,7 @@ class _RestrictionDetailSheet extends StatelessWidget {
       'maxweight' => Colors.brown.shade600,
       _           => Colors.deepOrange.shade600,
     };
+    final busy = _confirming || _reporting;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
       child: Column(
@@ -2065,29 +2270,74 @@ class _RestrictionDetailSheet extends StatelessWidget {
               Icon(iconData, color: color, size: 20),
               const SizedBox(width: 8),
               Text('Restrição marcada manualmente',
-                  style: TextStyle(
-                      color: Colors.grey.shade600, fontSize: 13)),
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+              const Spacer(),
+              if (r.isVerified)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.shade400),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.verified, size: 13, color: Colors.amber.shade700),
+                    const SizedBox(width: 4),
+                    Text('Verificado', style: TextStyle(fontSize: 11, color: Colors.amber.shade800, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
             ],
           ),
           const SizedBox(height: 8),
           Text(r.fullLabel,
-              style: const TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.bold)),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text('Adicionada em ${_formatDate(r.createdAt)}',
-              style:
-                  TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+          Row(children: [
+            Text('Adicionada em ${_formatDate(r.createdAt)}',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+            const SizedBox(width: 12),
+            Icon(Icons.thumb_up_outlined, size: 12, color: Colors.grey.shade500),
+            const SizedBox(width: 3),
+            Text('${r.confirmedBy} confirmação${r.confirmedBy == 1 ? '' : 'ões'}',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+          ]),
           const Divider(height: 24),
+          if (r.id != null) ...[
+            Row(children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: busy ? null : _confirm,
+                  icon: _confirming
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.thumb_up, size: 16),
+                  label: const Text('Confirmar'),
+                  style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: busy ? null : _report,
+                  icon: _reporting
+                      ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange.shade700))
+                      : const Icon(Icons.flag_outlined, size: 16),
+                  label: const Text('Incorreta'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orange.shade700,
+                    side: BorderSide(color: Colors.orange.shade400),
+                  ),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
+          ],
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: busy ? null : () => Navigator.pop(context, true),
               icon: const Icon(Icons.delete_outline, color: Colors.red),
-              label: const Text('Remover restrição',
-                  style: TextStyle(color: Colors.red)),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.red),
-              ),
+              label: const Text('Remover restrição', style: TextStyle(color: Colors.red)),
+              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
             ),
           ),
         ],
@@ -2270,4 +2520,23 @@ class _RouteOption extends StatelessWidget {
       ),
     );
   }
+}
+
+class _UpArrowPainter extends CustomPainter {
+  final Color color;
+  const _UpArrowPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    final path = Path()
+      ..moveTo(size.width / 2, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_UpArrowPainter old) => old.color != color;
 }

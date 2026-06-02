@@ -10,6 +10,32 @@ class ApiRestrictionRepository implements RestrictionRepository {
   final String baseUrl;
   ApiRestrictionRepository(this.baseUrl);
 
+  Future<List<BridgeRestriction>> _fetchByBbox(
+    double minLat, double maxLat, double minLng, double maxLng,
+  ) async {
+    final uri = Uri.parse('$baseUrl/restrictions').replace(queryParameters: {
+      'minLat': minLat.toString(),
+      'maxLat': maxLat.toString(),
+      'minLng': minLng.toString(),
+      'maxLng': maxLng.toString(),
+    });
+    final resp = await http.get(uri, headers: backendHeaders).timeout(const Duration(seconds: 10));
+    if (resp.statusCode != 200) return [];
+    final list = jsonDecode(resp.body) as List<dynamic>;
+    return list.map((e) {
+      final m = e as Map<String, dynamic>;
+      return BridgeRestriction(
+        id:          m['id'] as String?,
+        lat:         (m['lat']   as num).toDouble(),
+        lng:         (m['lng']   as num).toDouble(),
+        type:        m['type']   as String,
+        value:       (m['value'] as num).toDouble(),
+        roadName:    m['roadName'] as String?,
+        confirmedBy: (m['confirmedBy'] as num?)?.toInt() ?? 0,
+      );
+    }).toList();
+  }
+
   @override
   Future<List<BridgeRestriction>> fetchNearRoute(List<LatLng> points) async {
     if (points.isEmpty) return [];
@@ -22,27 +48,18 @@ class ApiRestrictionRepository implements RestrictionRepository {
       if (p.longitude > maxLng) maxLng = p.longitude;
     }
     try {
-      final uri = Uri.parse('$baseUrl/restrictions').replace(queryParameters: {
-        'minLat': minLat.toString(),
-        'maxLat': maxLat.toString(),
-        'minLng': minLng.toString(),
-        'maxLng': maxLng.toString(),
-      });
-      final resp = await http.get(uri, headers: backendHeaders).timeout(const Duration(seconds: 10));
-      if (resp.statusCode != 200) return [];
-      final list = jsonDecode(resp.body) as List<dynamic>;
-      return list.map((e) {
-        final m = e as Map<String, dynamic>;
-        return BridgeRestriction(
-          id:          m['id'] as String?,
-          lat:         (m['lat']   as num).toDouble(),
-          lng:         (m['lng']   as num).toDouble(),
-          type:        m['type']   as String,
-          value:       (m['value'] as num).toDouble(),
-          roadName:    m['roadName'] as String?,
-          confirmedBy: (m['confirmedBy'] as num?)?.toInt() ?? 0,
-        );
-      }).toList();
+      return await _fetchByBbox(minLat, maxLat, minLng, maxLng);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  Future<List<BridgeRestriction>> fetchByBounds(
+    double minLat, double maxLat, double minLng, double maxLng,
+  ) async {
+    try {
+      return await _fetchByBbox(minLat, maxLat, minLng, maxLng);
     } catch (_) {
       return [];
     }
