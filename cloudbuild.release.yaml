@@ -6,6 +6,8 @@ steps:
   - name: 'ghcr.io/cirruslabs/flutter:stable'
     entrypoint: bash
     secretEnv: ['BACKEND_API_KEY']
+    env:
+      - 'GRADLE_OPTS=-Xmx1536m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2'
     args:
       - '-c'
       - >-
@@ -22,4 +24,3 @@ timeout: '3600s'
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: N1_HIGHCPU_8
