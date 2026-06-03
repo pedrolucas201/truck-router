@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config.dart';
+import 'auth_service.dart';
 import '../models/route_maneuver.dart';
 import '../models/route_result.dart';
 import '../models/truck_profile.dart';
@@ -33,7 +34,7 @@ class TomTomRoutingService {
 
     final uri = Uri.parse('$backendUrl/route/tomtom/$locs')
         .replace(queryParameters: params);
-    final response = await http.get(uri, headers: backendHeaders).timeout(const Duration(seconds: 20));
+    final response = await http.get(uri, headers: await AuthService.getHeaders()).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
       throw Exception('TomTom ${response.statusCode}: ${response.body}');
     }

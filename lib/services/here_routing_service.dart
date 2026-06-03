@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config.dart';
+import 'auth_service.dart';
 import '../models/route_maneuver.dart';
 import '../models/route_result.dart';
 import '../models/truck_profile.dart';
@@ -48,7 +49,7 @@ class HereRoutingService {
       parts.add('avoid[areas]=${avoidAreas.join('|')}');
     }
     final uri = Uri.parse('$backendUrl/route/here?${parts.join('&')}');
-    final response = await http.get(uri, headers: backendHeaders);
+    final response = await http.get(uri, headers: await AuthService.getHeaders());
 
     if (response.statusCode != 200) {
       throw Exception('HERE API error ${response.statusCode}: ${response.body}');

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config.dart';
+import 'auth_service.dart';
 
 class GeocodingSuggestion {
   final String title;
@@ -66,7 +67,7 @@ class HereGeocodingService {
     };
     final response = await http.get(
         Uri.parse('$backendUrl/here/autocomplete').replace(queryParameters: params),
-        headers: backendHeaders);
+        headers: await AuthService.getHeaders());
     if (response.statusCode != 200) return [];
 
     final items = jsonDecode(response.body)['items'] as List<dynamic>? ?? [];
@@ -92,7 +93,7 @@ class HereGeocodingService {
     };
     final response = await http.get(
         Uri.parse('$backendUrl/here/geocode').replace(queryParameters: params),
-        headers: backendHeaders);
+        headers: await AuthService.getHeaders());
     if (response.statusCode != 200) return [];
 
     final items = jsonDecode(response.body)['items'] as List<dynamic>? ?? [];
@@ -129,7 +130,7 @@ class HereGeocodingService {
     };
     final response = await http.get(
         Uri.parse('$backendUrl/here/discover').replace(queryParameters: params),
-        headers: backendHeaders);
+        headers: await AuthService.getHeaders());
     if (response.statusCode != 200) return [];
 
     final items = jsonDecode(response.body)['items'] as List<dynamic>? ?? [];
@@ -241,7 +242,7 @@ class HereGeocodingService {
             try {
               final resp = await http.get(Uri.parse('$backendUrl/here/geocode').replace(
                 queryParameters: {'qq': qqParts.join(';'), 'in': 'countryCode:BRA', 'lang': 'pt-BR', 'limit': '5'},
-              ), headers: backendHeaders);
+              ), headers: await AuthService.getHeaders());
               if (resp.statusCode == 200) {
                 final cidadeN = _norm(cidade);
                 final ruaN    = _norm(logradouro);
@@ -379,7 +380,7 @@ class HereGeocodingService {
     try {
       final resp = await http.get(Uri.parse('$backendUrl/here/geocode').replace(
         queryParameters: {'qq': 'postalCode=$cep;country=Brazil', 'in': 'countryCode:BRA', 'lang': 'pt-BR', 'limit': '3'},
-      ), headers: backendHeaders);
+      ), headers: await AuthService.getHeaders());
       if (resp.statusCode == 200) {
         final items = (jsonDecode(resp.body)['items'] as List<dynamic>? ?? [])
             .cast<Map<String, dynamic>>()
@@ -420,7 +421,7 @@ class HereGeocodingService {
       if (state.isNotEmpty)    'countrySubdivision': state,
     };
     final uri = Uri.parse('$backendUrl/tomtom/geocode').replace(queryParameters: params);
-    final resp = await http.get(uri, headers: backendHeaders).timeout(const Duration(seconds: 8));
+    final resp = await http.get(uri, headers: await AuthService.getHeaders()).timeout(const Duration(seconds: 8));
     if (resp.statusCode != 200) return null;
 
     final results = (jsonDecode(resp.body)['results'] as List<dynamic>? ?? [])
@@ -460,7 +461,7 @@ class HereGeocodingService {
           'id':   hereId,
           'lang': 'pt-BR',
         }),
-        headers: backendHeaders);
+        headers: await AuthService.getHeaders());
     if (response.statusCode != 200) return null;
 
     final pos = jsonDecode(response.body)['position'] as Map<String, dynamic>?;
@@ -478,7 +479,7 @@ class HereGeocodingService {
           'lang':  'pt-BR',
           'limit': '1',
         }),
-        headers: backendHeaders);
+        headers: await AuthService.getHeaders());
     if (response.statusCode != 200) {
       return '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
     }

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../config.dart';
+import '../services/auth_service.dart';
 import '../models/bridge_restriction.dart';
 import '../models/user_restriction.dart';
 import 'restriction_repository.dart';
@@ -19,7 +19,7 @@ class ApiRestrictionRepository implements RestrictionRepository {
       'minLng': minLng.toString(),
       'maxLng': maxLng.toString(),
     });
-    final resp = await http.get(uri, headers: backendHeaders).timeout(const Duration(seconds: 10));
+    final resp = await http.get(uri, headers: await AuthService.getHeaders()).timeout(const Duration(seconds: 10));
     if (resp.statusCode != 200) return [];
     final list = jsonDecode(resp.body) as List<dynamic>;
     return list.map((e) {
@@ -70,7 +70,7 @@ class ApiRestrictionRepository implements RestrictionRepository {
     final resp = await http
         .post(
           Uri.parse('$baseUrl/restrictions'),
-          headers: {'Content-Type': 'application/json', ...backendHeaders},
+          headers: {'Content-Type': 'application/json', ...await AuthService.getHeaders()},
           body: jsonEncode({...r.toJson(), 'uid': uid}),
         )
         .timeout(const Duration(seconds: 10));
@@ -83,14 +83,14 @@ class ApiRestrictionRepository implements RestrictionRepository {
   @override
   Future<void> confirm(String id) async {
     await http
-        .post(Uri.parse('$baseUrl/restrictions/$id/confirm'), headers: backendHeaders, body: '')
+        .post(Uri.parse('$baseUrl/restrictions/$id/confirm'), headers: await AuthService.getHeaders(), body: '')
         .timeout(const Duration(seconds: 10));
   }
 
   @override
   Future<void> report(String id) async {
     await http
-        .post(Uri.parse('$baseUrl/restrictions/$id/report'), headers: backendHeaders, body: '')
+        .post(Uri.parse('$baseUrl/restrictions/$id/report'), headers: await AuthService.getHeaders(), body: '')
         .timeout(const Duration(seconds: 10));
   }
 }

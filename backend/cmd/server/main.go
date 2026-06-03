@@ -26,6 +26,10 @@ func main() {
 	}
 	defer fsClient.Close()
 
+	if err := apimw.InitFirebaseAuth(ctx); err != nil {
+		log.Fatalf("firebase auth: %v", err)
+	}
+
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -33,7 +37,7 @@ func main() {
 	r.Get("/health", handlers.Health)
 
 	r.Group(func(r chi.Router) {
-		r.Use(apimw.ApiKey)
+		r.Use(apimw.FirebaseAuth)
 
 		h := handlers.NewRestrictions(fsClient)
 		r.Get("/restrictions", h.List)
