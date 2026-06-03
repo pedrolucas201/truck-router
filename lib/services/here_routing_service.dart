@@ -129,7 +129,7 @@ class HereRoutingService {
       durationSeconds:   totalDuration,
       maneuvers:         allManeuvers,
       hasTimeRestriction: hasTimeRestriction,
-      maxTruckSpeedKmh:  maxTruckSpeed > 0 ? maxTruckSpeed : null,
+      maxTruckSpeedKmh:  maxTruckSpeed > 0 ? maxTruckSpeed : 90,
     );
   }
 }

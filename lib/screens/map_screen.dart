@@ -613,7 +613,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     buf.writeln('Distância: ${result.distanceText}');
     buf.writeln('Duração: ${result.durationText}');
     if (result.maxTruckSpeedKmh != null) {
-      buf.writeln('Vel. máx. caminhão: ${result.maxTruckSpeedKmh} km/h');
+      buf.writeln('Vel. máx. caminhão: 90 km/h (pista dupla) / 80 km/h (pista simples)');
     }
     buf.writeln();
     buf.write(
@@ -1692,7 +1692,7 @@ class _ResultCard extends StatelessWidget {
         if (result.usedTomTomData)
           const _TomTomBanner(),
         if (result.maxTruckSpeedKmh != null)
-          _SpeedLimitBanner(speedKmh: result.maxTruckSpeedKmh!),
+          const _SpeedLimitBanner(),
         if (result.restrictionsAvoided.isNotEmpty ||
             result.restrictionsBlocked.isNotEmpty)
           _RestrictionsBanner(
@@ -2019,8 +2019,7 @@ class _TomTomBanner extends StatelessWidget {
 }
 
 class _SpeedLimitBanner extends StatelessWidget {
-  final int speedKmh;
-  const _SpeedLimitBanner({required this.speedKmh});
+  const _SpeedLimitBanner();
 
   @override
   Widget build(BuildContext context) {
@@ -2035,18 +2034,60 @@ class _SpeedLimitBanner extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.speed, color: Colors.orange.shade700, size: 16),
-            const SizedBox(width: 8),
+            Icon(Icons.speed, color: Colors.orange.shade700, size: 14),
+            const SizedBox(width: 6),
             Text(
-              'Vel. máx. para caminhão: $speedKmh km/h',
+              'CTB art. 61',
               style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.orange.shade800,
-                  fontWeight: FontWeight.w500),
+                  fontSize: 11,
+                  color: Colors.orange.shade700,
+                  fontWeight: FontWeight.w600),
             ),
+            const Spacer(),
+            _SpeedChip(kmh: 90, label: 'dupla', color: Colors.orange.shade700),
+            const SizedBox(width: 8),
+            _SpeedChip(kmh: 80, label: 'simples', color: Colors.amber.shade700),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SpeedChip extends StatelessWidget {
+  final int kmh;
+  final String label;
+  final Color color;
+
+  const _SpeedChip(
+      {required this.kmh, required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(5),
+          ),
+          child: Text(
+            '$kmh',
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                height: 1.0),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: Colors.orange.shade800),
+        ),
+      ],
     );
   }
 }

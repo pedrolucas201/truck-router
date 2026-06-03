@@ -96,6 +96,8 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _paused = false;
   bool _arrived = false;
   bool _ttsActive = false;
+  bool _speedAlertActive = false;
+  DateTime? _lastSpeedAlertAt;
   final Set<String> _actionedRestrictions = {};
   LatLng? _snappedPos;
   bool _hasFirstFix = false;
@@ -319,6 +321,23 @@ class _NavigationScreenState extends State<NavigationScreen>
     });
   }
 
+  void _checkSpeedAlert(double kmh) {
+    if (kmh >= 90) {
+      final now = DateTime.now();
+      if (!_speedAlertActive) {
+        _speedAlertActive = true;
+        _lastSpeedAlertAt = now;
+        _speak('Velocidade acima do limite para caminhão');
+      } else if (_lastSpeedAlertAt != null &&
+          now.difference(_lastSpeedAlertAt!).inSeconds >= 30) {
+        _lastSpeedAlertAt = now;
+        _speak('Velocidade acima do limite para caminhão');
+      }
+    } else if (kmh < 85) {
+      _speedAlertActive = false;
+    }
+  }
+
   // ── GPS ──────────────────────────────────────────────────────────────────────
 
   void _startGps() {
@@ -472,6 +491,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     });
     _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
+    _checkSpeedAlert(_speedKmh);
 
     // 8. Câmera segue o usuário (pausada no modo crosshair)
     // Usa pts[bestIdx] (snapped) em vez do GPS bruto — evita que a seta
@@ -1382,7 +1402,7 @@ class _InstructionBar extends StatelessWidget {
 
 // ── _BottomBar ─────────────────────────────────────────────────────────────────
 
-class _BottomBar extends StatelessWidget {
+class _BottomBar extends StatefulWidget {
   final double speedKmh;
   final String remainingDist;
   final String eta;
@@ -1396,9 +1416,67 @@ class _BottomBar extends StatelessWidget {
   });
 
   @override
+  State<_BottomBar> createState() => _BottomBarState();
+}
+
+class _BottomBarState extends State<_BottomBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _pulseAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void didUpdateWidget(_BottomBar old) {
+    super.didUpdateWidget(old);
+    if (widget.speedKmh >= 90 && !_pulseCtrl.isAnimating) {
+      _pulseCtrl.repeat(reverse: true);
+    } else if (widget.speedKmh < 88 && _pulseCtrl.isAnimating) {
+      _pulseCtrl.stop();
+      _pulseCtrl.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  Color get _borderColor {
+    if (widget.speedKmh >= 90) return Colors.red.shade600;
+    if (widget.speedKmh >= 80) return Colors.amber.shade600;
+    return Colors.white24;
+  }
+
+  Color get _limitTextColor {
+    if (widget.speedKmh >= 90) return Colors.red.shade400;
+    return Colors.amber.shade400;
+  }
+
+  String? get _limitLabel {
+    if (widget.speedKmh >= 90) return '/ 90';
+    if (widget.speedKmh >= 80) return '/ 80';
+    return null;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isLombada = radarAlert != null &&
-        radarAlert!.type.toLowerCase().contains('lombada');
+    final isOver = widget.speedKmh >= 90;
+    final isWarn = widget.speedKmh >= 80;
+    final limitLabel = _limitLabel;
+    final isLombada = widget.radarAlert != null &&
+        widget.radarAlert!.type.toLowerCase().contains('lombada');
 
     return Container(
       color: const Color(0xFF212121),
@@ -1406,42 +1484,74 @@ class _BottomBar extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Velocímetro circular
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFF2C2C2C),
-              border: Border.all(color: Colors.white24, width: 2),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '${speedKmh.round()}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    height: 1.0,
-                  ),
+          AnimatedBuilder(
+            animation: _pulseAnim,
+            builder: (context, _) {
+              final t = isOver ? _pulseAnim.value : 0.0;
+              final borderColor = isOver
+                  ? Color.lerp(Colors.red.shade600, Colors.red.shade300, t)!
+                  : _borderColor;
+              final borderW = isOver ? 2.0 + t * 2.5 : (isWarn ? 2.5 : 2.0);
+              final bgColor = isOver
+                  ? Color.lerp(
+                      const Color(0xFF2C2C2C), Colors.red.shade900, t * 0.35)!
+                  : const Color(0xFF2C2C2C);
+
+              return Container(
+                width: 84,
+                height: 84,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: bgColor,
+                  border: Border.all(color: borderColor, width: borderW),
                 ),
-                Text(
-                  'km/h',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '${widget.speedKmh.round()}',
+                      style: TextStyle(
+                        color: isOver
+                            ? Color.lerp(
+                                Colors.white, Colors.red.shade200, t)
+                            : Colors.white,
+                        fontSize: limitLabel != null ? 26 : 32,
+                        fontWeight: FontWeight.bold,
+                        height: 1.0,
+                      ),
+                    ),
+                    Text(
+                      'km/h',
+                      style: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 10,
+                          height: 1.2),
+                    ),
+                    if (limitLabel != null)
+                      Text(
+                        limitLabel,
+                        style: TextStyle(
+                          color: _limitTextColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          height: 1.1,
+                        ),
+                      ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
           const SizedBox(width: 16),
-          // Alerta de radar (se houver) ou distância + tempo
           Expanded(
-            child: radarAlert != null
+            child: widget.radarAlert != null
                 ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isLombada ? Colors.orange.shade700 : Colors.red.shade700,
+                      color: isLombada
+                          ? Colors.orange.shade700
+                          : Colors.red.shade700,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
@@ -1450,9 +1560,11 @@ class _BottomBar extends StatelessWidget {
                         const Icon(Icons.speed, color: Colors.white, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          radarAlert!.speedKmh > 0
-                              ? '${radarAlert!.speedKmh} km/h'
-                              : isLombada ? 'Lombada' : 'Radar',
+                          widget.radarAlert!.speedKmh > 0
+                              ? '${widget.radarAlert!.speedKmh} km/h'
+                              : isLombada
+                                  ? 'Lombada'
+                                  : 'Radar',
                           style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -1464,8 +1576,9 @@ class _BottomBar extends StatelessWidget {
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _BarItem(top: remainingDist, bottom: 'restante'),
-                      _BarItem(top: eta, bottom: 'chegada'),
+                      _BarItem(
+                          top: widget.remainingDist, bottom: 'restante'),
+                      _BarItem(top: widget.eta, bottom: 'chegada'),
                     ],
                   ),
           ),
