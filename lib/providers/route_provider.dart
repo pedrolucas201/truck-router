@@ -1,5 +1,7 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../models/bridge_restriction.dart';
 import '../models/route_result.dart';
 import '../models/truck_profile.dart';
 import '../repositories/restriction_repository.dart';
@@ -107,7 +109,17 @@ class RouteProvider extends ChangeNotifier {
             waypoints:     waypoints,
             avoidAreas:    avoidAreas,
           );
-          result = rerouted.copyWith(restrictionsAvoided: conflicts);
+          // Valida se o desvio funcionou: HERE pode ignorar o avoid[areas]
+          // se não houver rota alternativa, retornando a rota original sem erro.
+          final reallyAvoided = <BridgeRestriction>[];
+          final stillBlocked  = <BridgeRestriction>[];
+          for (final r in conflicts) {
+            (_isOnRoute(r, rerouted.polylinePoints) ? stillBlocked : reallyAvoided).add(r);
+          }
+          result = rerouted.copyWith(
+            restrictionsAvoided: reallyAvoided,
+            restrictionsBlocked: stillBlocked,
+          );
         } catch (_) {
           // HERE não encontrou rota alternativa — usa a original e avisa.
           result = result.copyWith(restrictionsBlocked: conflicts);
@@ -160,5 +172,18 @@ class RouteProvider extends ChangeNotifier {
     _result = null;
     _errorMessage = null;
     notifyListeners();
+  }
+
+  // Retorna true se a restrição cai dentro de ~50m de qualquer ponto da polyline.
+  // Usa aproximação plana — válida para distâncias pequenas na latitude do Brasil.
+  static bool _isOnRoute(BridgeRestriction r, List<LatLng> points) {
+    const thresholdSq = 50.0 * 50.0;
+    final cosLat = cos(r.lat * pi / 180);
+    for (final p in points) {
+      final dy = (r.lat - p.latitude)  * 111320;
+      final dx = (r.lng - p.longitude) * 111320 * cosLat;
+      if (dx * dx + dy * dy <= thresholdSq) return true;
+    }
+    return false;
   }
 }

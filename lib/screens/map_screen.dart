@@ -779,6 +779,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         ));
     });
     context.read<RouteProvider>().clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _calculate();
+    });
   }
 
   Future<void> _showHistory() async {
@@ -2352,7 +2355,7 @@ class _RestrictionDetailSheetState extends State<_RestrictionDetailSheet> {
             const SizedBox(width: 12),
             Icon(Icons.thumb_up_outlined, size: 12, color: Colors.grey.shade500),
             const SizedBox(width: 3),
-            Text('${r.confirmedBy} confirmação${r.confirmedBy == 1 ? '' : 'ões'}',
+            Text('${r.confirmedBy} ${r.confirmedBy == 1 ? 'confirmação' : 'confirmações'}',
                 style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
           ]),
           const Divider(height: 24),
