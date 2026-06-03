@@ -18,7 +18,8 @@ availableSecrets:
     - versionName: projects/maps-route-495614/secrets/BACKEND_API_KEY/versions/latest
       env: BACKEND_API_KEY
 
-timeout: '1800s'
+timeout: '3600s'
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
