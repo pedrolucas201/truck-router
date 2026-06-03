@@ -1485,31 +1485,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                if (_origin == null && _destination == null)
-                  Center(
-                    child: IgnorePointer(
-                      child: Container(
-                        margin: const EdgeInsets.only(top: 80),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2))],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.map_outlined, size: 16, color: Colors.grey.shade600),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Digite origem e destino para calcular a rota',
-                              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
                 if (routeProvider.status == RouteStatus.loading)
                   Center(
                     child: Container(
