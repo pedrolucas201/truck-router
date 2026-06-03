@@ -1,0 +1,24 @@
+steps:
+  - name: 'ghcr.io/cirruslabs/flutter:stable'
+    entrypoint: flutter
+    args: ['pub', 'get']
+
+  - name: 'ghcr.io/cirruslabs/flutter:stable'
+    entrypoint: bash
+    secretEnv: ['BACKEND_API_KEY']
+    args:
+      - '-c'
+      - >-
+        flutter build apk --release --no-tree-shake-icons
+        --dart-define=BACKEND_URL=https://truck-router-backend-707407458764.southamerica-east1.run.app
+        --dart-define=BACKEND_API_KEY=$$BACKEND_API_KEY
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/maps-route-495614/secrets/BACKEND_API_KEY/versions/latest
+      env: BACKEND_API_KEY
+
+timeout: '1800s'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
