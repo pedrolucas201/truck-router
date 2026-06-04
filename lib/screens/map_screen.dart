@@ -2288,8 +2288,29 @@ class _RestrictionDetailSheet extends StatefulWidget {
 }
 
 class _RestrictionDetailSheetState extends State<_RestrictionDetailSheet> {
-  bool _confirming = false;
-  bool _reporting  = false;
+  bool    _confirming = false;
+  bool    _reporting  = false;
+  String? _cachedVote; // "confirm" | "report" | null
+
+  static String _voteKey(String id) => 'restriction_vote_$id';
+
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.restriction.id;
+    if (id != null) {
+      SharedPreferences.getInstance().then((prefs) {
+        if (mounted) setState(() => _cachedVote = prefs.getString(_voteKey(id)));
+      });
+    }
+  }
+
+  Future<void> _saveVote(String action) async {
+    final id = widget.restriction.id!;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_voteKey(id), action);
+    if (mounted) setState(() => _cachedVote = action);
+  }
 
   String _formatDate(DateTime dt) {
     final d   = dt.day.toString().padLeft(2, '0');
@@ -2303,6 +2324,7 @@ class _RestrictionDetailSheetState extends State<_RestrictionDetailSheet> {
     setState(() => _confirming = true);
     try {
       await context.read<RestrictionRepository>().confirm(widget.restriction.id!);
+      await _saveVote('confirm');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Confirmação registrada!'), duration: Duration(seconds: 2)),
@@ -2318,6 +2340,7 @@ class _RestrictionDetailSheetState extends State<_RestrictionDetailSheet> {
     setState(() => _reporting = true);
     try {
       await context.read<RestrictionRepository>().report(widget.restriction.id!);
+      await _saveVote('report');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Reporte enviado. Obrigado!'), duration: Duration(seconds: 2)),
@@ -2393,9 +2416,11 @@ class _RestrictionDetailSheetState extends State<_RestrictionDetailSheet> {
                   onPressed: busy ? null : _confirm,
                   icon: _confirming
                       ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.thumb_up, size: 16),
-                  label: const Text('Confirmar'),
-                  style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600),
+                      : Icon(_cachedVote == 'confirm' ? Icons.check : Icons.thumb_up, size: 16),
+                  label: Text(_cachedVote == 'confirm' ? 'Confirmado' : 'Confirmar'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _cachedVote == 'confirm' ? Colors.green.shade800 : Colors.green.shade600,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -2404,11 +2429,14 @@ class _RestrictionDetailSheetState extends State<_RestrictionDetailSheet> {
                   onPressed: busy ? null : _report,
                   icon: _reporting
                       ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange.shade700))
-                      : const Icon(Icons.flag_outlined, size: 16),
-                  label: const Text('Incorreta'),
+                      : Icon(_cachedVote == 'report' ? Icons.flag : Icons.flag_outlined, size: 16),
+                  label: Text(_cachedVote == 'report' ? 'Reportada' : 'Incorreta'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.orange.shade700,
-                    side: BorderSide(color: Colors.orange.shade400),
+                    side: BorderSide(
+                      color: _cachedVote == 'report' ? Colors.orange.shade700 : Colors.orange.shade400,
+                      width: _cachedVote == 'report' ? 2 : 1,
+                    ),
                   ),
                 ),
               ),

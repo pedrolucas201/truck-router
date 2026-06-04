@@ -9,6 +9,7 @@ import (
 	"cloud.google.com/go/firestore"
 	"github.com/go-chi/chi/v5"
 	fs "github.com/pedrolucas201/truck-router/backend/internal/firestore"
+	"github.com/pedrolucas201/truck-router/backend/internal/middleware"
 )
 
 type Restrictions struct {
@@ -68,21 +69,26 @@ func (h *Restrictions) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Restrictions) Confirm(w http.ResponseWriter, r *http.Request) {
-	h.incrementField(w, r, "confirmedBy")
+	h.vote(w, r, "confirm")
 }
 
 func (h *Restrictions) Report(w http.ResponseWriter, r *http.Request) {
-	h.incrementField(w, r, "reportedBy")
+	h.vote(w, r, "report")
 }
 
-func (h *Restrictions) incrementField(w http.ResponseWriter, r *http.Request, field string) {
+func (h *Restrictions) vote(w http.ResponseWriter, r *http.Request, action string) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "missing id", http.StatusBadRequest)
 		return
 	}
-	if err := fs.Increment(r.Context(), h.client, id, field); err != nil {
-		log.Printf("Increment %s %s: %v", id, field, err)
+	uid := middleware.UIDFromContext(r.Context())
+	if uid == "" {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	if err := fs.Vote(r.Context(), h.client, id, uid, action); err != nil {
+		log.Printf("Vote %s %s %s: %v", id, uid, action, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

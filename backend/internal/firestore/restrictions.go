@@ -6,6 +6,8 @@ import (
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const collection = "restrictions"
@@ -71,14 +73,55 @@ func Create(ctx context.Context, client *firestore.Client, in CreateInput) (stri
 	return ref.ID, nil
 }
 
-func Increment(ctx context.Context, client *firestore.Client, id, field string) error {
-	_, err := client.Collection(collection).Doc(id).Update(ctx, []firestore.Update{
-		{Path: field, Value: firestore.Increment(1)},
+// Vote registers a "confirm" or "report" vote for a restriction, deduplicating by uid.
+// Switching actions (confirm → report or vice-versa) is allowed and adjusts both counters.
+func Vote(ctx context.Context, client *firestore.Client, id, uid, action string) error {
+	restrictionRef := client.Collection(collection).Doc(id)
+	voteRef := restrictionRef.Collection("votes").Doc(uid)
+
+	return client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		voteDoc, err := tx.Get(voteRef)
+
+		if err != nil && !isNotFound(err) {
+			return fmt.Errorf("get vote: %w", err)
+		}
+
+		// No previous vote — increment target counter and create vote doc.
+		if isNotFound(err) {
+			if err := tx.Set(voteRef, map[string]any{"action": action}); err != nil {
+				return err
+			}
+			return tx.Update(restrictionRef, []firestore.Update{
+				{Path: counterField(action), Value: firestore.Increment(1)},
+			})
+		}
+
+		// Same action — idempotent, nothing to do.
+		prev, _ := voteDoc.Data()["action"].(string)
+		if prev == action {
+			return nil
+		}
+
+		// Changed action — swap counters and update vote doc.
+		if err := tx.Set(voteRef, map[string]any{"action": action}); err != nil {
+			return err
+		}
+		return tx.Update(restrictionRef, []firestore.Update{
+			{Path: counterField(prev), Value: firestore.Increment(-1)},
+			{Path: counterField(action), Value: firestore.Increment(1)},
+		})
 	})
-	if err != nil {
-		return fmt.Errorf("update %s: %w", field, err)
+}
+
+func counterField(action string) string {
+	if action == "confirm" {
+		return "confirmedBy"
 	}
-	return nil
+	return "reportedBy"
+}
+
+func isNotFound(err error) bool {
+	return status.Code(err) == codes.NotFound
 }
 
 func fromDoc(doc *firestore.DocumentSnapshot) Restriction {
