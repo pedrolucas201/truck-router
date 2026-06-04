@@ -1743,10 +1743,6 @@ class _ResultCard extends StatelessWidget {
             ),
           ),
         ),
-        if (result.usedTomTomData)
-          const _TomTomBanner(),
-        if (result.maxTruckSpeedKmh != null)
-          const _SpeedLimitBanner(),
         if (result.restrictionsAvoided.isNotEmpty ||
             result.restrictionsBlocked.isNotEmpty)
           _RestrictionsBanner(
@@ -2035,114 +2031,6 @@ class _PoiSheet extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _TomTomBanner extends StatelessWidget {
-  const _TomTomBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.teal.shade50,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.teal.shade200),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.verified_outlined, color: Colors.teal.shade700, size: 16),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Rota otimizada com TomTom — restrições adicionais detectadas',
-                style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.teal.shade800,
-                    fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SpeedLimitBanner extends StatelessWidget {
-  const _SpeedLimitBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.orange.shade50,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.orange.shade200),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.speed, color: Colors.orange.shade700, size: 14),
-            const SizedBox(width: 6),
-            Text(
-              'CTB art. 61',
-              style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.orange.shade700,
-                  fontWeight: FontWeight.w600),
-            ),
-            const Spacer(),
-            _SpeedChip(kmh: 90, label: 'dupla', color: Colors.orange.shade700),
-            const SizedBox(width: 8),
-            _SpeedChip(kmh: 80, label: 'simples', color: Colors.amber.shade700),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SpeedChip extends StatelessWidget {
-  final int kmh;
-  final String label;
-  final Color color;
-
-  const _SpeedChip(
-      {required this.kmh, required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(5),
-          ),
-          child: Text(
-            '$kmh',
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                height: 1.0),
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(fontSize: 11, color: Colors.orange.shade800),
-        ),
-      ],
     );
   }
 }
