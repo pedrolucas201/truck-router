@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,6 +10,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../utils/geo_uri_parser.dart';
 import '../data/pois.dart';
 import '../models/bridge_restriction.dart';
 import '../models/poi.dart';
@@ -47,6 +49,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   DateTime? _departureTime;
   Key _originKey      = const ValueKey('origin');
   Key _destinationKey = const ValueKey('destination');
+  StreamSubscription<Uri>? _deepLinkSub;
   bool _locatingGps = false;
   final _waypointPositions = <LatLng?>[];
   final _waypointLabels    = <String?>[];
@@ -79,6 +82,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _loadPoiIcons();
     _loadUserRestrictions();
     _loadTruckTip();
+    _initDeepLinks();
   }
 
   Future<void> _loadTruckTip() async {
@@ -97,9 +101,64 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     await prefs.setBool('truck_tip_shown', true);
   }
 
+  Future<void> _initDeepLinks() async {
+    final appLinks = AppLinks();
+    final initial = await appLinks.getInitialLink();
+    if (initial != null && mounted) _handleGeoUri(initial);
+    _deepLinkSub = appLinks.uriLinkStream.listen((uri) {
+      if (mounted) _handleGeoUri(uri);
+    });
+  }
+
+  void _handleGeoUri(Uri uri) {
+    final geo = parseGeoUri(uri);
+    if (geo == null) return;
+    if (_destination != null) {
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Usar como destino?'),
+          content: const Text('Isso vai substituir o destino atual.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _setDeepLinkDestination(geo);
+              },
+              child: const Text('Usar'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      _setDeepLinkDestination(geo);
+    }
+  }
+
+  void _setDeepLinkDestination(GeoLocation geo) {
+    setState(() {
+      _destination      = geo.coords;
+      _destinationLabel = geo.label ?? 'Localização compartilhada';
+      _destinationKey   = ValueKey('dest_deep_${DateTime.now().millisecondsSinceEpoch}');
+    });
+    context.read<RouteProvider>().clear();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Destino recebido — toque em Calcular para rotear'),
+        duration: Duration(seconds: 4),
+      ),
+    );
+    if (_origin != null) _calculate();
+  }
+
   @override
   void dispose() {
     _routeSelectionTimer?.cancel();
+    _deepLinkSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

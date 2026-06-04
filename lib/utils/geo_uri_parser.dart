@@ -1,0 +1,44 @@
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+typedef GeoLocation = ({LatLng coords, String? label});
+
+/// Parses a `geo:` URI into coordinates and optional label.
+///
+/// Handles the four common variants:
+///   geo:lat,lng
+///   geo:lat,lng?z=15
+///   geo:0,0?q=lat,lng
+///   geo:0,0?q=lat,lng(Label)
+///
+/// Returns null for malformed or text-search-only URIs (e.g. geo:0,0?q=Coffee).
+GeoLocation? parseGeoUri(Uri uri) {
+  if (uri.scheme != 'geo') return null;
+
+  final q = uri.queryParameters['q'];
+  if (q != null) {
+    String? label;
+    String coords = q;
+    final parenIdx = q.indexOf('(');
+    if (parenIdx != -1) {
+      label = q.substring(parenIdx + 1, q.endsWith(')') ? q.length - 1 : q.length);
+      coords = q.substring(0, parenIdx).trim();
+    }
+    final latLng = _parseLatLng(coords);
+    if (latLng == null) return null;
+    return (coords: latLng, label: label?.isNotEmpty == true ? label : null);
+  }
+
+  final latLng = _parseLatLng(uri.path);
+  if (latLng == null) return null;
+  return (coords: latLng, label: null);
+}
+
+LatLng? _parseLatLng(String s) {
+  final parts = s.split(',');
+  if (parts.length < 2) return null;
+  final lat = double.tryParse(parts[0].trim());
+  final lng = double.tryParse(parts[1].trim());
+  if (lat == null || lng == null) return null;
+  if (lat == 0.0 && lng == 0.0) return null;
+  return LatLng(lat, lng);
+}
