@@ -363,34 +363,46 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (_paused) {
       final pts2 = _result.polylinePoints;
       final s2 = (_closestPolylineIdx - 5).clamp(0, pts2.length - 1);
-      var bi2 = _closestPolylineIdx;
-      var bd2 = double.infinity;
-      for (var i = s2; i < min(s2 + 200, pts2.length); i++) {
-        final d = RadarService.haversine(
-            latLng.latitude, latLng.longitude, pts2[i].latitude, pts2[i].longitude);
-        if (d < bd2) { bd2 = d; bi2 = i; }
+      var bd2  = double.infinity;
+      var snap2 = pts2.isNotEmpty ? pts2[_closestPolylineIdx] : latLng;
+      final end2 = min(s2 + 200, pts2.length);
+      for (var i = s2; i < end2 - 1; i++) {
+        final s = _projectToSegment(latLng, pts2[i], pts2[i + 1]);
+        final d = RadarService.haversine(latLng.latitude, latLng.longitude, s.latitude, s.longitude);
+        if (d < bd2) { bd2 = d; snap2 = s; }
+      }
+      if (end2 == pts2.length && pts2.isNotEmpty) {
+        final d = RadarService.haversine(latLng.latitude, latLng.longitude, pts2[end2 - 1].latitude, pts2[end2 - 1].longitude);
+        if (d < bd2) { snap2 = pts2[end2 - 1]; }
       }
       setState(() {
         _currentPos = latLng;
-        _snappedPos = pts2.isNotEmpty ? pts2[bi2] : latLng;
+        _snappedPos = pts2.isNotEmpty ? snap2 : latLng;
         _bearing    = pos.heading;
         _speedKmh   = (pos.speed * 3.6).clamp(0, 300);
       });
       return;
     }
 
-    // 1. Ponto mais próximo na polyline (busca a partir do índice atual)
+    // 1. Segmento mais próximo na polyline (projeção, não só vértice)
     final pts  = _result.polylinePoints;
     final start = (_closestPolylineIdx - 5).clamp(0, pts.length - 1);
     var bestIdx  = _closestPolylineIdx;
     var bestDist = double.infinity;
+    var bestSnap = pts.isNotEmpty ? pts[_closestPolylineIdx] : latLng;
     final end = min(start + 200, pts.length);
-    for (var i = start; i < end; i++) {
+    for (var i = start; i < end - 1; i++) {
+      final snap = _projectToSegment(latLng, pts[i], pts[i + 1]);
       final d = RadarService.haversine(
         latLng.latitude, latLng.longitude,
-        pts[i].latitude, pts[i].longitude,
+        snap.latitude, snap.longitude,
       );
-      if (d < bestDist) { bestDist = d; bestIdx = i; }
+      if (d < bestDist) { bestDist = d; bestIdx = i; bestSnap = snap; }
+    }
+    if (end == pts.length && pts.isNotEmpty) {
+      final d = RadarService.haversine(
+          latLng.latitude, latLng.longitude, pts[end - 1].latitude, pts[end - 1].longitude);
+      if (d < bestDist) { bestDist = d; bestIdx = end - 1; bestSnap = pts[end - 1]; }
     }
 
     // 2. Arrival detection: distância restante na polyline < 30m E velocidade < 5 km/h.
@@ -479,7 +491,7 @@ class _NavigationScreenState extends State<NavigationScreen>
 
     setState(() {
       _currentPos                 = latLng;
-      _snappedPos                 = pts.isNotEmpty ? pts[bestIdx] : latLng;
+      _snappedPos                 = pts.isNotEmpty ? bestSnap : latLng;
       _bearing                    = pos.heading;
       _speedKmh                   = (pos.speed * 3.6).clamp(0, 300);
       _closestPolylineIdx         = bestIdx;
@@ -497,7 +509,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     // Usa pts[bestIdx] (snapped) em vez do GPS bruto — evita que a seta
     // apareça fora da via no zoom aproximado por drift de GPS.
     if (!_markingMode) {
-      final camTarget = pts.isNotEmpty ? pts[bestIdx] : latLng;
+      final camTarget = pts.isNotEmpty ? bestSnap : latLng;
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
           target:  camTarget,
@@ -813,6 +825,18 @@ class _NavigationScreenState extends State<NavigationScreen>
     final img   = await recorder.endRecording().toImage(size.toInt(), size.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+  }
+
+  // ── Projeção no segmento mais próximo ────────────────────────────────────────
+
+  static LatLng _projectToSegment(LatLng p, LatLng a, LatLng b) {
+    final dx = b.latitude - a.latitude;
+    final dy = b.longitude - a.longitude;
+    final lenSq = dx * dx + dy * dy;
+    if (lenSq == 0) return a;
+    final t = ((p.latitude - a.latitude) * dx + (p.longitude - a.longitude) * dy) / lenSq;
+    final tc = t.clamp(0.0, 1.0);
+    return LatLng(a.latitude + tc * dx, a.longitude + tc * dy);
   }
 
   // ── Centralizar câmera ────────────────────────────────────────────────────────
@@ -1459,22 +1483,10 @@ class _BottomBarState extends State<_BottomBar>
     return Colors.white24;
   }
 
-  Color get _limitTextColor {
-    if (widget.speedKmh >= 90) return Colors.red.shade400;
-    return Colors.amber.shade400;
-  }
-
-  String? get _limitLabel {
-    if (widget.speedKmh >= 90) return '/ 90';
-    if (widget.speedKmh >= 80) return '/ 80';
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     final isOver = widget.speedKmh >= 90;
     final isWarn = widget.speedKmh >= 80;
-    final limitLabel = _limitLabel;
     final isLombada = widget.radarAlert != null &&
         widget.radarAlert!.type.toLowerCase().contains('lombada');
 
@@ -1515,7 +1527,7 @@ class _BottomBarState extends State<_BottomBar>
                             ? Color.lerp(
                                 Colors.white, Colors.red.shade200, t)
                             : Colors.white,
-                        fontSize: limitLabel != null ? 26 : 32,
+                        fontSize: 32,
                         fontWeight: FontWeight.bold,
                         height: 1.0,
                       ),
@@ -1527,16 +1539,6 @@ class _BottomBarState extends State<_BottomBar>
                           fontSize: 10,
                           height: 1.2),
                     ),
-                    if (limitLabel != null)
-                      Text(
-                        limitLabel,
-                        style: TextStyle(
-                          color: _limitTextColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          height: 1.1,
-                        ),
-                      ),
                   ],
                 ),
               );
