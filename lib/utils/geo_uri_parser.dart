@@ -2,6 +2,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 typedef GeoLocation = ({LatLng coords, String? label});
 
+typedef MapsRoute = ({LatLng? origin, LatLng destination});
+
 /// Parses a `geo:` URI into coordinates and optional label.
 ///
 /// Handles the four common variants:
@@ -31,6 +33,22 @@ GeoLocation? parseGeoUri(Uri uri) {
   final latLng = _parseLatLng(uri.path);
   if (latLng == null) return null;
   return (coords: latLng, label: null);
+}
+
+/// Parses a `https://maps.google.com/maps?saddr=...&daddr=...` URI.
+/// Returns null if daddr is missing or unparseable.
+MapsRoute? parseMapsUri(Uri uri) {
+  if (uri.host != 'maps.google.com') return null;
+
+  final daddrStr = uri.queryParameters['daddr'];
+  if (daddrStr == null) return null;
+  final destination = _parseLatLng(daddrStr);
+  if (destination == null) return null;
+
+  final saddrStr = uri.queryParameters['saddr'];
+  final origin = saddrStr != null ? _parseLatLng(saddrStr) : null;
+
+  return (origin: origin, destination: destination);
 }
 
 LatLng? _parseLatLng(String s) {
