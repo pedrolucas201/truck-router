@@ -28,8 +28,10 @@ import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
 import 'truck_profile_screen.dart';
 import 'navigation_screen.dart';
+import '../models/police_alert.dart';
 import '../models/user_restriction.dart';
 import '../services/auth_service.dart';
+import '../services/police_alert_service.dart';
 import '../services/restriction_service.dart';
 import '../repositories/restriction_repository.dart';
 
@@ -58,6 +60,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   final _poiIconCache      = <String, BitmapDescriptor>{};
   List<RadarPoint>         _nearbyRadares = [];
   List<UserRestriction>    _userRestrictions = [];
+  List<PoliceAlert>        _policeAlerts = [];
+  StreamSubscription<List<PoliceAlert>>? _policeAlertSub;
   double                   _currentZoom = 11.0;
   bool                     _markingMode = false;
   bool                     _panelCollapsed = false;
@@ -159,6 +163,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   void dispose() {
     _routeSelectionTimer?.cancel();
     _deepLinkSub?.cancel();
+    _policeAlertSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -1078,6 +1083,55 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _refreshPoliceAlerts(LatLngBounds bounds) {
+    _policeAlertSub?.cancel();
+    _policeAlertSub = PoliceAlertService.streamInBounds(
+      bounds.southwest.latitude,
+      bounds.northeast.latitude,
+      bounds.southwest.longitude,
+      bounds.northeast.longitude,
+    ).listen((alerts) {
+      if (mounted) setState(() => _policeAlerts = alerts);
+    });
+  }
+
+  Future<void> _showPoliceAlertSheet(PoliceAlert alert) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _PoliceAlertSheet(alert: alert),
+    );
+  }
+
+  Future<void> _showReportPoliceSheet() async {
+    final uid = await AuthService.getUid();
+    if (!mounted) return;
+    final type = await showModalBottomSheet<PoliceAlertType>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => const _ReportPoliceSheet(),
+    );
+    if (type == null) return;
+    await PoliceAlertService.report(
+      type: type,
+      lat: _cameraTarget.latitude,
+      lng: _cameraTarget.longitude,
+      uid: uid,
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Alerta reportado'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final routeProvider  = context.watch<RouteProvider>();
@@ -1201,6 +1255,29 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       ));
     }
 
+    for (final alert in _policeAlerts) {
+      markers.add(Marker(
+        markerId: MarkerId('police_${alert.id}'),
+        position: alert.position,
+        icon: BitmapDescriptor.defaultMarkerWithHue(
+          switch (alert.type) {
+            PoliceAlertType.radar  => BitmapDescriptor.hueOrange,
+            PoliceAlertType.police => BitmapDescriptor.hueBlue,
+            PoliceAlertType.blitz  => BitmapDescriptor.hueRed,
+          },
+        ),
+        infoWindow: InfoWindow(
+          title: switch (alert.type) {
+            PoliceAlertType.radar  => 'Radar',
+            PoliceAlertType.police => 'Polícia',
+            PoliceAlertType.blitz  => 'Blitz',
+          },
+          snippet: alert.timeRemainingText,
+        ),
+        onTap: () => _showPoliceAlertSheet(alert),
+      ));
+    }
+
     return Scaffold(
       body: Column(
         children: [
@@ -1216,6 +1293,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       setState(() => _currentZoom = pos.zoom);
                     }
                     _cameraTarget = pos.target;
+                  },
+                  onCameraIdle: () async {
+                    final bounds = await _mapController?.getVisibleRegion();
+                    if (bounds != null) _refreshPoliceAlerts(bounds);
                   },
                   polylines: polylines,
                   markers: markers,
@@ -1495,6 +1576,20 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       elevation: 3,
                       tooltip: 'Marcar restrição',
                       child: const Icon(Icons.add_location_alt),
+                    ),
+                  ),
+                if (!_markingMode)
+                  Positioned(
+                    bottom: routeProvider.result != null && _panelCollapsed ? 64 : 16,
+                    right: 16,
+                    child: FloatingActionButton.small(
+                      heroTag: 'report_police',
+                      onPressed: _showReportPoliceSheet,
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.blue.shade700,
+                      elevation: 3,
+                      tooltip: 'Reportar polícia',
+                      child: const Icon(Icons.local_police_outlined),
                     ),
                   ),
                 if (_showTruckTip)
@@ -2750,4 +2845,99 @@ class _UpArrowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_UpArrowPainter old) => old.color != color;
+}
+
+// ── _PoliceAlertSheet ─────────────────────────────────────────────────────────
+
+class _PoliceAlertSheet extends StatelessWidget {
+  final PoliceAlert alert;
+  const _PoliceAlertSheet({required this.alert});
+
+  String get _typeLabel => switch (alert.type) {
+    PoliceAlertType.radar  => 'Radar',
+    PoliceAlertType.police => 'Polícia',
+    PoliceAlertType.blitz  => 'Blitz / Fiscalização',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_typeLabel, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(alert.timeRemainingText,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    if (alert.id != null) {
+                      await PoliceAlertService.notThere(alert.id!);
+                    }
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Não está mais lá'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    if (alert.id != null) {
+                      await PoliceAlertService.confirm(alert.id!);
+                    }
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.check),
+                  label: const Text('Confirmar'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── _ReportPoliceSheet ────────────────────────────────────────────────────────
+
+class _ReportPoliceSheet extends StatelessWidget {
+  const _ReportPoliceSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('O que você viu?', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 16),
+          for (final type in PoliceAlertType.values)
+            ListTile(
+              leading: Icon(switch (type) {
+                PoliceAlertType.radar  => Icons.speed,
+                PoliceAlertType.police => Icons.local_police,
+                PoliceAlertType.blitz  => Icons.assignment_late,
+              }),
+              title: Text(switch (type) {
+                PoliceAlertType.radar  => 'Radar de velocidade',
+                PoliceAlertType.police => 'Polícia na via',
+                PoliceAlertType.blitz  => 'Blitz / Fiscalização',
+              }),
+              onTap: () => Navigator.pop(context, type),
+            ),
+        ],
+      ),
+    );
+  }
 }
