@@ -408,12 +408,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       'maxheight' => Colors.red.shade700,
       'maxweight' => Colors.brown.shade600,
       'dirtroad'  => Colors.green.shade700,
+      'truck_ban' => Colors.red.shade900,
       _           => Colors.deepOrange.shade600,
     };
     final text = switch (r.type) {
       'maxheight' => '${r.value.toStringAsFixed(1)}m',
       'maxweight' => '${r.value.toStringAsFixed(0)}t',
       'dirtroad'  => 'Terra',
+      'truck_ban' => 'Proib.',
       _           => '${r.value.toStringAsFixed(1)}m',
     };
     final tp = TextPainter(textDirection: TextDirection.ltr)

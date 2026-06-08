@@ -36,6 +36,7 @@ class UserRestriction {
         'maxweight' => 'Peso máx. ${value.toStringAsFixed(0)} t',
         'maxwidth'  => 'Largura máx. ${value.toStringAsFixed(1)} m',
         'dirtroad'  => 'Estrada de terra / sem pavimento',
+        'truck_ban' => 'Proibido caminhões',
         _           => 'Restrição',
       };
 
