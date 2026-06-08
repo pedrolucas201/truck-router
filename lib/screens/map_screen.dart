@@ -108,15 +108,46 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   Future<void> _initDeepLinks() async {
     final appLinks = AppLinks();
     final initial = await appLinks.getInitialLink();
-    if (initial != null && mounted) _handleGeoUri(initial);
+    if (initial != null && mounted) _handleIncomingUri(initial);
     _deepLinkSub = appLinks.uriLinkStream.listen((uri) {
-      if (mounted) _handleGeoUri(uri);
+      if (mounted) _handleIncomingUri(uri);
     });
   }
 
-  void _handleGeoUri(Uri uri) {
+  void _handleIncomingUri(Uri uri) {
+    final route = parseMapsUri(uri);
+    if (route != null) {
+      _setDeepLinkRoute(route);
+      return;
+    }
     final geo = parseGeoUri(uri);
-    if (geo == null) return;
+    if (geo != null) _handleGeoUri(geo);
+  }
+
+  void _setDeepLinkRoute(MapsRoute route) {
+    setState(() {
+      _destination      = route.destination;
+      _destinationLabel = 'Destino compartilhado';
+      _destinationKey   = ValueKey('dest_shared_${DateTime.now().millisecondsSinceEpoch}');
+      if (route.origin != null) {
+        _origin      = route.origin;
+        _originLabel = 'Origem compartilhada';
+        _originKey   = ValueKey('origin_shared_${DateTime.now().millisecondsSinceEpoch}');
+      }
+    });
+    context.read<RouteProvider>().clear();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(route.origin != null
+            ? 'Rota recebida — toque em Calcular para rotear'
+            : 'Destino recebido — toque em Calcular para rotear'),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+    if (_origin != null && _destination != null) _calculate();
+  }
+
+  void _handleGeoUri(GeoLocation geo) {
     if (_destination != null) {
       showDialog<void>(
         context: context,
@@ -692,7 +723,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   void _shareRoute(RouteResult result, TruckProfile truck) {
-    Share.share(_buildShareText(result, truck), subject: 'Rota do Caminhão');
+    final text = StringBuffer(_buildShareText(result, truck));
+    if (_origin != null && _destination != null) {
+      final url = 'https://maps.google.com/maps'
+          '?saddr=${_origin!.latitude},${_origin!.longitude}'
+          '&daddr=${_destination!.latitude},${_destination!.longitude}';
+      text.writeln('\n\nAbrir no Truck Router:');
+      text.write(url);
+    }
+    Share.share(text.toString(), subject: 'Rota do Caminhão');
   }
 
   Future<void> _launchNavigation() async {
