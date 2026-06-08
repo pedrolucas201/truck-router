@@ -40,6 +40,16 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="geo"/>
             </intent-filter>
+            <!-- maps.google.com — aparece no chooser ao receber link de rota compartilhada -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="maps.google.com"
+                    android:pathPrefix="/maps"/>
+            </intent-filter>
         </activity>
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
