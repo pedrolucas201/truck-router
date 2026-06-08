@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/bridge_restriction.dart';
+import '../models/police_alert.dart';
 import '../models/radar_point.dart';
 import '../models/route_maneuver.dart';
 import '../models/route_result.dart';
@@ -20,6 +21,7 @@ import '../models/user_restriction.dart';
 import '../repositories/restriction_repository.dart';
 import '../services/auth_service.dart';
 import '../services/here_routing_service.dart';
+import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
 import '../services/restriction_service.dart';
 import '../widgets/add_restriction_sheet.dart';
@@ -100,6 +102,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _lastSpeedAlertAt;
   final Set<String> _actionedRestrictions = {};
   LatLng? _snappedPos;
+  PoliceAlert? _nearestPoliceAlert;
   bool _hasFirstFix = false;
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
   BitmapDescriptor? _userArrowIcon;
@@ -349,6 +352,28 @@ class _NavigationScreenState extends State<NavigationScreen>
         .listen(_onPositionUpdate);
   }
 
+  void _checkPoliceAlerts(LatLng position) {
+    const radiusMeters = 500.0;
+    const deltaLat = 0.0045; // ~500m em graus lat
+    const deltaLng = 0.0050; // ~500m em graus lng na latitude do Brasil
+    PoliceAlertService.streamInBounds(
+      position.latitude - deltaLat, position.latitude + deltaLat,
+      position.longitude - deltaLng, position.longitude + deltaLng,
+    ).first.then((alerts) {
+      if (!mounted) return;
+      PoliceAlert? nearest;
+      double bestDist = radiusMeters;
+      for (final a in alerts) {
+        final d = RadarService.haversine(
+          position.latitude, position.longitude, a.lat, a.lng);
+        if (d < bestDist) { bestDist = d; nearest = a; }
+      }
+      if (nearest?.id != _nearestPoliceAlert?.id) {
+        setState(() => _nearestPoliceAlert = nearest);
+      }
+    });
+  }
+
   void _onPositionUpdate(Position pos) {
     if (!mounted) return;
     final firstFix = !_hasFirstFix;
@@ -504,6 +529,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
     _checkSpeedAlert(_speedKmh);
+    _checkPoliceAlerts(latLng);
 
     // 8. Câmera segue o usuário (pausada no modo crosshair)
     // Usa pts[bestIdx] (snapped) em vez do GPS bruto — evita que a seta
@@ -1179,6 +1205,49 @@ class _NavigationScreenState extends State<NavigationScreen>
                       ),
                     ),
                   ],
+                  if (_nearestPoliceAlert != null && !_markingMode)
+                    Positioned(
+                      top: 0, left: 0, right: 0,
+                      child: Material(
+                        color: switch (_nearestPoliceAlert!.type) {
+                          PoliceAlertType.radar  => Colors.orange.shade700,
+                          PoliceAlertType.police => Colors.blue.shade700,
+                          PoliceAlertType.blitz  => Colors.red.shade700,
+                        },
+                        child: SafeArea(
+                          bottom: false,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.local_police, color: Colors.white, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    switch (_nearestPoliceAlert!.type) {
+                                      PoliceAlertType.radar  => 'Radar à frente',
+                                      PoliceAlertType.police => 'Polícia à frente',
+                                      PoliceAlertType.blitz  => 'Blitz à frente',
+                                    },
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  _nearestPoliceAlert!.timeRemainingText,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   if (!_markingMode) ...[
                     // Botão pausar/retomar
                     Positioned(
