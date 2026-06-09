@@ -15,7 +15,7 @@ if ($pubspec -match "version:\s*(.+)") {
 Write-Host "Buildando v$version..." -ForegroundColor Cyan
 
 flutter build apk --release --no-tree-shake-icons `
-    "--dart-define=BACKEND_URL=https://truck-router-backend-707407458764.southamerica-east1.run.app"
+    "--dart-define-from-file=dart_defines.json"
 
 $apk    = "build\app\outputs\flutter-apk\app-release.apk"
 $dest   = "gs://truck-router-apks/truck-router-v$version.apk"

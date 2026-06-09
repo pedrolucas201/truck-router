@@ -35,3 +35,4 @@ build/
 app.*.symbols
 app.*.map.json
 HANDOFF.md
+dart_defines.json
