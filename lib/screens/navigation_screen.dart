@@ -1163,14 +1163,14 @@ class _NavigationScreenState extends State<NavigationScreen>
           polylineId: const PolylineId('nav_traveled'),
           points: pts.sublist(0, splitIdx + 1),
           color: Colors.blueGrey.shade300,
-          width: 5,
+          width: 7,
         ),
       if (splitIdx < pts.length - 1)
         Polyline(
           polylineId: const PolylineId('nav_remaining'),
           points: pts.sublist(splitIdx),
           color: const Color(0xFF1565C0),
-          width: 7,
+          width: 10,
         ),
     };
 
@@ -1261,7 +1261,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                         onCameraMove: (pos) => _cameraTarget = pos.target,
                         polylines: polylines,
                         markers: markers,
-                        trafficEnabled: true,
+                        trafficEnabled: false,
                         myLocationButtonEnabled: false,
                         zoomControlsEnabled: false,
                         compassEnabled: false,
