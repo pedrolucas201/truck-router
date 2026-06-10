@@ -24,8 +24,12 @@ import '../services/here_routing_service.dart';
 import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
 import '../services/restriction_service.dart';
+import '../data/pois.dart';
+import '../models/poi.dart';
+import '../models/route_event.dart';
 import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
+import '../widgets/route_timeline.dart';
 
 @pragma('vm:entry-point')
 void _navForegroundCallback() {
@@ -107,6 +111,11 @@ class _NavigationScreenState extends State<NavigationScreen>
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
   BitmapDescriptor? _userArrowIcon;
 
+  List<RouteEvent>  _upcomingEvents = [];
+  List<Poi>         _routePois      = [];
+  List<PoliceAlert> _policeAhead    = [];
+  Timer?            _policeTimelineTimer;
+
   BridgeRestriction? _nearbyBlockedRestriction;
   String? _lastRestrictionAlertKey;
   String? _lastRadarAlertKey;
@@ -150,12 +159,18 @@ class _NavigationScreenState extends State<NavigationScreen>
     _buildUserArrow().then((icon) {
       if (mounted) setState(() => _userArrowIcon = icon);
     });
+    _loadRoutePois();
+    _policeTimelineTimer = Timer.periodic(
+      const Duration(minutes: 2),
+      (_) => _refreshPoliceTimeline(),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
+    _policeTimelineTimer?.cancel();
     _posSub?.cancel();
     _tts.stop();
     _ttsActive = false;
@@ -383,6 +398,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       _speak('Atenção! Restrição para caminhões nesta via');
       _updatePulse();
     }
+    if (firstFix) _refreshPoliceTimeline();
     final latLng = LatLng(pos.latitude, pos.longitude);
 
     if (_paused) {
@@ -530,6 +546,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _updateRadarAlert(upcoming);
     _checkSpeedAlert(_speedKmh);
     _checkPoliceAlerts(latLng);
+    _buildUpcomingEvents();
 
     // 8. Câmera segue o usuário (pausada no modo crosshair)
     // Usa pts[bestIdx] (snapped) em vez do GPS bruto — evita que a seta
@@ -714,6 +731,8 @@ class _NavigationScreenState extends State<NavigationScreen>
         _timeRestrictionAlertSpoken = false;
       }
       _updatePulse();
+      _loadRoutePois();
+      _refreshPoliceTimeline();
       // Só anuncia se nível completo e rota mudou significativamente (>500m)
       if (_audioLevel == AudioLevel.completo &&
           (newResult.distanceMeters - prevDistM).abs() > 500) {
@@ -945,6 +964,152 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
     if (mounted) setState(() => _userRestrictions.addAll(restrictions));
+  }
+
+  Future<void> _loadRoutePois() async {
+    final pts = _result.polylinePoints;
+    if (pts.isEmpty) return;
+
+    var minLat = pts[0].latitude, maxLat = pts[0].latitude;
+    var minLng = pts[0].longitude, maxLng = pts[0].longitude;
+    for (final p in pts) {
+      if (p.latitude  < minLat) minLat = p.latitude;
+      if (p.latitude  > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    const buf = 0.003;
+
+    final sampled = <LatLng>[];
+    for (var i = 0; i < pts.length; i += 5) { sampled.add(pts[i]); }
+    if (sampled.last != pts.last) { sampled.add(pts.last); }
+
+    final filtered = kHardcodedPois.where((poi) {
+      if (poi.category != PoiCategory.scale &&
+          poi.category != PoiCategory.restArea) { return false; }
+      final lat = poi.position.latitude;
+      final lng = poi.position.longitude;
+      if (lat < minLat - buf || lat > maxLat + buf ||
+          lng < minLng - buf || lng > maxLng + buf) { return false; }
+      return sampled.any((p) =>
+          RadarService.haversine(lat, lng, p.latitude, p.longitude) <= 500);
+    }).toList();
+
+    if (mounted) setState(() => _routePois = filtered);
+  }
+
+  Future<void> _refreshPoliceTimeline() async {
+    if (_currentPos == null) return;
+    final pts = _result.polylinePoints;
+    if (pts.isEmpty) return;
+
+    final startIdx = _closestPolylineIdx.clamp(0, pts.length - 1);
+    final endIdx   = (startIdx + 200).clamp(0, pts.length - 1);
+    final ahead    = pts.sublist(startIdx, endIdx + 1);
+    if (ahead.isEmpty) return;
+
+    var minLat = ahead[0].latitude, maxLat = ahead[0].latitude;
+    var minLng = ahead[0].longitude, maxLng = ahead[0].longitude;
+    for (final p in ahead) {
+      if (p.latitude  < minLat) minLat = p.latitude;
+      if (p.latitude  > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    const buf = 0.005;
+
+    try {
+      final alerts = await PoliceAlertService.streamInBounds(
+        minLat - buf, maxLat + buf, minLng - buf, maxLng + buf,
+      ).first;
+      if (mounted) setState(() => _policeAhead = alerts);
+    } catch (_) {}
+  }
+
+  void _buildUpcomingEvents() {
+    if (_currentPos == null) return;
+    final pts = _result.polylinePoints;
+    if (pts.isEmpty) return;
+
+    final startIdx = _closestPolylineIdx.clamp(0, pts.length - 1);
+    final aheadPts = pts.sublist(startIdx);
+    if (aheadPts.isEmpty) {
+      if (mounted) setState(() => _upcomingEvents = []);
+      return;
+    }
+
+    var minLat = aheadPts[0].latitude, maxLat = aheadPts[0].latitude;
+    var minLng = aheadPts[0].longitude, maxLng = aheadPts[0].longitude;
+    for (final p in aheadPts) {
+      if (p.latitude  < minLat) minLat = p.latitude;
+      if (p.latitude  > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    const buf = 0.002;
+
+    bool isAhead(double lat, double lng, double corridorM) {
+      if (lat < minLat - buf || lat > maxLat + buf ||
+          lng < minLng - buf || lng > maxLng + buf) { return false; }
+      for (var i = 0; i < aheadPts.length; i += 5) {
+        if (RadarService.haversine(lat, lng,
+                aheadPts[i].latitude, aheadPts[i].longitude) <= corridorM) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    double distFrom(double lat, double lng) => RadarService.haversine(
+        _currentPos!.latitude, _currentPos!.longitude, lat, lng);
+
+    final candidates = <RouteEvent>[];
+
+    double bestRadarDist = double.infinity;
+    for (final r in _radares) {
+      if (!isAhead(r.lat, r.lng, 100)) continue;
+      final d = distFrom(r.lat, r.lng);
+      if (d < bestRadarDist) bestRadarDist = d;
+    }
+    if (bestRadarDist != double.infinity) {
+      candidates.add(RouteEvent(type: RouteEventType.radar, distanceM: bestRadarDist));
+    }
+
+    double bestRestrDist = double.infinity;
+    for (final b in _result.restrictionsBlocked) {
+      if (!isAhead(b.lat, b.lng, 150)) continue;
+      final d = distFrom(b.lat, b.lng);
+      if (d < bestRestrDist) bestRestrDist = d;
+    }
+    if (bestRestrDist != double.infinity) {
+      candidates.add(RouteEvent(type: RouteEventType.restriction, distanceM: bestRestrDist));
+    }
+
+    double bestPoliceDist = double.infinity;
+    for (final a in _policeAhead) {
+      if (!isAhead(a.lat, a.lng, 200)) continue;
+      final d = distFrom(a.lat, a.lng);
+      if (d < bestPoliceDist) bestPoliceDist = d;
+    }
+    if (bestPoliceDist != double.infinity) {
+      candidates.add(RouteEvent(type: RouteEventType.police, distanceM: bestPoliceDist));
+    }
+
+    for (final poi in _routePois) {
+      final lat = poi.position.latitude;
+      final lng = poi.position.longitude;
+      if (!isAhead(lat, lng, 300)) continue;
+      final d = distFrom(lat, lng);
+      if (d > 20000) continue;
+      final type = poi.category == PoiCategory.scale
+          ? RouteEventType.scale
+          : RouteEventType.restArea;
+      candidates.add(RouteEvent(type: type, distanceM: d));
+    }
+
+    candidates.sort((a, b) => a.distanceM.compareTo(b.distanceM));
+    final events = candidates.take(4).toList();
+    if (mounted) setState(() => _upcomingEvents = events);
   }
 
   Future<void> _confirmMarkingPosition() async {
@@ -1247,6 +1412,12 @@ class _NavigationScreenState extends State<NavigationScreen>
                           ),
                         ),
                       ),
+                    ),
+                  if (_upcomingEvents.isNotEmpty && !_markingMode)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: RouteTimeline(events: _upcomingEvents),
                     ),
                   if (!_markingMode) ...[
                     // Botão pausar/retomar
