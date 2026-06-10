@@ -1167,6 +1167,13 @@ class _NavigationScreenState extends State<NavigationScreen>
         ),
       if (splitIdx < pts.length - 1)
         Polyline(
+          polylineId: const PolylineId('nav_remaining_halo'),
+          points: pts.sublist(splitIdx),
+          color: const Color(0xFF1565C0).withAlpha(90),
+          width: 18,
+        ),
+      if (splitIdx < pts.length - 1)
+        Polyline(
           polylineId: const PolylineId('nav_remaining'),
           points: pts.sublist(splitIdx),
           color: const Color(0xFF1565C0),

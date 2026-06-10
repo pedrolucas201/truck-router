@@ -1183,6 +1183,16 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     if (_showDirtAlternative && result?.dirtRoadAlternative != null) {
       final dirtPts = result!.dirtRoadAlternative!.polylinePoints;
       final dirtDimmed = _selectedRoute == 'paved';
+      if (!dirtDimmed) {
+        polylines.add(Polyline(
+          polylineId: const PolylineId('route_dirt_halo'),
+          points: dirtPts,
+          color: Colors.orange.shade700.withAlpha(90),
+          width: 18,
+          patterns: [PatternItem.dash(24), PatternItem.gap(12)],
+          zIndex: 0,
+        ));
+      }
       polylines.add(Polyline(
         polylineId: const PolylineId('route_dirt'),
         points: dirtPts,
@@ -1205,6 +1215,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
     if (pts != null && pts.isNotEmpty) {
       final pavedDimmed = _selectedRoute == 'dirt';
+      if (!pavedDimmed) {
+        polylines.add(Polyline(
+          polylineId: const PolylineId('route_halo'),
+          points: pts,
+          color: const Color(0xFF1565C0).withAlpha(90),
+          width: 18,
+          zIndex: 1,
+        ));
+      }
       polylines.add(Polyline(
         polylineId: const PolylineId('route'),
         points: pts,
