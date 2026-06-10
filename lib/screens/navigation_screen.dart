@@ -126,11 +126,11 @@ class _NavigationScreenState extends State<NavigationScreen>
   late final Animation<double> _pulseAnimation;
 
   static const _offRouteThresholdM  = 80.0;
-  static const _offRouteCountLimit  = 4;
+  static const _offRouteCountLimit  = 2;
   static const _radarAlertM         = 400.0;
   static const _restrictionAlertM   = 300.0;
   static const _radarLookAheadM     = 1500.0;
-  static const _radarCorridorM      = 100.0;
+  static const _radarCorridorM      = 150.0;
   static const _prefAudioLevel = 'nav_audio_level';
   static const _prefZoomLevel  = 'nav_zoom_level';
 
@@ -216,7 +216,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (m.action == 'depart' || m.action == 'arrive') return;
     final dist = _distToNextManeuver;
     final text = dist.isFinite && dist < 50000
-        ? 'Em ${_fmtDist(dist)}, ${m.instruction}'
+        ? 'Em ${_fmtDist(dist)}. ${m.instruction}'
         : m.instruction;
     _speak(text);
     // Marca os thresholds já anunciados para _checkTts não repetir no próximo GPS update.
@@ -233,7 +233,12 @@ class _NavigationScreenState extends State<NavigationScreen>
     _tts.setLanguage('pt-BR');
     _tts.setSpeechRate(0.9);
     _tts.setVolume(1.0);
-    _tts.setCompletionHandler(() => _ttsActive = false);
+    // Debounce de 300ms: evita que completionHandler prematuro (chunk interno do engine)
+    // abra a janela para um novo _speak interromper a utterance em andamento.
+    _tts.setCompletionHandler(() =>
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _ttsActive = false;
+        }));
     _tts.setCancelHandler(() => _ttsActive = false);
   }
 
@@ -493,9 +498,22 @@ class _NavigationScreenState extends State<NavigationScreen>
       _checkTts(nextIdx, distToNext, nextManeuver);
     }
 
-    // 5. Radar à frente
+    // 5. Radares visíveis: próximos 1500m da polyline com corredor de 150m
+    // Computado antes de upcoming para que upcoming use o mesmo filtro de corredor,
+    // eliminando falsos positivos em vias paralelas.
+    final aheadPts = <LatLng>[];
+    for (var i = bestIdx; i < pts.length; i++) {
+      if (RadarService.haversine(latLng.latitude, latLng.longitude,
+              pts[i].latitude, pts[i].longitude) > _radarLookAheadM) { break; }
+      aheadPts.add(pts[i]);
+    }
+    final visibleRadares = _radares.where((r) => aheadPts.any((p) =>
+        RadarService.haversine(r.lat, r.lng, p.latitude, p.longitude) <=
+            _radarCorridorM)).toList();
+
+    // 6. Radar à frente — restrito ao corredor da rota (sem falso positivo em paralelas)
     RadarPoint? upcoming;
-    for (final r in _radares) {
+    for (final r in visibleRadares) {
       final d = RadarService.haversine(latLng.latitude, latLng.longitude, r.lat, r.lng);
       if (d < _radarAlertM) {
         if (upcoming == null ||
@@ -505,7 +523,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
 
-    // 6. Restrição bloqueada à frente
+    // 7. Restrição bloqueada à frente
     final userBlocked = _userRestrictions
         .map((r) => r.toBridgeRestriction())
         .where((b) => b.conflictsWith(widget.truck));
@@ -518,17 +536,6 @@ class _NavigationScreenState extends State<NavigationScreen>
         nearestBlocked = b;
       }
     }
-
-    // 7. Radares visíveis: próximos 1500m da polyline com corredor de 100m
-    final aheadPts = <LatLng>[];
-    for (var i = bestIdx; i < pts.length; i++) {
-      if (RadarService.haversine(latLng.latitude, latLng.longitude,
-              pts[i].latitude, pts[i].longitude) > _radarLookAheadM) { break; }
-      aheadPts.add(pts[i]);
-    }
-    final visibleRadares = _radares.where((r) => aheadPts.any((p) =>
-        RadarService.haversine(r.lat, r.lng, p.latitude, p.longitude) <=
-            _radarCorridorM)).toList();
 
     setState(() {
       _currentPos                 = latLng;
@@ -584,11 +591,11 @@ class _NavigationScreenState extends State<NavigationScreen>
       // 500m só no nível completo
       if (_audioLevel == AudioLevel.completo && distM <= 500 && !_announced.contains(k500)) {
         _announced.add(k500);
-        _speak('Em 500 metros, ${m.instruction}');
+        _speak('Em 500 metros. ${m.instruction}');
       } else if (distM <= 200 && !_announced.contains(k200)) {
         _announced.add(k200);
         _announced.add(k500);
-        _speak('Em 200 metros, ${m.instruction}');
+        _speak('Em 200 metros. ${m.instruction}');
       } else if (distM <= 50 && !_announced.contains(k50)) {
         _announced.add(k50);
         _announced.add(k200);
@@ -600,7 +607,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (_audioLevel == AudioLevel.completo && distM <= 200 && !_announced.contains(k200)) {
         _announced.add(k200);
         _announced.add(k500);
-        _speak('Em 200 metros, ${m.instruction}');
+        _speak('Em 200 metros. ${m.instruction}');
       } else if (distM <= 50 && !_announced.contains(k50)) {
         _announced.add(k50);
         _announced.add(k200);
@@ -793,10 +800,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   Future<BitmapDescriptor> _radarIcon(RadarPoint r) async {
     final isLombada = r.type.toLowerCase().contains('lombada');
     final isPedagio = r.type.toLowerCase().contains('pedagio');
+    final isRadarWithSpeed = !isPedagio && !isLombada && r.speedKmh > 0;
     final key = isPedagio ? 'p' : '${isLombada ? 'l' : 'r'}_${r.speedKmh}';
     if (_iconCache.containsKey(key)) return _iconCache[key]!;
 
-    const size = 40.0;
     final bgColor = isPedagio
         ? Colors.blue.shade700
         : isLombada
@@ -804,30 +811,57 @@ class _NavigationScreenState extends State<NavigationScreen>
             : Colors.red.shade700;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
+
+    if (isRadarWithSpeed) {
+      // Retângulo arredondado: câmera acima + velocidade abaixo — distinto de placa de limite
+      const w = 44.0;
+      const h = 50.0;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(const Rect.fromLTWH(0, 0, w, h), const Radius.circular(8)),
+        Paint()..color = bgColor,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(const Rect.fromLTWH(0, 0, w, h), const Radius.circular(8)),
+        Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 3.0,
+      );
+      const camIcon = Icons.camera_alt;
+      final camTp = TextPainter(textDirection: TextDirection.ltr)
+        ..text = TextSpan(
+          text: String.fromCharCode(camIcon.codePoint),
+          style: TextStyle(fontSize: 20, fontFamily: camIcon.fontFamily, color: Colors.white),
+        )
+        ..layout();
+      camTp.paint(canvas, Offset((w - camTp.width) / 2, 4));
+      final speedTp = TextPainter(textDirection: TextDirection.ltr)
+        ..text = TextSpan(
+          text: r.speedKmh.toString(),
+          style: TextStyle(
+            fontSize: r.speedKmh >= 100 ? 11.0 : 13.0,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        )
+        ..layout();
+      speedTp.paint(canvas, Offset((w - speedTp.width) / 2, h - speedTp.height - 4));
+      final img   = await recorder.endRecording().toImage(w.toInt(), h.toInt());
+      final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+      final icon  = BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+      _iconCache[key] = icon;
+      return icon;
+    }
+
+    // Círculo para lombada, pedágio e radar sem velocidade cadastrada
+    const size = 40.0;
     canvas.drawCircle(const Offset(size / 2, size / 2), size / 2, Paint()..color = bgColor);
     canvas.drawCircle(
       const Offset(size / 2, size / 2), size / 2 - 3.0,
       Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 3.0,
     );
-    final IconData displayIcon = isPedagio
-        ? Icons.toll
-        : (r.speedKmh == 0 ? Icons.camera_alt : Icons.circle);
+    final IconData displayIcon = isPedagio ? Icons.toll : Icons.camera_alt;
     final tp = TextPainter(textDirection: TextDirection.ltr)
       ..text = TextSpan(
-        text: (!isPedagio && r.speedKmh > 0)
-            ? r.speedKmh.toString()
-            : String.fromCharCode(displayIcon.codePoint),
-        style: (!isPedagio && r.speedKmh > 0)
-            ? TextStyle(
-                fontSize: r.speedKmh >= 100 ? 13.0 : 16.0,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              )
-            : TextStyle(
-                fontSize: 22,
-                fontFamily: displayIcon.fontFamily,
-                color: Colors.white,
-              ),
+        text: String.fromCharCode(displayIcon.codePoint),
+        style: TextStyle(fontSize: 22, fontFamily: displayIcon.fontFamily, color: Colors.white),
       )
       ..layout();
     tp.paint(canvas, Offset((size - tp.width) / 2, (size - tp.height) / 2));
@@ -1181,6 +1215,23 @@ class _NavigationScreenState extends State<NavigationScreen>
         ),
     };
 
+    final radarCircles = <Circle>{
+      if (_upcomingRadar != null)
+        Circle(
+          circleId: const CircleId('radar_alert'),
+          center: LatLng(_upcomingRadar!.lat, _upcomingRadar!.lng),
+          radius: 80.0,
+          fillColor: (_upcomingRadar!.type.toLowerCase().contains('lombada')
+                  ? Colors.orange
+                  : Colors.red)
+              .withAlpha(35),
+          strokeColor: _upcomingRadar!.type.toLowerCase().contains('lombada')
+              ? Colors.orange.shade400
+              : Colors.red.shade400,
+          strokeWidth: 2,
+        ),
+    };
+
     final markers = <Marker>{
       Marker(
         markerId: const MarkerId('destination'),
@@ -1268,6 +1319,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                         onCameraMove: (pos) => _cameraTarget = pos.target,
                         polylines: polylines,
                         markers: markers,
+                        circles: radarCircles,
                         trafficEnabled: false,
                         myLocationButtonEnabled: false,
                         zoomControlsEnabled: false,
