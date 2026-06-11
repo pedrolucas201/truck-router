@@ -5,7 +5,10 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 )
+
+var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 // forward faz GET em targetURL, copia status + body para w.
 // rawQuery é repassado sem re-encoding (preserva vehicle[height] literais).
@@ -17,7 +20,7 @@ func forward(w http.ResponseWriter, targetURL string, rawQuery string) {
 		return
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		log.Printf("forward do request %s: %v", targetURL, err)
 		http.Error(w, "internal error", http.StatusBadGateway)
