@@ -44,6 +44,24 @@ class FirestoreRestrictionService {
     }
   }
 
+  static Future<List<BridgeRestriction>> fetchByBounds(
+    double minLat, double maxLat, double minLng, double maxLng,
+  ) async {
+    try {
+      final snap = await _db
+          .collection(_col)
+          .where('lat', isGreaterThanOrEqualTo: minLat)
+          .where('lat', isLessThanOrEqualTo: maxLat)
+          .get();
+      return snap.docs
+          .map(_fromDoc)
+          .where((r) => r.lng >= minLng && r.lng <= maxLng)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   static bool _isNearRoute(double lat, double lng, List<LatLng> polyline) {
     for (var i = 0; i < polyline.length; i += 5) {
       if (RadarService.haversine(lat, lng, polyline[i].latitude, polyline[i].longitude) <= _corridorM) {

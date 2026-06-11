@@ -12,6 +12,7 @@ class RouteResult {
   final bool usedTomTomData;
   final bool hasTimeRestriction;
   final RouteResult? dirtRoadAlternative;
+  final int? maxTruckSpeedKmh;
 
   const RouteResult({
     required this.polylinePoints,
@@ -23,6 +24,7 @@ class RouteResult {
     this.usedTomTomData       = false,
     this.hasTimeRestriction   = false,
     this.dirtRoadAlternative  ,
+    this.maxTruckSpeedKmh,
   });
 
   RouteResult copyWith({
@@ -35,6 +37,7 @@ class RouteResult {
     bool? usedTomTomData,
     bool? hasTimeRestriction,
     RouteResult? dirtRoadAlternative,
+    int? maxTruckSpeedKmh,
   }) => RouteResult(
     polylinePoints:      polylinePoints      ?? this.polylinePoints,
     distanceMeters:      distanceMeters      ?? this.distanceMeters,
@@ -45,6 +48,7 @@ class RouteResult {
     usedTomTomData:      usedTomTomData      ?? this.usedTomTomData,
     hasTimeRestriction:  hasTimeRestriction  ?? this.hasTimeRestriction,
     dirtRoadAlternative: dirtRoadAlternative ?? this.dirtRoadAlternative,
+    maxTruckSpeedKmh:    maxTruckSpeedKmh    ?? this.maxTruckSpeedKmh,
   );
 
   String get distanceText {

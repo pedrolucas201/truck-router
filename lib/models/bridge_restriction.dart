@@ -29,6 +29,7 @@ class BridgeRestriction {
         'maxweight' => truck.weightKg / 1000.0 >= value,
         'maxwidth'  => truck.widthCm  / 100.0 >= value,
         'dirtroad'  => true,  // todo caminhão evita estrada de terra não-mapeada
+        'truck_ban' => true,
         _           => false,
       };
 
@@ -37,6 +38,7 @@ class BridgeRestriction {
         'maxweight' => 'Peso máx. ${value.toStringAsFixed(0)} t',
         'maxwidth'  => 'Largura máx. ${value.toStringAsFixed(1)} m',
         'dirtroad'  => 'Estrada de terra / sem pavimento',
+        'truck_ban' => 'Proibido caminhões',
         _           => 'Restrição',
       };
 

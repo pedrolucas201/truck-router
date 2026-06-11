@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../services/auth_service.dart';
 import '../models/bridge_restriction.dart';
 import '../models/user_restriction.dart';
 import 'restriction_repository.dart';
@@ -8,6 +9,32 @@ import 'restriction_repository.dart';
 class ApiRestrictionRepository implements RestrictionRepository {
   final String baseUrl;
   ApiRestrictionRepository(this.baseUrl);
+
+  Future<List<BridgeRestriction>> _fetchByBbox(
+    double minLat, double maxLat, double minLng, double maxLng,
+  ) async {
+    final uri = Uri.parse('$baseUrl/restrictions').replace(queryParameters: {
+      'minLat': minLat.toString(),
+      'maxLat': maxLat.toString(),
+      'minLng': minLng.toString(),
+      'maxLng': maxLng.toString(),
+    });
+    final resp = await http.get(uri, headers: await AuthService.getHeaders()).timeout(const Duration(seconds: 10));
+    if (resp.statusCode != 200) return [];
+    final list = jsonDecode(resp.body) as List<dynamic>;
+    return list.map((e) {
+      final m = e as Map<String, dynamic>;
+      return BridgeRestriction(
+        id:          m['id'] as String?,
+        lat:         (m['lat']   as num).toDouble(),
+        lng:         (m['lng']   as num).toDouble(),
+        type:        m['type']   as String,
+        value:       (m['value'] as num).toDouble(),
+        roadName:    m['roadName'] as String?,
+        confirmedBy: (m['confirmedBy'] as num?)?.toInt() ?? 0,
+      );
+    }).toList();
+  }
 
   @override
   Future<List<BridgeRestriction>> fetchNearRoute(List<LatLng> points) async {
@@ -21,27 +48,18 @@ class ApiRestrictionRepository implements RestrictionRepository {
       if (p.longitude > maxLng) maxLng = p.longitude;
     }
     try {
-      final uri = Uri.parse('$baseUrl/restrictions').replace(queryParameters: {
-        'minLat': minLat.toString(),
-        'maxLat': maxLat.toString(),
-        'minLng': minLng.toString(),
-        'maxLng': maxLng.toString(),
-      });
-      final resp = await http.get(uri).timeout(const Duration(seconds: 10));
-      if (resp.statusCode != 200) return [];
-      final list = jsonDecode(resp.body) as List<dynamic>;
-      return list.map((e) {
-        final m = e as Map<String, dynamic>;
-        return BridgeRestriction(
-          id:          m['id'] as String?,
-          lat:         (m['lat']   as num).toDouble(),
-          lng:         (m['lng']   as num).toDouble(),
-          type:        m['type']   as String,
-          value:       (m['value'] as num).toDouble(),
-          roadName:    m['roadName'] as String?,
-          confirmedBy: (m['confirmedBy'] as num?)?.toInt() ?? 0,
-        );
-      }).toList();
+      return await _fetchByBbox(minLat, maxLat, minLng, maxLng);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  Future<List<BridgeRestriction>> fetchByBounds(
+    double minLat, double maxLat, double minLng, double maxLng,
+  ) async {
+    try {
+      return await _fetchByBbox(minLat, maxLat, minLng, maxLng);
     } catch (_) {
       return [];
     }
@@ -52,7 +70,7 @@ class ApiRestrictionRepository implements RestrictionRepository {
     final resp = await http
         .post(
           Uri.parse('$baseUrl/restrictions'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type': 'application/json', ...await AuthService.getHeaders()},
           body: jsonEncode({...r.toJson(), 'uid': uid}),
         )
         .timeout(const Duration(seconds: 10));
@@ -65,14 +83,14 @@ class ApiRestrictionRepository implements RestrictionRepository {
   @override
   Future<void> confirm(String id) async {
     await http
-        .post(Uri.parse('$baseUrl/restrictions/$id/confirm'))
+        .post(Uri.parse('$baseUrl/restrictions/$id/confirm'), headers: await AuthService.getHeaders(), body: '')
         .timeout(const Duration(seconds: 10));
   }
 
   @override
   Future<void> report(String id) async {
     await http
-        .post(Uri.parse('$baseUrl/restrictions/$id/report'))
+        .post(Uri.parse('$baseUrl/restrictions/$id/report'), headers: await AuthService.getHeaders(), body: '')
         .timeout(const Duration(seconds: 10));
   }
 }

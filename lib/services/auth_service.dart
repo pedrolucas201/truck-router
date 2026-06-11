@@ -8,4 +8,13 @@ class AuthService {
     }
     return auth.currentUser!.uid;
   }
+
+  static Future<Map<String, String>> getHeaders() async {
+    final auth = FirebaseAuth.instance;
+    if (auth.currentUser == null) {
+      await auth.signInAnonymously();
+    }
+    final token = await auth.currentUser!.getIdToken();
+    return {'Authorization': 'Bearer $token'};
+  }
 }

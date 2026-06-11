@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,6 +10,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../utils/geo_uri_parser.dart';
 import '../data/pois.dart';
 import '../models/bridge_restriction.dart';
 import '../models/poi.dart';
@@ -26,8 +28,10 @@ import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
 import 'truck_profile_screen.dart';
 import 'navigation_screen.dart';
+import '../models/police_alert.dart';
 import '../models/user_restriction.dart';
 import '../services/auth_service.dart';
+import '../services/police_alert_service.dart';
 import '../services/restriction_service.dart';
 import '../repositories/restriction_repository.dart';
 
@@ -47,6 +51,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   DateTime? _departureTime;
   Key _originKey      = const ValueKey('origin');
   Key _destinationKey = const ValueKey('destination');
+  StreamSubscription<Uri>? _deepLinkSub;
   bool _locatingGps = false;
   final _waypointPositions = <LatLng?>[];
   final _waypointLabels    = <String?>[];
@@ -55,10 +60,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   final _poiIconCache      = <String, BitmapDescriptor>{};
   List<RadarPoint>         _nearbyRadares = [];
   List<UserRestriction>    _userRestrictions = [];
+  List<PoliceAlert>        _policeAlerts = [];
+  StreamSubscription<List<PoliceAlert>>? _policeAlertSub;
   double                   _currentZoom = 11.0;
   bool                     _markingMode = false;
   bool                     _panelCollapsed = false;
   bool                     _showDirtAlternative = false;
+  bool                     _showTruckTip = false;
   String?                  _selectedRoute; // 'paved' | 'dirt'
   Timer?                   _routeSelectionTimer;
   LatLng                   _cameraTarget = const LatLng(-23.5505, -46.6333);
@@ -77,11 +85,116 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _loadPoiIcons();
     _loadUserRestrictions();
+    _loadTruckTip();
+    _initDeepLinks();
+  }
+
+  Future<void> _loadTruckTip() async {
+    final prefs = await SharedPreferences.getInstance();
+    final shown = prefs.getBool('truck_tip_shown') ?? false;
+    if (!shown && mounted) {
+      setState(() => _showTruckTip = true);
+      Future.delayed(const Duration(seconds: 5), _dismissTruckTip);
+    }
+  }
+
+  Future<void> _dismissTruckTip() async {
+    if (!mounted) return;
+    setState(() => _showTruckTip = false);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('truck_tip_shown', true);
+  }
+
+  Future<void> _initDeepLinks() async {
+    final appLinks = AppLinks();
+    final initial = await appLinks.getInitialLink();
+    if (initial != null && mounted) _handleIncomingUri(initial);
+    _deepLinkSub = appLinks.uriLinkStream.listen((uri) {
+      if (mounted) _handleIncomingUri(uri);
+    });
+  }
+
+  void _handleIncomingUri(Uri uri) {
+    final route = parseMapsUri(uri);
+    if (route != null) {
+      _setDeepLinkRoute(route);
+      return;
+    }
+    final geo = parseGeoUri(uri);
+    if (geo != null) _handleGeoUri(geo);
+  }
+
+  void _setDeepLinkRoute(MapsRoute route) {
+    setState(() {
+      _destination      = route.destination;
+      _destinationLabel = 'Destino compartilhado';
+      _destinationKey   = ValueKey('dest_shared_${DateTime.now().millisecondsSinceEpoch}');
+      if (route.origin != null) {
+        _origin      = route.origin;
+        _originLabel = 'Origem compartilhada';
+        _originKey   = ValueKey('origin_shared_${DateTime.now().millisecondsSinceEpoch}');
+      }
+    });
+    context.read<RouteProvider>().clear();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(route.origin != null
+            ? 'Rota recebida — toque em Calcular para rotear'
+            : 'Destino recebido — toque em Calcular para rotear'),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+    if (_origin != null && _destination != null) _calculate();
+  }
+
+  void _handleGeoUri(GeoLocation geo) {
+    if (_destination != null) {
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Usar como destino?'),
+          content: const Text('Isso vai substituir o destino atual.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _setDeepLinkDestination(geo);
+              },
+              child: const Text('Usar'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      _setDeepLinkDestination(geo);
+    }
+  }
+
+  void _setDeepLinkDestination(GeoLocation geo) {
+    setState(() {
+      _destination      = geo.coords;
+      _destinationLabel = geo.label ?? 'Localização compartilhada';
+      _destinationKey   = ValueKey('dest_deep_${DateTime.now().millisecondsSinceEpoch}');
+    });
+    context.read<RouteProvider>().clear();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Destino recebido — toque em Calcular para rotear'),
+        duration: Duration(seconds: 4),
+      ),
+    );
+    if (_origin != null) _calculate();
   }
 
   @override
   void dispose() {
     _routeSelectionTimer?.cancel();
+    _deepLinkSub?.cancel();
+    _policeAlertSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -280,9 +393,44 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _loadUserRestrictions() async {
-    final restrictions = await RestrictionService.load();
+    final local = await RestrictionService.load();
+    var restrictions = local;
+
+    if (local.isNotEmpty && mounted) {
+      try {
+        var minLat = local[0].lat, maxLat = local[0].lat;
+        var minLng = local[0].lng, maxLng = local[0].lng;
+        for (final r in local) {
+          if (r.lat < minLat) minLat = r.lat;
+          if (r.lat > maxLat) maxLat = r.lat;
+          if (r.lng < minLng) minLng = r.lng;
+          if (r.lng > maxLng) maxLng = r.lng;
+        }
+        const pad = 0.01;
+        final remote = await context.read<RestrictionRepository>().fetchByBounds(
+          minLat - pad, maxLat + pad, minLng - pad, maxLng + pad,
+        );
+        if (remote.isNotEmpty) {
+          restrictions = local.map((r) {
+            BridgeRestriction? match;
+            for (final b in remote) {
+              if ((b.lat - r.lat).abs() < 0.0001 && (b.lng - r.lng).abs() < 0.0001) {
+                match = b;
+                break;
+              }
+            }
+            if (match == null || match.confirmedBy == r.confirmedBy) return r;
+            return UserRestriction(
+              id: r.id ?? match.id, lat: r.lat, lng: r.lng, type: r.type,
+              value: r.value, createdAt: r.createdAt, confirmedBy: match.confirmedBy,
+            );
+          }).toList();
+        }
+      } catch (_) {}
+    }
+
     for (final r in restrictions) {
-      final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+      final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}_${r.isVerified}';
       if (!_poiIconCache.containsKey(key)) {
         _poiIconCache[key] = await _buildRestrictionIcon(r);
       }
@@ -296,12 +444,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       'maxheight' => Colors.red.shade700,
       'maxweight' => Colors.brown.shade600,
       'dirtroad'  => Colors.green.shade700,
+      'truck_ban' => Colors.red.shade900,
       _           => Colors.deepOrange.shade600,
     };
     final text = switch (r.type) {
       'maxheight' => '${r.value.toStringAsFixed(1)}m',
       'maxweight' => '${r.value.toStringAsFixed(0)}t',
       'dirtroad'  => 'Terra',
+      'truck_ban' => 'Proib.',
       _           => '${r.value.toStringAsFixed(1)}m',
     };
     final tp = TextPainter(textDirection: TextDirection.ltr)
@@ -313,10 +463,20 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final iconW = (tp.width + 14).ceilToDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, iconW, iconH), const Radius.circular(4)),
-      Paint()..color = bgColor,
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, iconW, iconH),
+      const Radius.circular(4),
     );
+    canvas.drawRRect(rrect, Paint()..color = bgColor);
+    if (r.isVerified) {
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = Colors.amber.shade300
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+    }
     tp.paint(canvas, Offset(7, (iconH - tp.height) / 2));
     final picture = recorder.endRecording();
     final img = await picture.toImage(iconW.toInt(), iconH.toInt());
@@ -340,11 +500,25 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     () async {
       try {
         final uid = await AuthService.getUid();
-        await repo.add(r, uid);
+        final id = await repo.add(r, uid);
+        final rWithId = UserRestriction(
+          id: id, lat: r.lat, lng: r.lng, type: r.type,
+          value: r.value, createdAt: r.createdAt, confirmedBy: r.confirmedBy,
+        );
+        await RestrictionService.remove(r);
+        await RestrictionService.add(rWithId);
+        if (mounted) {
+          setState(() {
+            final idx = _userRestrictions.indexWhere(
+              (x) => x.lat == r.lat && x.lng == r.lng && x.createdAt == r.createdAt,
+            );
+            if (idx != -1) _userRestrictions[idx] = rWithId;
+          });
+        }
       } catch (_) {}
     }();
 
-    final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+    final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}_${r.isVerified}';
     final icon = await _buildRestrictionIcon(r);
     if (!mounted) return;
     _poiIconCache[key] = icon;
@@ -535,6 +709,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
     buf.writeln('Distância: ${result.distanceText}');
     buf.writeln('Duração: ${result.durationText}');
+    if (result.maxTruckSpeedKmh != null) {
+      buf.writeln('Vel. máx. caminhão: 90 km/h (pista dupla) / 80 km/h (pista simples)');
+    }
     buf.writeln();
     buf.write(
       'Caminhão: ${truck.heightCm}cm alt / ${truck.widthCm}cm larg / '
@@ -546,7 +723,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   void _shareRoute(RouteResult result, TruckProfile truck) {
-    Share.share(_buildShareText(result, truck), subject: 'Rota do Caminhão');
+    final text = StringBuffer(_buildShareText(result, truck));
+    if (_origin != null && _destination != null) {
+      final url = 'https://maps.google.com/maps'
+          '?saddr=${_origin!.latitude},${_origin!.longitude}'
+          '&daddr=${_destination!.latitude},${_destination!.longitude}';
+      text.writeln('\n\nAbrir no Truck Router:');
+      text.write(url);
+    }
+    Share.share(text.toString(), subject: 'Rota do Caminhão');
   }
 
   Future<void> _launchNavigation() async {
@@ -699,6 +884,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         ));
     });
     context.read<RouteProvider>().clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _calculate();
+    });
   }
 
   Future<void> _showHistory() async {
@@ -934,6 +1122,55 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _refreshPoliceAlerts(LatLngBounds bounds) {
+    _policeAlertSub?.cancel();
+    _policeAlertSub = PoliceAlertService.streamInBounds(
+      bounds.southwest.latitude,
+      bounds.northeast.latitude,
+      bounds.southwest.longitude,
+      bounds.northeast.longitude,
+    ).listen((alerts) {
+      if (mounted) setState(() => _policeAlerts = alerts);
+    });
+  }
+
+  Future<void> _showPoliceAlertSheet(PoliceAlert alert) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _PoliceAlertSheet(alert: alert),
+    );
+  }
+
+  Future<void> _showReportPoliceSheet() async {
+    final uid = await AuthService.getUid();
+    if (!mounted) return;
+    final type = await showModalBottomSheet<PoliceAlertType>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => const _ReportPoliceSheet(),
+    );
+    if (type == null) return;
+    await PoliceAlertService.report(
+      type: type,
+      lat: _cameraTarget.latitude,
+      lng: _cameraTarget.longitude,
+      uid: uid,
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Alerta reportado'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final routeProvider  = context.watch<RouteProvider>();
@@ -946,11 +1183,21 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     if (_showDirtAlternative && result?.dirtRoadAlternative != null) {
       final dirtPts = result!.dirtRoadAlternative!.polylinePoints;
       final dirtDimmed = _selectedRoute == 'paved';
+      if (!dirtDimmed) {
+        polylines.add(Polyline(
+          polylineId: const PolylineId('route_dirt_halo'),
+          points: dirtPts,
+          color: Colors.orange.shade700.withAlpha(90),
+          width: 18,
+          patterns: [PatternItem.dash(24), PatternItem.gap(12)],
+          zIndex: 0,
+        ));
+      }
       polylines.add(Polyline(
         polylineId: const PolylineId('route_dirt'),
         points: dirtPts,
         color: Colors.orange.shade700.withAlpha(dirtDimmed ? 60 : 255),
-        width: dirtDimmed ? 4 : 6,
+        width: dirtDimmed ? 5 : 10,
         patterns: [PatternItem.dash(24), PatternItem.gap(12)],
         zIndex: 0,
         onTap: _tapDirtRoute,
@@ -968,11 +1215,20 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
     if (pts != null && pts.isNotEmpty) {
       final pavedDimmed = _selectedRoute == 'dirt';
+      if (!pavedDimmed) {
+        polylines.add(Polyline(
+          polylineId: const PolylineId('route_halo'),
+          points: pts,
+          color: const Color(0xFF1565C0).withAlpha(90),
+          width: 18,
+          zIndex: 1,
+        ));
+      }
       polylines.add(Polyline(
         polylineId: const PolylineId('route'),
         points: pts,
         color: const Color(0xFF1565C0).withAlpha(pavedDimmed ? 60 : 255),
-        width: pavedDimmed ? 4 : 6,
+        width: pavedDimmed ? 5 : 10,
         zIndex: 1,
         onTap: _showDirtAlternative ? _tapPavedRoute : null,
         consumeTapEvents: _showDirtAlternative,
@@ -1045,7 +1301,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
 
     for (final r in _userRestrictions) {
-      final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';
+      final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}_${r.isVerified}';
       final icon = _poiIconCache[key];
       if (icon == null) continue;
       markers.add(Marker(
@@ -1054,6 +1310,29 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         icon: icon,
         infoWindow: InfoWindow(title: r.fullLabel, snippet: 'Toque para gerenciar'),
         onTap: () => _showRestrictionDetails(r),
+      ));
+    }
+
+    for (final alert in _policeAlerts) {
+      markers.add(Marker(
+        markerId: MarkerId('police_${alert.id}'),
+        position: alert.position,
+        icon: BitmapDescriptor.defaultMarkerWithHue(
+          switch (alert.type) {
+            PoliceAlertType.radar  => BitmapDescriptor.hueOrange,
+            PoliceAlertType.police => BitmapDescriptor.hueBlue,
+            PoliceAlertType.blitz  => BitmapDescriptor.hueRed,
+          },
+        ),
+        infoWindow: InfoWindow(
+          title: switch (alert.type) {
+            PoliceAlertType.radar  => 'Radar',
+            PoliceAlertType.police => 'Polícia',
+            PoliceAlertType.blitz  => 'Blitz',
+          },
+          snippet: alert.timeRemainingText,
+        ),
+        onTap: () => _showPoliceAlertSheet(alert),
       ));
     }
 
@@ -1073,9 +1352,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     }
                     _cameraTarget = pos.target;
                   },
+                  onCameraIdle: () async {
+                    final bounds = await _mapController?.getVisibleRegion();
+                    if (bounds != null) _refreshPoliceAlerts(bounds);
+                  },
                   polylines: polylines,
                   markers: markers,
-                  trafficEnabled: true,
+                  trafficEnabled: false,
                   myLocationButtonEnabled: false,
                 ),
                 if (!_markingMode) ...[
@@ -1353,6 +1636,94 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       child: const Icon(Icons.add_location_alt),
                     ),
                   ),
+                if (!_markingMode)
+                  Positioned(
+                    bottom: routeProvider.result != null && _panelCollapsed ? 64 : 16,
+                    right: 16,
+                    child: FloatingActionButton.small(
+                      heroTag: 'report_police',
+                      onPressed: _showReportPoliceSheet,
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.blue.shade700,
+                      elevation: 3,
+                      tooltip: 'Reportar polícia',
+                      child: const Icon(Icons.local_police_outlined),
+                    ),
+                  ),
+                if (_showTruckTip)
+                  Positioned(
+                    top: 100,
+                    right: 12,
+                    child: GestureDetector(
+                      onTap: _dismissTruckTip,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 14),
+                            child: CustomPaint(
+                              size: const Size(12, 8),
+                              painter: _UpArrowPainter(
+                                  color: Theme.of(context).colorScheme.primary),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: const [
+                                BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 6,
+                                    offset: Offset(0, 2))
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.local_shipping_rounded,
+                                    color: Colors.white, size: 15),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Configure seu caminhão aqui',
+                                  style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onPrimary,
+                                      fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (routeProvider.status == RouteStatus.loading)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.all(Radius.circular(24)),
+                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2))],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 10),
+                          Text('Calculando rota...', style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
                 if (_showDirtAlternative && result?.dirtRoadAlternative != null)
                   Positioned(
@@ -1458,6 +1829,21 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       routeProvider.result!,
                       context.read<TruckProfileProvider>().profile,
                     ),
+                    onBlockedTap: routeProvider.result!.restrictionsBlocked.isEmpty
+                        ? null
+                        : () => showModalBottomSheet(
+                              context: context,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                              ),
+                              builder: (_) => _BlockedSheet(
+                                blocked: routeProvider.result!.restrictionsBlocked,
+                                onAddWaypoint: () {
+                                  setState(() => _panelCollapsed = false);
+                                  _addWaypoint();
+                                },
+                              ),
+                            ),
                   ),
           ),
         ],
@@ -1473,6 +1859,7 @@ class _ResultCard extends StatelessWidget {
   final VoidCallback onOpenExternal;
   final VoidCallback onShare;
   final VoidCallback onCopy;
+  final VoidCallback? onBlockedTap;
 
   const _ResultCard({
     required this.result,
@@ -1481,6 +1868,7 @@ class _ResultCard extends StatelessWidget {
     required this.onOpenExternal,
     required this.onShare,
     required this.onCopy,
+    this.onBlockedTap,
   });
 
   static String _etaString(DateTime? departureTime, int durationSeconds) {
@@ -1510,13 +1898,12 @@ class _ResultCard extends StatelessWidget {
             ),
           ),
         ),
-        if (result.usedTomTomData)
-          const _TomTomBanner(),
         if (result.restrictionsAvoided.isNotEmpty ||
             result.restrictionsBlocked.isNotEmpty)
           _RestrictionsBanner(
             avoided: result.restrictionsAvoided,
             blocked: result.restrictionsBlocked,
+            onBlockedTap: onBlockedTap,
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
@@ -1803,53 +2190,20 @@ class _PoiSheet extends StatelessWidget {
   }
 }
 
-class _TomTomBanner extends StatelessWidget {
-  const _TomTomBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.teal.shade50,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.teal.shade200),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.verified_outlined, color: Colors.teal.shade700, size: 16),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Rota otimizada com TomTom — restrições adicionais detectadas',
-                style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.teal.shade800,
-                    fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _RestrictionsBanner extends StatelessWidget {
   final List<BridgeRestriction> avoided;
   final List<BridgeRestriction> blocked;
+  final VoidCallback? onBlockedTap;
 
-  const _RestrictionsBanner({required this.avoided, required this.blocked});
+  const _RestrictionsBanner({required this.avoided, required this.blocked, this.onBlockedTap});
 
   @override
   Widget build(BuildContext context) {
     final hasBlocked = blocked.isNotEmpty;
-    final color  = hasBlocked ? Colors.amber.shade700  : Colors.green.shade600;
-    final bgColor = hasBlocked ? Colors.amber.shade50  : Colors.green.shade50;
-    final border  = hasBlocked ? Colors.amber.shade300 : Colors.green.shade200;
-    final icon    = hasBlocked ? Icons.warning_amber_rounded : Icons.check_circle_outline;
+    final color   = hasBlocked ? Colors.red.shade700    : Colors.green.shade600;
+    final bgColor = hasBlocked ? Colors.red.shade50     : Colors.green.shade50;
+    final border  = hasBlocked ? Colors.red.shade200    : Colors.green.shade200;
+    final icon    = hasBlocked ? Icons.block            : Icons.check_circle_outline;
 
     final String message;
     if (hasBlocked) {
@@ -1874,29 +2228,37 @@ class _RestrictionsBanner extends StatelessWidget {
       }
     }
 
+    final banner = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                  fontSize: 12, color: color, fontWeight: FontWeight.w500),
+            ),
+          ),
+          if (hasBlocked) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, color: color, size: 18),
+          ],
+        ],
+      ),
+    );
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: border),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 16),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(
-                    fontSize: 12, color: color, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-      ),
+      child: hasBlocked
+          ? GestureDetector(onTap: onBlockedTap, child: banner)
+          : banner,
     );
   }
 }
@@ -2019,9 +2381,38 @@ class _OnboardingItem extends StatelessWidget {
 
 // ── _RestrictionDetailSheet ───────────────────────────────────────────────────
 
-class _RestrictionDetailSheet extends StatelessWidget {
+class _RestrictionDetailSheet extends StatefulWidget {
   final UserRestriction restriction;
   const _RestrictionDetailSheet({required this.restriction});
+
+  @override
+  State<_RestrictionDetailSheet> createState() => _RestrictionDetailSheetState();
+}
+
+class _RestrictionDetailSheetState extends State<_RestrictionDetailSheet> {
+  bool    _confirming = false;
+  bool    _reporting  = false;
+  String? _cachedVote; // "confirm" | "report" | null
+
+  static String _voteKey(String id) => 'restriction_vote_$id';
+
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.restriction.id;
+    if (id != null) {
+      SharedPreferences.getInstance().then((prefs) {
+        if (mounted) setState(() => _cachedVote = prefs.getString(_voteKey(id)));
+      });
+    }
+  }
+
+  Future<void> _saveVote(String action) async {
+    final id = widget.restriction.id!;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_voteKey(id), action);
+    if (mounted) setState(() => _cachedVote = action);
+  }
 
   String _formatDate(DateTime dt) {
     final d   = dt.day.toString().padLeft(2, '0');
@@ -2031,9 +2422,41 @@ class _RestrictionDetailSheet extends StatelessWidget {
     return '$d/$m/${dt.year} ${h}h$min';
   }
 
+  Future<void> _confirm() async {
+    setState(() => _confirming = true);
+    try {
+      await context.read<RestrictionRepository>().confirm(widget.restriction.id!);
+      await _saveVote('confirm');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Confirmação registrada!'), duration: Duration(seconds: 2)),
+        );
+        Navigator.pop(context);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _confirming = false);
+    }
+  }
+
+  Future<void> _report() async {
+    setState(() => _reporting = true);
+    try {
+      await context.read<RestrictionRepository>().report(widget.restriction.id!);
+      await _saveVote('report');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reporte enviado. Obrigado!'), duration: Duration(seconds: 2)),
+        );
+        Navigator.pop(context);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _reporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final r = restriction;
+    final r = widget.restriction;
     final iconData = switch (r.type) {
       'maxheight' => Icons.height,
       'maxweight' => Icons.monitor_weight,
@@ -2044,6 +2467,7 @@ class _RestrictionDetailSheet extends StatelessWidget {
       'maxweight' => Colors.brown.shade600,
       _           => Colors.deepOrange.shade600,
     };
+    final busy = _confirming || _reporting;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
       child: Column(
@@ -2055,29 +2479,79 @@ class _RestrictionDetailSheet extends StatelessWidget {
               Icon(iconData, color: color, size: 20),
               const SizedBox(width: 8),
               Text('Restrição marcada manualmente',
-                  style: TextStyle(
-                      color: Colors.grey.shade600, fontSize: 13)),
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+              const Spacer(),
+              if (r.isVerified)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.shade400),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.verified, size: 13, color: Colors.amber.shade700),
+                    const SizedBox(width: 4),
+                    Text('Verificado', style: TextStyle(fontSize: 11, color: Colors.amber.shade800, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
             ],
           ),
           const SizedBox(height: 8),
           Text(r.fullLabel,
-              style: const TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.bold)),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text('Adicionada em ${_formatDate(r.createdAt)}',
-              style:
-                  TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+          Row(children: [
+            Text('Adicionada em ${_formatDate(r.createdAt)}',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+            const SizedBox(width: 12),
+            Icon(Icons.thumb_up_outlined, size: 12, color: Colors.grey.shade500),
+            const SizedBox(width: 3),
+            Text('${r.confirmedBy} ${r.confirmedBy == 1 ? 'confirmação' : 'confirmações'}',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+          ]),
           const Divider(height: 24),
+          if (r.id != null) ...[
+            Row(children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: busy ? null : _confirm,
+                  icon: _confirming
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Icon(_cachedVote == 'confirm' ? Icons.check : Icons.thumb_up, size: 16),
+                  label: Text(_cachedVote == 'confirm' ? 'Confirmado' : 'Confirmar'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _cachedVote == 'confirm' ? Colors.green.shade800 : Colors.green.shade600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: busy ? null : _report,
+                  icon: _reporting
+                      ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange.shade700))
+                      : Icon(_cachedVote == 'report' ? Icons.flag : Icons.flag_outlined, size: 16),
+                  label: Text(_cachedVote == 'report' ? 'Reportada' : 'Incorreta'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orange.shade700,
+                    side: BorderSide(
+                      color: _cachedVote == 'report' ? Colors.orange.shade700 : Colors.orange.shade400,
+                      width: _cachedVote == 'report' ? 2 : 1,
+                    ),
+                  ),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
+          ],
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: busy ? null : () => Navigator.pop(context, true),
               icon: const Icon(Icons.delete_outline, color: Colors.red),
-              label: const Text('Remover restrição',
-                  style: TextStyle(color: Colors.red)),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.red),
-              ),
+              label: const Text('Remover restrição', style: TextStyle(color: Colors.red)),
+              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
             ),
           ),
         ],
@@ -2256,6 +2730,270 @@ class _RouteOption extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── _BlockedSheet — detalhes de restrição não contornável ────────────────────
+
+class _BlockedSheet extends StatelessWidget {
+  final List<BridgeRestriction> blocked;
+  final VoidCallback onAddWaypoint;
+
+  const _BlockedSheet({required this.blocked, required this.onAddWaypoint});
+
+  static IconData _iconFor(String type) => switch (type) {
+        'maxheight' => Icons.height,
+        'maxweight' => Icons.monitor_weight,
+        'maxwidth'  => Icons.swap_horiz,
+        _           => Icons.warning_amber_rounded,
+      };
+
+  static String _typeLabel(String type) => switch (type) {
+        'maxheight' => 'Altura máxima',
+        'maxweight' => 'Peso máximo',
+        'maxwidth'  => 'Largura máxima',
+        _           => 'Restrição',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.block, color: Colors.red.shade700, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  blocked.length == 1
+                      ? 'Passagem incompatível com seu caminhão'
+                      : '${blocked.length} restrições incompatíveis com seu caminhão',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'HERE não encontrou rota alternativa automática para estas restrições.',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 16),
+          ...blocked.map((r) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(_iconFor(r.type), color: Colors.red.shade700, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _typeLabel(r.type),
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.red.shade700,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              r.label,
+                              style: const TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (r.isVerified)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade100,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.amber.shade400),
+                          ),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.verified, size: 11, color: Colors.amber.shade700),
+                            const SizedBox(width: 3),
+                            Text('Verificada',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.amber.shade800,
+                                    fontWeight: FontWeight.w600)),
+                          ]),
+                        ),
+                    ],
+                  ),
+                ),
+              )),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.lightbulb_outline, size: 16, color: Colors.grey.shade600),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Adicione uma parada antes da restrição para forçar um desvio manual.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                onAddWaypoint();
+              },
+              icon: const Icon(Icons.add_location_alt),
+              label: const Text('Adicionar parada'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Continuar mesmo assim',
+                  style: TextStyle(color: Colors.grey.shade600)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UpArrowPainter extends CustomPainter {
+  final Color color;
+  const _UpArrowPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    final path = Path()
+      ..moveTo(size.width / 2, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_UpArrowPainter old) => old.color != color;
+}
+
+// ── _PoliceAlertSheet ─────────────────────────────────────────────────────────
+
+class _PoliceAlertSheet extends StatelessWidget {
+  final PoliceAlert alert;
+  const _PoliceAlertSheet({required this.alert});
+
+  String get _typeLabel => switch (alert.type) {
+    PoliceAlertType.radar  => 'Radar',
+    PoliceAlertType.police => 'Polícia',
+    PoliceAlertType.blitz  => 'Blitz / Fiscalização',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_typeLabel, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(alert.timeRemainingText,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    if (alert.id != null) {
+                      await PoliceAlertService.notThere(alert.id!);
+                    }
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Não está mais lá'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    if (alert.id != null) {
+                      await PoliceAlertService.confirm(alert.id!);
+                    }
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.check),
+                  label: const Text('Confirmar'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── _ReportPoliceSheet ────────────────────────────────────────────────────────
+
+class _ReportPoliceSheet extends StatelessWidget {
+  const _ReportPoliceSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('O que você viu?', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 16),
+          for (final type in PoliceAlertType.values)
+            ListTile(
+              leading: Icon(switch (type) {
+                PoliceAlertType.radar  => Icons.speed,
+                PoliceAlertType.police => Icons.local_police,
+                PoliceAlertType.blitz  => Icons.assignment_late,
+              }),
+              title: Text(switch (type) {
+                PoliceAlertType.radar  => 'Radar de velocidade',
+                PoliceAlertType.police => 'Polícia na via',
+                PoliceAlertType.blitz  => 'Blitz / Fiscalização',
+              }),
+              onTap: () => Navigator.pop(context, type),
+            ),
         ],
       ),
     );

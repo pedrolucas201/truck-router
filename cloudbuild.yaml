@@ -1,0 +1,13 @@
+steps:
+  - name: 'ghcr.io/cirruslabs/flutter:stable'
+    entrypoint: flutter
+    args: ['pub', 'get']
+
+  - name: 'ghcr.io/cirruslabs/flutter:stable'
+    entrypoint: flutter
+    args: ['analyze']
+
+timeout: '300s'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

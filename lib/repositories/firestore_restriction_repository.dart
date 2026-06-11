@@ -10,6 +10,11 @@ class FirestoreRestrictionRepository implements RestrictionRepository {
       FirestoreRestrictionService.fetchNearRoute(points);
 
   @override
+  Future<List<BridgeRestriction>> fetchByBounds(
+    double minLat, double maxLat, double minLng, double maxLng,
+  ) => FirestoreRestrictionService.fetchByBounds(minLat, maxLat, minLng, maxLng);
+
+  @override
   Future<String> add(UserRestriction r, String uid) =>
       FirestoreRestrictionService.add(r, uid);
 

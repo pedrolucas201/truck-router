@@ -28,7 +28,7 @@ class _AddRestrictionSheetState extends State<AddRestrictionSheet> {
   }
 
   String get _unit => _type == 'maxweight' ? 't' : 'm';
-  bool get _needsValue => _type != 'dirtroad';
+  bool get _needsValue => _type != 'dirtroad' && _type != 'truck_ban';
 
   void _save() {
     final double value;
@@ -100,6 +100,12 @@ class _AddRestrictionSheetState extends State<AddRestrictionSheet> {
                 icon: Icons.terrain,
                 selected: _type == 'dirtroad',
                 onTap: () => setState(() => _type = 'dirtroad'),
+              ),
+              RestrictionTypeChip(
+                label: 'Proibido caminhão',
+                icon: Icons.no_crash,
+                selected: _type == 'truck_ban',
+                onTap: () => setState(() => _type = 'truck_ban'),
               ),
             ],
           ),

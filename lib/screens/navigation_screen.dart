@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/bridge_restriction.dart';
+import '../models/police_alert.dart';
 import '../models/radar_point.dart';
 import '../models/route_maneuver.dart';
 import '../models/route_result.dart';
@@ -20,10 +21,15 @@ import '../models/user_restriction.dart';
 import '../repositories/restriction_repository.dart';
 import '../services/auth_service.dart';
 import '../services/here_routing_service.dart';
+import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
 import '../services/restriction_service.dart';
+import '../data/pois.dart';
+import '../models/poi.dart';
+import '../models/route_event.dart';
 import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
+import '../widgets/route_timeline.dart';
 
 @pragma('vm:entry-point')
 void _navForegroundCallback() {
@@ -94,11 +100,21 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   bool _markingMode = false;
   bool _paused = false;
+  bool _arrived = false;
+  bool _ttsActive = false;
+  bool _speedAlertActive = false;
+  DateTime? _lastSpeedAlertAt;
   final Set<String> _actionedRestrictions = {};
   LatLng? _snappedPos;
+  PoliceAlert? _nearestPoliceAlert;
   bool _hasFirstFix = false;
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
   BitmapDescriptor? _userArrowIcon;
+
+  List<RouteEvent>  _upcomingEvents = [];
+  List<Poi>         _routePois      = [];
+  List<PoliceAlert> _policeAhead    = [];
+  Timer?            _policeTimelineTimer;
 
   BridgeRestriction? _nearbyBlockedRestriction;
   String? _lastRestrictionAlertKey;
@@ -110,11 +126,11 @@ class _NavigationScreenState extends State<NavigationScreen>
   late final Animation<double> _pulseAnimation;
 
   static const _offRouteThresholdM  = 80.0;
-  static const _offRouteCountLimit  = 4;
+  static const _offRouteCountLimit  = 2;
   static const _radarAlertM         = 400.0;
   static const _restrictionAlertM   = 300.0;
   static const _radarLookAheadM     = 1500.0;
-  static const _radarCorridorM      = 100.0;
+  static const _radarCorridorM      = 150.0;
   static const _prefAudioLevel = 'nav_audio_level';
   static const _prefZoomLevel  = 'nav_zoom_level';
 
@@ -143,14 +159,21 @@ class _NavigationScreenState extends State<NavigationScreen>
     _buildUserArrow().then((icon) {
       if (mounted) setState(() => _userArrowIcon = icon);
     });
+    _loadRoutePois();
+    _policeTimelineTimer = Timer.periodic(
+      const Duration(minutes: 2),
+      (_) => _refreshPoliceTimeline(),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
+    _policeTimelineTimer?.cancel();
     _posSub?.cancel();
     _tts.stop();
+    _ttsActive = false;
     _pulseController.dispose();
     FlutterForegroundTask.stopService();
     WakelockPlus.disable();
@@ -193,7 +216,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (m.action == 'depart' || m.action == 'arrive') return;
     final dist = _distToNextManeuver;
     final text = dist.isFinite && dist < 50000
-        ? 'Em ${_fmtDist(dist)}, ${m.instruction}'
+        ? 'Em ${_fmtDist(dist)}. ${m.instruction}'
         : m.instruction;
     _speak(text);
     // Marca os thresholds já anunciados para _checkTts não repetir no próximo GPS update.
@@ -210,6 +233,13 @@ class _NavigationScreenState extends State<NavigationScreen>
     _tts.setLanguage('pt-BR');
     _tts.setSpeechRate(0.9);
     _tts.setVolume(1.0);
+    // Debounce de 300ms: evita que completionHandler prematuro (chunk interno do engine)
+    // abra a janela para um novo _speak interromper a utterance em andamento.
+    _tts.setCompletionHandler(() =>
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _ttsActive = false;
+        }));
+    _tts.setCancelHandler(() => _ttsActive = false);
   }
 
   Future<void> _startForegroundService() async {
@@ -283,6 +313,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     setState(() => _paused = !_paused);
     if (_paused) {
       _tts.stop();
+      _ttsActive = false;
     } else {
       _resumedAt = DateTime.now();
       _recenter();
@@ -294,7 +325,40 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (_audioLevel == AudioLevel.silencioso) return;
     if (_resumedAt != null &&
         DateTime.now().difference(_resumedAt!).inMilliseconds < 4000) { return; }
+    if (_ttsActive) return;
+    _ttsActive = true;
     _tts.speak(text);
+  }
+
+  void _handleArrival() {
+    if (_arrived) return;
+    _arrived = true;
+    _posSub?.cancel();
+    _tts.stop();
+    _ttsActive = false;
+    if (_audioLevel != AudioLevel.silencioso) {
+      _tts.speak('Você chegou ao destino');
+    }
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
+  void _checkSpeedAlert(double kmh) {
+    if (kmh >= 90) {
+      final now = DateTime.now();
+      if (!_speedAlertActive) {
+        _speedAlertActive = true;
+        _lastSpeedAlertAt = now;
+        _speak('Velocidade acima do limite para caminhão');
+      } else if (_lastSpeedAlertAt != null &&
+          now.difference(_lastSpeedAlertAt!).inSeconds >= 30) {
+        _lastSpeedAlertAt = now;
+        _speak('Velocidade acima do limite para caminhão');
+      }
+    } else if (kmh < 85) {
+      _speedAlertActive = false;
+    }
   }
 
   // ── GPS ──────────────────────────────────────────────────────────────────────
@@ -308,6 +372,28 @@ class _NavigationScreenState extends State<NavigationScreen>
         .listen(_onPositionUpdate);
   }
 
+  void _checkPoliceAlerts(LatLng position) {
+    const radiusMeters = 500.0;
+    const deltaLat = 0.0045; // ~500m em graus lat
+    const deltaLng = 0.0050; // ~500m em graus lng na latitude do Brasil
+    PoliceAlertService.streamInBounds(
+      position.latitude - deltaLat, position.latitude + deltaLat,
+      position.longitude - deltaLng, position.longitude + deltaLng,
+    ).first.then((alerts) {
+      if (!mounted) return;
+      PoliceAlert? nearest;
+      double bestDist = radiusMeters;
+      for (final a in alerts) {
+        final d = RadarService.haversine(
+          position.latitude, position.longitude, a.lat, a.lng);
+        if (d < bestDist) { bestDist = d; nearest = a; }
+      }
+      if (nearest?.id != _nearestPoliceAlert?.id) {
+        setState(() => _nearestPoliceAlert = nearest);
+      }
+    });
+  }
+
   void _onPositionUpdate(Position pos) {
     if (!mounted) return;
     final firstFix = !_hasFirstFix;
@@ -317,42 +403,73 @@ class _NavigationScreenState extends State<NavigationScreen>
       _speak('Atenção! Restrição para caminhões nesta via');
       _updatePulse();
     }
+    if (firstFix) _refreshPoliceTimeline();
     final latLng = LatLng(pos.latitude, pos.longitude);
 
     if (_paused) {
       final pts2 = _result.polylinePoints;
       final s2 = (_closestPolylineIdx - 5).clamp(0, pts2.length - 1);
-      var bi2 = _closestPolylineIdx;
-      var bd2 = double.infinity;
-      for (var i = s2; i < min(s2 + 200, pts2.length); i++) {
-        final d = RadarService.haversine(
-            latLng.latitude, latLng.longitude, pts2[i].latitude, pts2[i].longitude);
-        if (d < bd2) { bd2 = d; bi2 = i; }
+      var bd2  = double.infinity;
+      var snap2 = pts2.isNotEmpty ? pts2[_closestPolylineIdx] : latLng;
+      final end2 = min(s2 + 200, pts2.length);
+      for (var i = s2; i < end2 - 1; i++) {
+        final s = _projectToSegment(latLng, pts2[i], pts2[i + 1]);
+        final d = RadarService.haversine(latLng.latitude, latLng.longitude, s.latitude, s.longitude);
+        if (d < bd2) { bd2 = d; snap2 = s; }
+      }
+      if (end2 == pts2.length && pts2.isNotEmpty) {
+        final d = RadarService.haversine(latLng.latitude, latLng.longitude, pts2[end2 - 1].latitude, pts2[end2 - 1].longitude);
+        if (d < bd2) { snap2 = pts2[end2 - 1]; }
       }
       setState(() {
         _currentPos = latLng;
-        _snappedPos = pts2.isNotEmpty ? pts2[bi2] : latLng;
+        _snappedPos = pts2.isNotEmpty ? snap2 : latLng;
         _bearing    = pos.heading;
         _speedKmh   = (pos.speed * 3.6).clamp(0, 300);
       });
       return;
     }
 
-    // 1. Ponto mais próximo na polyline (busca a partir do índice atual)
+    // 1. Segmento mais próximo na polyline (projeção, não só vértice)
     final pts  = _result.polylinePoints;
     final start = (_closestPolylineIdx - 5).clamp(0, pts.length - 1);
     var bestIdx  = _closestPolylineIdx;
     var bestDist = double.infinity;
+    var bestSnap = pts.isNotEmpty ? pts[_closestPolylineIdx] : latLng;
     final end = min(start + 200, pts.length);
-    for (var i = start; i < end; i++) {
+    for (var i = start; i < end - 1; i++) {
+      final snap = _projectToSegment(latLng, pts[i], pts[i + 1]);
       final d = RadarService.haversine(
         latLng.latitude, latLng.longitude,
-        pts[i].latitude, pts[i].longitude,
+        snap.latitude, snap.longitude,
       );
-      if (d < bestDist) { bestDist = d; bestIdx = i; }
+      if (d < bestDist) { bestDist = d; bestIdx = i; bestSnap = snap; }
+    }
+    if (end == pts.length && pts.isNotEmpty) {
+      final d = RadarService.haversine(
+          latLng.latitude, latLng.longitude, pts[end - 1].latitude, pts[end - 1].longitude);
+      if (d < bestDist) { bestDist = d; bestIdx = end - 1; bestSnap = pts[end - 1]; }
     }
 
-    // 2. Desvio de rota
+    // 2. Arrival detection: distância restante na polyline < 30m E velocidade < 5 km/h.
+    // Remaining polyline (não linha reta ao destino) evita falso positivo em semáforos
+    // antes de curvas — a distância restante na rota ainda é alta nesses casos.
+    if (!_arrived && pos.speed * 3.6 < 5) {
+      var remaining = 0.0;
+      for (var i = bestIdx; i < pts.length - 1; i++) {
+        remaining += RadarService.haversine(
+          pts[i].latitude, pts[i].longitude,
+          pts[i + 1].latitude, pts[i + 1].longitude,
+        );
+        if (remaining > 60) break;
+      }
+      if (remaining < 30) {
+        _handleArrival();
+        return;
+      }
+    }
+
+    // 3. Desvio de rota
     if (bestDist > _offRouteThresholdM) {
       _offRouteCount++;
       if (_offRouteCount >= _offRouteCountLimit) _reroute(latLng);
@@ -360,13 +477,15 @@ class _NavigationScreenState extends State<NavigationScreen>
       _offRouteCount = 0;
     }
 
-    // 3. Manobra atual
+    // 4. Manobra atual — busca monotônica: mIdx só avança, nunca retrocede.
+    // GPS noise pode oscilar bestIdx ao redor do polylineOffset de uma manobra,
+    // fazendo nextIdx alternar entre N e N+1 e re-disparar os thresholds de TTS.
     final maneuvers = _result.maneuvers;
-    var mIdx = 0;
-    for (var i = 0; i < maneuvers.length; i++) {
+    final searchStart = _maneuverIndex > 0 ? _maneuverIndex - 1 : 0;
+    var mIdx = searchStart;
+    for (var i = searchStart; i < maneuvers.length; i++) {
       if (maneuvers[i].polylineOffset <= bestIdx) mIdx = i;
     }
-    // Avança se já passou desta manobra
     final nextIdx = (mIdx + 1 < maneuvers.length) ? mIdx + 1 : mIdx;
     final nextManeuver = maneuvers.isNotEmpty ? maneuvers[nextIdx] : null;
 
@@ -379,9 +498,22 @@ class _NavigationScreenState extends State<NavigationScreen>
       _checkTts(nextIdx, distToNext, nextManeuver);
     }
 
-    // 4. Radar à frente
+    // 5. Radares visíveis: próximos 1500m da polyline com corredor de 150m
+    // Computado antes de upcoming para que upcoming use o mesmo filtro de corredor,
+    // eliminando falsos positivos em vias paralelas.
+    final aheadPts = <LatLng>[];
+    for (var i = bestIdx; i < pts.length; i++) {
+      if (RadarService.haversine(latLng.latitude, latLng.longitude,
+              pts[i].latitude, pts[i].longitude) > _radarLookAheadM) { break; }
+      aheadPts.add(pts[i]);
+    }
+    final visibleRadares = _radares.where((r) => aheadPts.any((p) =>
+        RadarService.haversine(r.lat, r.lng, p.latitude, p.longitude) <=
+            _radarCorridorM)).toList();
+
+    // 6. Radar à frente — restrito ao corredor da rota (sem falso positivo em paralelas)
     RadarPoint? upcoming;
-    for (final r in _radares) {
+    for (final r in visibleRadares) {
       final d = RadarService.haversine(latLng.latitude, latLng.longitude, r.lat, r.lng);
       if (d < _radarAlertM) {
         if (upcoming == null ||
@@ -391,7 +523,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
 
-    // 5. Restrição bloqueada à frente
+    // 7. Restrição bloqueada à frente
     final userBlocked = _userRestrictions
         .map((r) => r.toBridgeRestriction())
         .where((b) => b.conflictsWith(widget.truck));
@@ -405,20 +537,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
 
-    // 6. Radares visíveis: próximos 1500m da polyline com corredor de 100m
-    final aheadPts = <LatLng>[];
-    for (var i = bestIdx; i < pts.length; i++) {
-      if (RadarService.haversine(latLng.latitude, latLng.longitude,
-              pts[i].latitude, pts[i].longitude) > _radarLookAheadM) { break; }
-      aheadPts.add(pts[i]);
-    }
-    final visibleRadares = _radares.where((r) => aheadPts.any((p) =>
-        RadarService.haversine(r.lat, r.lng, p.latitude, p.longitude) <=
-            _radarCorridorM)).toList();
-
     setState(() {
       _currentPos                 = latLng;
-      _snappedPos                 = pts.isNotEmpty ? pts[bestIdx] : latLng;
+      _snappedPos                 = pts.isNotEmpty ? bestSnap : latLng;
       _bearing                    = pos.heading;
       _speedKmh                   = (pos.speed * 3.6).clamp(0, 300);
       _closestPolylineIdx         = bestIdx;
@@ -430,12 +551,15 @@ class _NavigationScreenState extends State<NavigationScreen>
     });
     _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
+    _checkSpeedAlert(_speedKmh);
+    _checkPoliceAlerts(latLng);
+    _buildUpcomingEvents();
 
-    // 7. Câmera segue o usuário (pausada no modo crosshair)
+    // 8. Câmera segue o usuário (pausada no modo crosshair)
     // Usa pts[bestIdx] (snapped) em vez do GPS bruto — evita que a seta
     // apareça fora da via no zoom aproximado por drift de GPS.
     if (!_markingMode) {
-      final camTarget = pts.isNotEmpty ? pts[bestIdx] : latLng;
+      final camTarget = pts.isNotEmpty ? bestSnap : latLng;
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
           target:  camTarget,
@@ -467,11 +591,11 @@ class _NavigationScreenState extends State<NavigationScreen>
       // 500m só no nível completo
       if (_audioLevel == AudioLevel.completo && distM <= 500 && !_announced.contains(k500)) {
         _announced.add(k500);
-        _speak('Em 500 metros, ${m.instruction}');
+        _speak('Em 500 metros. ${m.instruction}');
       } else if (distM <= 200 && !_announced.contains(k200)) {
         _announced.add(k200);
         _announced.add(k500);
-        _speak('Em 200 metros, ${m.instruction}');
+        _speak('Em 200 metros. ${m.instruction}');
       } else if (distM <= 50 && !_announced.contains(k50)) {
         _announced.add(k50);
         _announced.add(k200);
@@ -483,7 +607,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (_audioLevel == AudioLevel.completo && distM <= 200 && !_announced.contains(k200)) {
         _announced.add(k200);
         _announced.add(k500);
-        _speak('Em 200 metros, ${m.instruction}');
+        _speak('Em 200 metros. ${m.instruction}');
       } else if (distM <= 50 && !_announced.contains(k50)) {
         _announced.add(k50);
         _announced.add(k200);
@@ -614,6 +738,8 @@ class _NavigationScreenState extends State<NavigationScreen>
         _timeRestrictionAlertSpoken = false;
       }
       _updatePulse();
+      _loadRoutePois();
+      _refreshPoliceTimeline();
       // Só anuncia se nível completo e rota mudou significativamente (>500m)
       if (_audioLevel == AudioLevel.completo &&
           (newResult.distanceMeters - prevDistM).abs() > 500) {
@@ -674,10 +800,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   Future<BitmapDescriptor> _radarIcon(RadarPoint r) async {
     final isLombada = r.type.toLowerCase().contains('lombada');
     final isPedagio = r.type.toLowerCase().contains('pedagio');
+    final isRadarWithSpeed = !isPedagio && !isLombada && r.speedKmh > 0;
     final key = isPedagio ? 'p' : '${isLombada ? 'l' : 'r'}_${r.speedKmh}';
     if (_iconCache.containsKey(key)) return _iconCache[key]!;
 
-    const size = 40.0;
     final bgColor = isPedagio
         ? Colors.blue.shade700
         : isLombada
@@ -685,30 +811,57 @@ class _NavigationScreenState extends State<NavigationScreen>
             : Colors.red.shade700;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
+
+    if (isRadarWithSpeed) {
+      // Retângulo arredondado: câmera acima + velocidade abaixo — distinto de placa de limite
+      const w = 44.0;
+      const h = 50.0;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(const Rect.fromLTWH(0, 0, w, h), const Radius.circular(8)),
+        Paint()..color = bgColor,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(const Rect.fromLTWH(0, 0, w, h), const Radius.circular(8)),
+        Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 3.0,
+      );
+      const camIcon = Icons.camera_alt;
+      final camTp = TextPainter(textDirection: TextDirection.ltr)
+        ..text = TextSpan(
+          text: String.fromCharCode(camIcon.codePoint),
+          style: TextStyle(fontSize: 20, fontFamily: camIcon.fontFamily, color: Colors.white),
+        )
+        ..layout();
+      camTp.paint(canvas, Offset((w - camTp.width) / 2, 4));
+      final speedTp = TextPainter(textDirection: TextDirection.ltr)
+        ..text = TextSpan(
+          text: r.speedKmh.toString(),
+          style: TextStyle(
+            fontSize: r.speedKmh >= 100 ? 11.0 : 13.0,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        )
+        ..layout();
+      speedTp.paint(canvas, Offset((w - speedTp.width) / 2, h - speedTp.height - 4));
+      final img   = await recorder.endRecording().toImage(w.toInt(), h.toInt());
+      final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+      final icon  = BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+      _iconCache[key] = icon;
+      return icon;
+    }
+
+    // Círculo para lombada, pedágio e radar sem velocidade cadastrada
+    const size = 40.0;
     canvas.drawCircle(const Offset(size / 2, size / 2), size / 2, Paint()..color = bgColor);
     canvas.drawCircle(
       const Offset(size / 2, size / 2), size / 2 - 3.0,
       Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 3.0,
     );
-    final IconData displayIcon = isPedagio
-        ? Icons.toll
-        : (r.speedKmh == 0 ? Icons.camera_alt : Icons.circle);
+    final IconData displayIcon = isPedagio ? Icons.toll : Icons.camera_alt;
     final tp = TextPainter(textDirection: TextDirection.ltr)
       ..text = TextSpan(
-        text: (!isPedagio && r.speedKmh > 0)
-            ? r.speedKmh.toString()
-            : String.fromCharCode(displayIcon.codePoint),
-        style: (!isPedagio && r.speedKmh > 0)
-            ? TextStyle(
-                fontSize: r.speedKmh >= 100 ? 13.0 : 16.0,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              )
-            : TextStyle(
-                fontSize: 22,
-                fontFamily: displayIcon.fontFamily,
-                color: Colors.white,
-              ),
+        text: String.fromCharCode(displayIcon.codePoint),
+        style: TextStyle(fontSize: 22, fontFamily: displayIcon.fontFamily, color: Colors.white),
       )
       ..layout();
     tp.paint(canvas, Offset((size - tp.width) / 2, (size - tp.height) / 2));
@@ -751,6 +904,18 @@ class _NavigationScreenState extends State<NavigationScreen>
     final img   = await recorder.endRecording().toImage(size.toInt(), size.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+  }
+
+  // ── Projeção no segmento mais próximo ────────────────────────────────────────
+
+  static LatLng _projectToSegment(LatLng p, LatLng a, LatLng b) {
+    final dx = b.latitude - a.latitude;
+    final dy = b.longitude - a.longitude;
+    final lenSq = dx * dx + dy * dy;
+    if (lenSq == 0) return a;
+    final t = ((p.latitude - a.latitude) * dx + (p.longitude - a.longitude) * dy) / lenSq;
+    final tc = t.clamp(0.0, 1.0);
+    return LatLng(a.latitude + tc * dx, a.longitude + tc * dy);
   }
 
   // ── Centralizar câmera ────────────────────────────────────────────────────────
@@ -835,6 +1000,152 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (mounted) setState(() => _userRestrictions.addAll(restrictions));
   }
 
+  Future<void> _loadRoutePois() async {
+    final pts = _result.polylinePoints;
+    if (pts.isEmpty) return;
+
+    var minLat = pts[0].latitude, maxLat = pts[0].latitude;
+    var minLng = pts[0].longitude, maxLng = pts[0].longitude;
+    for (final p in pts) {
+      if (p.latitude  < minLat) minLat = p.latitude;
+      if (p.latitude  > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    const buf = 0.003;
+
+    final sampled = <LatLng>[];
+    for (var i = 0; i < pts.length; i += 5) { sampled.add(pts[i]); }
+    if (sampled.last != pts.last) { sampled.add(pts.last); }
+
+    final filtered = kHardcodedPois.where((poi) {
+      if (poi.category != PoiCategory.scale &&
+          poi.category != PoiCategory.restArea) { return false; }
+      final lat = poi.position.latitude;
+      final lng = poi.position.longitude;
+      if (lat < minLat - buf || lat > maxLat + buf ||
+          lng < minLng - buf || lng > maxLng + buf) { return false; }
+      return sampled.any((p) =>
+          RadarService.haversine(lat, lng, p.latitude, p.longitude) <= 500);
+    }).toList();
+
+    if (mounted) setState(() => _routePois = filtered);
+  }
+
+  Future<void> _refreshPoliceTimeline() async {
+    if (_currentPos == null) return;
+    final pts = _result.polylinePoints;
+    if (pts.isEmpty) return;
+
+    final startIdx = _closestPolylineIdx.clamp(0, pts.length - 1);
+    final endIdx   = (startIdx + 200).clamp(0, pts.length - 1);
+    final ahead    = pts.sublist(startIdx, endIdx + 1);
+    if (ahead.isEmpty) return;
+
+    var minLat = ahead[0].latitude, maxLat = ahead[0].latitude;
+    var minLng = ahead[0].longitude, maxLng = ahead[0].longitude;
+    for (final p in ahead) {
+      if (p.latitude  < minLat) minLat = p.latitude;
+      if (p.latitude  > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    const buf = 0.005;
+
+    try {
+      final alerts = await PoliceAlertService.streamInBounds(
+        minLat - buf, maxLat + buf, minLng - buf, maxLng + buf,
+      ).first;
+      if (mounted) setState(() => _policeAhead = alerts);
+    } catch (_) {}
+  }
+
+  void _buildUpcomingEvents() {
+    if (_currentPos == null) return;
+    final pts = _result.polylinePoints;
+    if (pts.isEmpty) return;
+
+    final startIdx = _closestPolylineIdx.clamp(0, pts.length - 1);
+    final aheadPts = pts.sublist(startIdx);
+    if (aheadPts.isEmpty) {
+      if (mounted) setState(() => _upcomingEvents = []);
+      return;
+    }
+
+    var minLat = aheadPts[0].latitude, maxLat = aheadPts[0].latitude;
+    var minLng = aheadPts[0].longitude, maxLng = aheadPts[0].longitude;
+    for (final p in aheadPts) {
+      if (p.latitude  < minLat) minLat = p.latitude;
+      if (p.latitude  > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    const buf = 0.002;
+
+    bool isAhead(double lat, double lng, double corridorM) {
+      if (lat < minLat - buf || lat > maxLat + buf ||
+          lng < minLng - buf || lng > maxLng + buf) { return false; }
+      for (var i = 0; i < aheadPts.length; i += 5) {
+        if (RadarService.haversine(lat, lng,
+                aheadPts[i].latitude, aheadPts[i].longitude) <= corridorM) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    double distFrom(double lat, double lng) => RadarService.haversine(
+        _currentPos!.latitude, _currentPos!.longitude, lat, lng);
+
+    final candidates = <RouteEvent>[];
+
+    double bestRadarDist = double.infinity;
+    for (final r in _radares) {
+      if (!isAhead(r.lat, r.lng, 100)) continue;
+      final d = distFrom(r.lat, r.lng);
+      if (d < bestRadarDist) bestRadarDist = d;
+    }
+    if (bestRadarDist != double.infinity) {
+      candidates.add(RouteEvent(type: RouteEventType.radar, distanceM: bestRadarDist));
+    }
+
+    double bestRestrDist = double.infinity;
+    for (final b in _result.restrictionsBlocked) {
+      if (!isAhead(b.lat, b.lng, 150)) continue;
+      final d = distFrom(b.lat, b.lng);
+      if (d < bestRestrDist) bestRestrDist = d;
+    }
+    if (bestRestrDist != double.infinity) {
+      candidates.add(RouteEvent(type: RouteEventType.restriction, distanceM: bestRestrDist));
+    }
+
+    double bestPoliceDist = double.infinity;
+    for (final a in _policeAhead) {
+      if (!isAhead(a.lat, a.lng, 200)) continue;
+      final d = distFrom(a.lat, a.lng);
+      if (d < bestPoliceDist) bestPoliceDist = d;
+    }
+    if (bestPoliceDist != double.infinity) {
+      candidates.add(RouteEvent(type: RouteEventType.police, distanceM: bestPoliceDist));
+    }
+
+    for (final poi in _routePois) {
+      final lat = poi.position.latitude;
+      final lng = poi.position.longitude;
+      if (!isAhead(lat, lng, 300)) continue;
+      final d = distFrom(lat, lng);
+      if (d > 20000) continue;
+      final type = poi.category == PoiCategory.scale
+          ? RouteEventType.scale
+          : RouteEventType.restArea;
+      candidates.add(RouteEvent(type: type, distanceM: d));
+    }
+
+    candidates.sort((a, b) => a.distanceM.compareTo(b.distanceM));
+    final events = candidates.take(4).toList();
+    if (mounted) setState(() => _upcomingEvents = events);
+  }
+
   Future<void> _confirmMarkingPosition() async {
     final pos = _cameraTarget;
     setState(() => _markingMode = false);
@@ -886,14 +1197,38 @@ class _NavigationScreenState extends State<NavigationScreen>
           polylineId: const PolylineId('nav_traveled'),
           points: pts.sublist(0, splitIdx + 1),
           color: Colors.blueGrey.shade300,
-          width: 5,
+          width: 7,
+        ),
+      if (splitIdx < pts.length - 1)
+        Polyline(
+          polylineId: const PolylineId('nav_remaining_halo'),
+          points: pts.sublist(splitIdx),
+          color: const Color(0xFF1565C0).withAlpha(90),
+          width: 18,
         ),
       if (splitIdx < pts.length - 1)
         Polyline(
           polylineId: const PolylineId('nav_remaining'),
           points: pts.sublist(splitIdx),
           color: const Color(0xFF1565C0),
-          width: 7,
+          width: 10,
+        ),
+    };
+
+    final radarCircles = <Circle>{
+      if (_upcomingRadar != null)
+        Circle(
+          circleId: const CircleId('radar_alert'),
+          center: LatLng(_upcomingRadar!.lat, _upcomingRadar!.lng),
+          radius: 80.0,
+          fillColor: (_upcomingRadar!.type.toLowerCase().contains('lombada')
+                  ? Colors.orange
+                  : Colors.red)
+              .withAlpha(35),
+          strokeColor: _upcomingRadar!.type.toLowerCase().contains('lombada')
+              ? Colors.orange.shade400
+              : Colors.red.shade400,
+          strokeWidth: 2,
         ),
     };
 
@@ -984,7 +1319,8 @@ class _NavigationScreenState extends State<NavigationScreen>
                         onCameraMove: (pos) => _cameraTarget = pos.target,
                         polylines: polylines,
                         markers: markers,
-                        trafficEnabled: true,
+                        circles: radarCircles,
+                        trafficEnabled: false,
                         myLocationButtonEnabled: false,
                         zoomControlsEnabled: false,
                         compassEnabled: false,
@@ -1061,8 +1397,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                                         side: const BorderSide(
                                             color: Colors.white54),
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 6),
-                                        visualDensity: VisualDensity.compact,
+                                            vertical: 12),
                                         textStyle:
                                             const TextStyle(fontSize: 13),
                                       ),
@@ -1080,8 +1415,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                                         side: const BorderSide(
                                             color: Colors.white30),
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 6),
-                                        visualDensity: VisualDensity.compact,
+                                            vertical: 12),
                                         textStyle:
                                             const TextStyle(fontSize: 13),
                                       ),
@@ -1095,6 +1429,55 @@ class _NavigationScreenState extends State<NavigationScreen>
                       ),
                     ),
                   ],
+                  if (_nearestPoliceAlert != null && !_markingMode)
+                    Positioned(
+                      top: 0, left: 0, right: 0,
+                      child: Material(
+                        color: switch (_nearestPoliceAlert!.type) {
+                          PoliceAlertType.radar  => Colors.orange.shade700,
+                          PoliceAlertType.police => Colors.blue.shade700,
+                          PoliceAlertType.blitz  => Colors.red.shade700,
+                        },
+                        child: SafeArea(
+                          bottom: false,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.local_police, color: Colors.white, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    switch (_nearestPoliceAlert!.type) {
+                                      PoliceAlertType.radar  => 'Radar à frente',
+                                      PoliceAlertType.police => 'Polícia à frente',
+                                      PoliceAlertType.blitz  => 'Blitz à frente',
+                                    },
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  _nearestPoliceAlert!.timeRemainingText,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (_upcomingEvents.isNotEmpty && !_markingMode)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: RouteTimeline(events: _upcomingEvents),
+                    ),
                   if (!_markingMode) ...[
                     // Botão pausar/retomar
                     Positioned(
@@ -1342,7 +1725,7 @@ class _InstructionBar extends StatelessWidget {
 
 // ── _BottomBar ─────────────────────────────────────────────────────────────────
 
-class _BottomBar extends StatelessWidget {
+class _BottomBar extends StatefulWidget {
   final double speedKmh;
   final String remainingDist;
   final String eta;
@@ -1356,9 +1739,55 @@ class _BottomBar extends StatelessWidget {
   });
 
   @override
+  State<_BottomBar> createState() => _BottomBarState();
+}
+
+class _BottomBarState extends State<_BottomBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _pulseAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void didUpdateWidget(_BottomBar old) {
+    super.didUpdateWidget(old);
+    if (widget.speedKmh >= 90 && !_pulseCtrl.isAnimating) {
+      _pulseCtrl.repeat(reverse: true);
+    } else if (widget.speedKmh < 88 && _pulseCtrl.isAnimating) {
+      _pulseCtrl.stop();
+      _pulseCtrl.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  Color get _borderColor {
+    if (widget.speedKmh >= 90) return Colors.red.shade600;
+    if (widget.speedKmh >= 80) return Colors.amber.shade600;
+    return Colors.white24;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isLombada = radarAlert != null &&
-        radarAlert!.type.toLowerCase().contains('lombada');
+    final isOver = widget.speedKmh >= 90;
+    final isWarn = widget.speedKmh >= 80;
+    final isLombada = widget.radarAlert != null &&
+        widget.radarAlert!.type.toLowerCase().contains('lombada');
 
     return Container(
       color: const Color(0xFF212121),
@@ -1366,42 +1795,64 @@ class _BottomBar extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Velocímetro circular
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFF2C2C2C),
-              border: Border.all(color: Colors.white24, width: 2),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '${speedKmh.round()}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    height: 1.0,
-                  ),
+          AnimatedBuilder(
+            animation: _pulseAnim,
+            builder: (context, _) {
+              final t = isOver ? _pulseAnim.value : 0.0;
+              final borderColor = isOver
+                  ? Color.lerp(Colors.red.shade600, Colors.red.shade300, t)!
+                  : _borderColor;
+              final borderW = isOver ? 2.0 + t * 2.5 : (isWarn ? 2.5 : 2.0);
+              final bgColor = isOver
+                  ? Color.lerp(
+                      const Color(0xFF2C2C2C), Colors.red.shade900, t * 0.35)!
+                  : const Color(0xFF2C2C2C);
+
+              return Container(
+                width: 84,
+                height: 84,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: bgColor,
+                  border: Border.all(color: borderColor, width: borderW),
                 ),
-                Text(
-                  'km/h',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '${widget.speedKmh.round()}',
+                      style: TextStyle(
+                        color: isOver
+                            ? Color.lerp(
+                                Colors.white, Colors.red.shade200, t)
+                            : Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        height: 1.0,
+                      ),
+                    ),
+                    Text(
+                      'km/h',
+                      style: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 10,
+                          height: 1.2),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
           const SizedBox(width: 16),
-          // Alerta de radar (se houver) ou distância + tempo
           Expanded(
-            child: radarAlert != null
+            child: widget.radarAlert != null
                 ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isLombada ? Colors.orange.shade700 : Colors.red.shade700,
+                      color: isLombada
+                          ? Colors.orange.shade700
+                          : Colors.red.shade700,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
@@ -1410,9 +1861,11 @@ class _BottomBar extends StatelessWidget {
                         const Icon(Icons.speed, color: Colors.white, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          radarAlert!.speedKmh > 0
-                              ? '${radarAlert!.speedKmh} km/h'
-                              : isLombada ? 'Lombada' : 'Radar',
+                          widget.radarAlert!.speedKmh > 0
+                              ? '${widget.radarAlert!.speedKmh} km/h'
+                              : isLombada
+                                  ? 'Lombada'
+                                  : 'Radar',
                           style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -1424,8 +1877,9 @@ class _BottomBar extends StatelessWidget {
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _BarItem(top: remainingDist, bottom: 'restante'),
-                      _BarItem(top: eta, bottom: 'chegada'),
+                      _BarItem(
+                          top: widget.remainingDist, bottom: 'restante'),
+                      _BarItem(top: widget.eta, bottom: 'chegada'),
                     ],
                   ),
           ),

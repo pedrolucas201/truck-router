@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -5,6 +7,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
 }
+
+val dartDefinesFile = rootProject.file("../dart_defines.json")
+val googleMapsApiKey: String = if (dartDefinesFile.exists()) {
+    Regex(""""GOOGLE_MAPS_API_KEY"\s*:\s*"([^"]+)"""").find(dartDefinesFile.readText())?.groupValues?.get(1) ?: ""
+} else ""
 
 android {
     namespace = "com.truckrouter.truck_router"
@@ -29,6 +36,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
     }
 
     buildTypes {

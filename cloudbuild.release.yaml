@@ -1,0 +1,19 @@
+steps:
+  - name: 'ghcr.io/cirruslabs/flutter:stable'
+    entrypoint: flutter
+    args: ['pub', 'get']
+
+  - name: 'ghcr.io/cirruslabs/flutter:stable'
+    entrypoint: bash
+    env:
+      - 'GRADLE_OPTS=-Xmx1536m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2'
+    args:
+      - '-c'
+      - >-
+        flutter build apk --release --no-tree-shake-icons
+        --dart-define=BACKEND_URL=https://truck-router-backend-707407458764.southamerica-east1.run.app
+
+timeout: '3600s'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
