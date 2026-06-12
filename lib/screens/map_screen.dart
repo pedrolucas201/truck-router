@@ -47,6 +47,8 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   GoogleMapController? _mapController;
   late ThemeController _themeController;
+  String?   _lastHandledUri;
+  DateTime? _lastHandledAt;
   LatLng? _origin;
   LatLng? _destination;
   String? _originLabel;
@@ -120,11 +122,24 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   void _handleIncomingUri(Uri uri) {
-    final route = parseMapsUri(uri);
-    if (route != null) {
-      _setDeepLinkRoute(route);
+    final uriStr = uri.toString();
+    final now    = DateTime.now();
+    if (uriStr == _lastHandledUri &&
+        _lastHandledAt != null &&
+        now.difference(_lastHandledAt!) < const Duration(seconds: 5)) {
       return;
     }
+    _lastHandledUri = uriStr;
+    _lastHandledAt  = now;
+
+    final type = classifyMapsUri(uri);
+    if (type == DeepLinkType.route) {
+      final route = parseMapsUri(uri);
+      if (route != null) _setDeepLinkRoute(route);
+      return;
+    }
+    if (type == DeepLinkType.destination) return; // pin simples — abre app, ignora
+
     final geo = parseGeoUri(uri);
     if (geo != null) _handleGeoUri(geo);
   }
