@@ -24,9 +24,11 @@ import '../services/here_routing_service.dart';
 import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
 import '../services/restriction_service.dart';
+import '../data/map_styles.dart';
 import '../data/pois.dart';
 import '../models/poi.dart';
 import '../models/route_event.dart';
+import '../providers/theme_controller.dart';
 import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
 import '../widgets/route_timeline.dart';
@@ -71,6 +73,7 @@ class NavigationScreen extends StatefulWidget {
 class _NavigationScreenState extends State<NavigationScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   GoogleMapController? _mapController;
+  late ThemeController _themeController;
   StreamSubscription<Position>? _posSub;
   late final FlutterTts _tts;
 
@@ -153,6 +156,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     _loadUserRestrictions();
     _startForegroundService();
     _initTts();
+    _themeController = context.read<ThemeController>();
+    _themeController.addListener(_onThemeChanged);
     _startGps();
     _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
     WakelockPlus.enable();
@@ -175,6 +180,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _tts.stop();
     _ttsActive = false;
     _pulseController.dispose();
+    _themeController.removeListener(_onThemeChanged);
     FlutterForegroundTask.stopService();
     WakelockPlus.disable();
     super.dispose();
@@ -265,6 +271,12 @@ class _NavigationScreenState extends State<NavigationScreen>
           ? 'Destino: ${widget.destinationLabel}'
           : 'GPS ativo',
       callback: _navForegroundCallback,
+    );
+  }
+
+  void _onThemeChanged() {
+    _mapController?.setMapStyle(
+      _themeController.isNight ? kNightMapStyle : null,
     );
   }
 
@@ -1316,7 +1328,10 @@ class _NavigationScreenState extends State<NavigationScreen>
                           zoom: 17,
                           tilt: 45,
                         ),
-                        onMapCreated: (c) => _mapController = c,
+                        onMapCreated: (c) {
+                          _mapController = c;
+                          if (_themeController.isNight) c.setMapStyle(kNightMapStyle);
+                        },
                         onCameraMove: (pos) => _cameraTarget = pos.target,
                         polylines: polylines,
                         markers: markers,
