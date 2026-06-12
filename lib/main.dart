@@ -10,6 +10,7 @@ import 'repositories/firestore_restriction_repository.dart';
 import 'repositories/api_restriction_repository.dart';
 import 'screens/map_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'providers/theme_controller.dart';
 
 const _backendUrl = String.fromEnvironment('BACKEND_URL');
 
@@ -30,6 +31,7 @@ void main() async {
         Provider<RestrictionRepository>.value(value: repo),
         ChangeNotifierProvider(create: (_) => TruckProfileProvider()..load()),
         ChangeNotifierProvider(create: (ctx) => RouteProvider(ctx.read<RestrictionRepository>())),
+        ChangeNotifierProvider(create: (_) => ThemeController()),
       ],
       child: TruckRouterApp(onboardingDone: onboardingDone),
     ),
@@ -42,6 +44,7 @@ class TruckRouterApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeMode = context.watch<ThemeController>().value;
     return MaterialApp(
       title: 'Rota Caminhão',
       debugShowCheckedModeBanner: false,
@@ -56,7 +59,7 @@ class TruckRouterApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       home: onboardingDone ? const MapScreen() : const OnboardingScreen(),
     );
   }
