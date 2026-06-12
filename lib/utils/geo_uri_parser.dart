@@ -4,6 +4,21 @@ typedef GeoLocation = ({LatLng coords, String? label});
 
 typedef MapsRoute = ({LatLng? origin, LatLng destination});
 
+enum DeepLinkType { route, destination, unknown }
+
+/// Classifica uma URL maps.google.com por tipo de conteúdo.
+///
+/// - [route]       — tem saddr + daddr (rota compartilhada pelo despachante)
+/// - [destination] — tem q= (pin de localização simples)
+/// - [unknown]     — formato não reconhecido
+DeepLinkType classifyMapsUri(Uri uri) {
+  if (uri.host != 'maps.google.com') return DeepLinkType.unknown;
+  final p = uri.queryParameters;
+  if (p.containsKey('saddr') && p.containsKey('daddr')) return DeepLinkType.route;
+  if (p.containsKey('q'))                               return DeepLinkType.destination;
+  return DeepLinkType.unknown;
+}
+
 /// Parses a `geo:` URI into coordinates and optional label.
 ///
 /// Handles the four common variants:
