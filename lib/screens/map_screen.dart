@@ -224,6 +224,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _mapController?.setMapStyle(
       _themeController.isNight ? kNightMapStyle : null,
     );
+    if (mounted) setState(() {});
   }
 
   @override
@@ -1111,7 +1112,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle, color: Colors.red.shade400),
                   ),
-                  Container(width: 2, height: 12, color: Colors.grey.shade300),
+                  Container(width: 2, height: 12, color: _themeController.isNight ? Colors.grey.shade600 : Colors.grey.shade300),
                   Container(
                     width: 10, height: 10,
                     decoration: BoxDecoration(
@@ -1128,7 +1129,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                 children: [
                   Text(
                     _originLabel ?? '',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    style: TextStyle(fontSize: 12, color: _themeController.isNight ? Colors.grey.shade400 : Colors.grey.shade600),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1396,7 +1397,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   child: Padding(
                     padding: const EdgeInsets.all(12),
                     child: Material(
-                      color: Colors.white,
+                      color: _themeController.isNight ? const Color(0xFF1E1E1E) : Colors.white,
                       elevation: 4,
                       shadowColor: Colors.black26,
                       borderRadius: BorderRadius.circular(16),
