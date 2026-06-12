@@ -125,8 +125,6 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _resumedAt;
   bool _hasTimeRestrictionAlert  = false;
   bool _timeRestrictionAlertSpoken = false;
-  late final AnimationController _pulseController;
-  late final Animation<double> _pulseAnimation;
 
   static const _offRouteThresholdM  = 80.0;
   static const _offRouteCountLimit  = 2;
@@ -145,12 +143,6 @@ class _NavigationScreenState extends State<NavigationScreen>
     _visibleRadares = List.of(widget.initialRadares);
     _hasTimeRestrictionAlert = widget.result.hasTimeRestriction;
     WidgetsBinding.instance.addObserver(this);
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
-    );
-    _pulseAnimation = Tween<double>(begin: 0.12, end: 0.48)
-        .animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
     _loadAudioLevel();
     _loadZoomLevel();
     _loadUserRestrictions();
@@ -179,7 +171,6 @@ class _NavigationScreenState extends State<NavigationScreen>
     _posSub?.cancel();
     _tts.stop();
     _ttsActive = false;
-    _pulseController.dispose();
     _themeController.removeListener(_onThemeChanged);
     FlutterForegroundTask.stopService();
     WakelockPlus.disable();
@@ -414,7 +405,6 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (firstFix && _hasTimeRestrictionAlert && !_timeRestrictionAlertSpoken) {
       _timeRestrictionAlertSpoken = true;
       _speak('Atenção! Restrição para caminhões nesta via');
-      _updatePulse();
     }
     if (firstFix) _refreshPoliceTimeline();
     final latLng = LatLng(pos.latitude, pos.longitude);
@@ -633,23 +623,12 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   // ── Alerta de restrição bloqueada ────────────────────────────────────────────
 
-  void _updatePulse() {
-    final active = _nearbyBlockedRestriction != null || _hasTimeRestrictionAlert;
-    if (active) {
-      if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
-    } else {
-      _pulseController.stop();
-      _pulseController.reset();
-    }
-  }
-
   void _updateRestrictionAlert(BridgeRestriction? restriction, double dist) {
-    if (restriction == null) { _updatePulse(); return; }
+    if (restriction == null) { return; }
     final key = '${restriction.lat}_${restriction.lng}';
     if (key == _lastRestrictionAlertKey) return;
     _lastRestrictionAlertKey = key;
     _speak('Atenção! ${restriction.label} a ${dist.round()} metros à frente');
-    _updatePulse();
   }
 
   Future<void> _confirmRestriction(String id) async {
@@ -751,7 +730,6 @@ class _NavigationScreenState extends State<NavigationScreen>
       } else if (!newResult.hasTimeRestriction) {
         _timeRestrictionAlertSpoken = false;
       }
-      _updatePulse();
       _loadRoutePois();
       _refreshPoliceTimeline();
       // Só anuncia se nível completo e rota mudou significativamente (>500m)
@@ -950,36 +928,58 @@ class _NavigationScreenState extends State<NavigationScreen>
   // ── Ícone de restrição (badge colorido) ──────────────────────────────────────
 
   static Future<BitmapDescriptor> _buildRestrictionIcon(UserRestriction r) async {
-    const iconH = 20.0;
-    final bgColor = switch (r.type) {
-      'maxheight' => Colors.red.shade700,
-      'maxweight' => Colors.brown.shade600,
-      'dirtroad'  => Colors.green.shade700,
-      _           => Colors.deepOrange.shade600,
-    };
+    const double size   = 56;
+    const double center = size / 2;
+    const double radius = 24;
+
     final text = switch (r.type) {
       'maxheight' => '${r.value.toStringAsFixed(1)}m',
       'maxweight' => '${r.value.toStringAsFixed(0)}t',
       'dirtroad'  => 'Terra',
       _           => '${r.value.toStringAsFixed(1)}m',
     };
+
+    final recorder = ui.PictureRecorder();
+    final canvas   = Canvas(recorder, const Rect.fromLTWH(0, 0, size, size));
+
+    // Sombra
+    canvas.drawCircle(
+      const Offset(center, center + 2),
+      radius,
+      Paint()
+        ..color      = Colors.black38
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+
+    // Fundo âmbar
+    canvas.drawCircle(
+      const Offset(center, center),
+      radius,
+      Paint()..color = const Color(0xFFFFA726),
+    );
+
+    // Borda branca
+    canvas.drawCircle(
+      const Offset(center, center),
+      radius,
+      Paint()
+        ..color       = Colors.white
+        ..style       = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+
+    // Texto centralizado
     final tp = TextPainter(textDirection: TextDirection.ltr)
       ..text = TextSpan(
         text: text,
-        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
       )
-      ..layout();
-    final iconW = (tp.width + 14).ceilToDouble();
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, iconW, iconH), const Radius.circular(4)),
-      Paint()..color = bgColor,
-    );
-    tp.paint(canvas, Offset(7, (iconH - tp.height) / 2));
+      ..layout(maxWidth: radius * 2);
+    tp.paint(canvas, Offset(center - tp.width / 2, center - tp.height / 2));
+
     final picture = recorder.endRecording();
-    final img = await picture.toImage(iconW.toInt(), iconH.toInt());
-    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    final img     = await picture.toImage(size.toInt(), size.toInt());
+    final bytes   = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
@@ -1313,6 +1313,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                             markerId: MarkerId(key),
                             position: LatLng(r.lat, r.lng),
                             icon: icon,
+                            anchor: const Offset(0.5, 0.5),
                             infoWindow: InfoWindow(
                               title: switch (r.type) {
                                 'maxheight' => 'Altura máx. ${r.value.toStringAsFixed(1)}m',
@@ -1346,29 +1347,18 @@ class _NavigationScreenState extends State<NavigationScreen>
                     },
                   ),
                   // ── Alerta restrição bloqueada / horário ────────────────
-                  if ((_nearbyBlockedRestriction != null || _hasTimeRestrictionAlert) && !_markingMode) ...[
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: AnimatedBuilder(
-                          animation: _pulseAnimation,
-                          builder: (context, child) => ColoredBox(
-                            color: Colors.red.withValues(alpha: _pulseAnimation.value),
-                          ),
-                        ),
-                      ),
-                    ),
+                  if ((_nearbyBlockedRestriction != null || _hasTimeRestrictionAlert) && !_markingMode)
                     Positioned(
-                      top: 12,
+                      bottom: 8,
                       left: 12,
                       right: 12,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                         decoration: BoxDecoration(
-                          color: Colors.red.shade800,
-                          borderRadius: BorderRadius.circular(10),
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(20),
                           boxShadow: const [
-                            BoxShadow(color: Colors.black54, blurRadius: 8)
+                            BoxShadow(color: Colors.black54, blurRadius: 12, offset: Offset(0, 4)),
                           ],
                         ),
                         child: Column(
@@ -1380,10 +1370,10 @@ class _NavigationScreenState extends State<NavigationScreen>
                                   _nearbyBlockedRestriction != null
                                       ? Icons.warning_amber_rounded
                                       : Icons.schedule,
-                                  color: Colors.white,
-                                  size: 24,
+                                  color: const Color(0xFF4FC3F7),
+                                  size: 26,
                                 ),
-                                const SizedBox(width: 10),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
                                     _nearbyBlockedRestriction != null
@@ -1401,42 +1391,42 @@ class _NavigationScreenState extends State<NavigationScreen>
                             if (_nearbyBlockedRestriction?.id != null &&
                                 !_actionedRestrictions.contains(
                                     _nearbyBlockedRestriction!.id)) ...[
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 12),
                               Row(
                                 children: [
                                   Expanded(
-                                    child: OutlinedButton.icon(
+                                    child: ElevatedButton(
                                       onPressed: () => _confirmRestriction(
                                           _nearbyBlockedRestriction!.id!),
-                                      icon: const Icon(Icons.check, size: 16),
-                                      label: const Text('Confirmar'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.white,
-                                        side: const BorderSide(
-                                            color: Colors.white54),
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 12),
-                                        textStyle:
-                                            const TextStyle(fontSize: 13),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF4FC3F7),
+                                        foregroundColor: Colors.black,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(vertical: 13),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12)),
+                                        textStyle: const TextStyle(
+                                            fontSize: 13, fontWeight: FontWeight.w600),
                                       ),
+                                      child: const Text('Confirmar'),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: OutlinedButton.icon(
+                                    child: ElevatedButton(
                                       onPressed: () => _reportRestriction(
                                           _nearbyBlockedRestriction!.id!),
-                                      icon: const Icon(Icons.close, size: 16),
-                                      label: const Text('Não existe'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.white70,
-                                        side: const BorderSide(
-                                            color: Colors.white30),
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 12),
-                                        textStyle:
-                                            const TextStyle(fontSize: 13),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF424242),
+                                        foregroundColor: const Color(0xFF4FC3F7),
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(vertical: 13),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12)),
+                                        textStyle: const TextStyle(
+                                            fontSize: 13, fontWeight: FontWeight.w600),
                                       ),
+                                      child: const Text('Não existe'),
                                     ),
                                   ),
                                 ],
@@ -1446,7 +1436,6 @@ class _NavigationScreenState extends State<NavigationScreen>
                         ),
                       ),
                     ),
-                  ],
                   if (_nearestPoliceAlert != null && !_markingMode)
                     Positioned(
                       top: 0, left: 0, right: 0,
