@@ -34,6 +34,8 @@ import '../services/auth_service.dart';
 import '../services/police_alert_service.dart';
 import '../services/restriction_service.dart';
 import '../repositories/restriction_repository.dart';
+import '../data/map_styles.dart';
+import '../providers/theme_controller.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -44,6 +46,7 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   GoogleMapController? _mapController;
+  late ThemeController _themeController;
   LatLng? _origin;
   LatLng? _destination;
   String? _originLabel;
@@ -87,6 +90,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _loadUserRestrictions();
     _loadTruckTip();
     _initDeepLinks();
+    _themeController = context.read<ThemeController>();
+    _themeController.addListener(_onThemeChanged);
   }
 
   Future<void> _loadTruckTip() async {
@@ -195,8 +200,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _routeSelectionTimer?.cancel();
     _deepLinkSub?.cancel();
     _policeAlertSub?.cancel();
+    _themeController.removeListener(_onThemeChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _onThemeChanged() {
+    _mapController?.setMapStyle(
+      _themeController.isNight ? kNightMapStyle : null,
+    );
   }
 
   @override
@@ -1345,7 +1357,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               children: [
                 GoogleMap(
                   initialCameraPosition: _initialPosition,
-                  onMapCreated: (c) => _mapController = c,
+                  onMapCreated: (c) {
+                    _mapController = c;
+                    if (_themeController.isNight) c.setMapStyle(kNightMapStyle);
+                  },
                   onCameraMove: (pos) {
                     if ((pos.zoom - _currentZoom).abs() > 0.3) {
                       setState(() => _currentZoom = pos.zoom);
