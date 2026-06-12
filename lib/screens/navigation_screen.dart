@@ -278,6 +278,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _mapController?.setMapStyle(
       _themeController.isNight ? kNightMapStyle : null,
     );
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadAudioLevel() async {
@@ -1276,6 +1277,7 @@ class _NavigationScreenState extends State<NavigationScreen>
               dirIcon:      nextM != null ? _dirIcon(nextM) : Icons.straight,
               audioLevel:   _audioLevel,
               rerouting:    _isRerouting,
+              isNight:      _themeController.isNight,
               onAudioCycle: _cycleAudioLevel,
               onClose:      () => Navigator.of(context).pop(),
               fmtDist:      _fmtDist,
@@ -1651,6 +1653,7 @@ class _InstructionBar extends StatelessWidget {
   final IconData dirIcon;
   final AudioLevel audioLevel;
   final bool rerouting;
+  final bool isNight;
   final VoidCallback onAudioCycle;
   final VoidCallback onClose;
   final String Function(double) fmtDist;
@@ -1661,6 +1664,7 @@ class _InstructionBar extends StatelessWidget {
     required this.dirIcon,
     required this.audioLevel,
     required this.rerouting,
+    required this.isNight,
     required this.onAudioCycle,
     required this.onClose,
     required this.fmtDist,
@@ -1668,8 +1672,12 @@ class _InstructionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bg           = isNight ? Colors.black : const Color(0xFF1A237E);
+    final instrColor   = isNight ? const Color(0xFF4FC3F7) : Colors.white;
+    final distColor    = isNight ? Colors.white : Colors.blue.shade100;
+
     return Container(
-      color: const Color(0xFF1A237E),
+      color: bg,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
@@ -1703,15 +1711,15 @@ class _InstructionBar extends StatelessWidget {
                     children: [
                       Text(
                         maneuver?.instruction ?? '—',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                            color: instrColor, fontSize: 16, fontWeight: FontWeight.w600),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (distance.isFinite && distance < 50000)
                         Text(
                           'Em ${fmtDist(distance)}',
-                          style: TextStyle(color: Colors.blue.shade100, fontSize: 13),
+                          style: TextStyle(color: distColor, fontSize: 13),
                         ),
                     ],
                   ),
