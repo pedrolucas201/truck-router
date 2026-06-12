@@ -661,10 +661,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   void _updateRadarAlert(RadarPoint? radar) {
-    final key = radar != null ? '${radar.lat}_${radar.lng}' : null;
+    if (radar == null) return;
+    final key = '${radar.lat}_${radar.lng}';
     if (key == _lastRadarAlertKey) return;
     _lastRadarAlertKey = key;
-    if (radar == null) return;
     final isLombada = radar.type.toLowerCase().contains('lombada');
     final isPedagio = radar.type.toLowerCase().contains('pedagio');
     if (isLombada) {
@@ -729,6 +729,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         _distToNextManeuver      = double.infinity;
         _hasTimeRestrictionAlert = newResult.hasTimeRestriction;
         _announced.clear();
+        _lastRadarAlertKey       = null;
         _iconCache.clear();
       });
       if (newResult.hasTimeRestriction && !_timeRestrictionAlertSpoken) {
