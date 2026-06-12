@@ -643,12 +643,11 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   void _updateRestrictionAlert(BridgeRestriction? restriction, double dist) {
-    final key = restriction != null ? '${restriction.lat}_${restriction.lng}' : null;
+    if (restriction == null) { _updatePulse(); return; }
+    final key = '${restriction.lat}_${restriction.lng}';
     if (key == _lastRestrictionAlertKey) return;
     _lastRestrictionAlertKey = key;
-    if (restriction != null) {
-      _speak('Atenção! ${restriction.label} a ${dist.round()} metros à frente');
-    }
+    _speak('Atenção! ${restriction.label} a ${dist.round()} metros à frente');
     _updatePulse();
   }
 
@@ -742,6 +741,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         _hasTimeRestrictionAlert = newResult.hasTimeRestriction;
         _announced.clear();
         _lastRadarAlertKey       = null;
+        _lastRestrictionAlertKey = null;
         _iconCache.clear();
       });
       if (newResult.hasTimeRestriction && !_timeRestrictionAlertSpoken) {
