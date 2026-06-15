@@ -583,6 +583,52 @@ class _NavigationScreenState extends State<NavigationScreen>
     }
   }
 
+  void _animateMarkerTo(LatLng target, double targetBearing) {
+    // Primeiro fix: sem animação — posiciona marcador diretamente.
+    if (_lastPosUpdateAt == null) {
+      _lastPosUpdateAt = DateTime.now();
+      if (mounted) setState(() { _animPos = target; _animBearing = targetBearing; });
+      return;
+    }
+
+    _markerAnimCtrl.stop();
+
+    // Remove listener anterior para evitar acúmulo de callbacks a cada GPS update.
+    if (_markerAnimListener != null) {
+      _markerAnimCtrl.removeListener(_markerAnimListener!);
+      _markerAnimListener = null;
+    }
+
+    final fromPos     = _animPos;
+    final fromBearing = _animBearing;
+
+    final now         = DateTime.now();
+    final intervalMs  = now.difference(_lastPosUpdateAt!).inMilliseconds;
+    _lastPosUpdateAt  = now;
+    final durationMs  = (intervalMs * 0.8).clamp(100, 600).toInt();
+
+    _markerAnimCtrl.duration = Duration(milliseconds: durationMs);
+    _markerAnimCtrl.reset();
+
+    final latTween     = Tween<double>(begin: fromPos.latitude,  end: target.latitude);
+    final lngTween     = Tween<double>(begin: fromPos.longitude, end: target.longitude);
+    final bearingDelta = ((targetBearing - fromBearing + 540) % 360) - 180;
+    final bearingTween = Tween<double>(begin: 0, end: bearingDelta);
+
+    final curved = CurvedAnimation(parent: _markerAnimCtrl, curve: Curves.easeOut);
+
+    _markerAnimListener = () {
+      if (!mounted) return;
+      setState(() {
+        _animPos     = LatLng(latTween.evaluate(curved), lngTween.evaluate(curved));
+        _animBearing = fromBearing + bearingTween.evaluate(curved);
+      });
+    };
+
+    _markerAnimCtrl.addListener(_markerAnimListener!);
+    _markerAnimCtrl.forward();
+  }
+
   // ── TTS por threshold de distância ───────────────────────────────────────────
 
   void _checkTts(int idx, double distM, RouteManeuver m) {
