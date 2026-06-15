@@ -1344,7 +1344,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         infoWindow: InfoWindow(title: 'Destino', snippet: widget.destinationLabel),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       ),
-      if (_currentPos != null)
+      if (_currentPos != null && _lastPosUpdateAt != null)
         Marker(
           markerId: const MarkerId('user'),
           position: _animPos,
