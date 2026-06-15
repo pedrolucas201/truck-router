@@ -741,6 +741,21 @@ class _NavigationScreenState extends State<NavigationScreen>
   Future<void> _reroute([LatLng? fromPos]) async {
     final origin = fromPos ?? _currentPos;
     if (_isRerouting || origin == null) return;
+
+    // Para animação em andamento e snapa marcador para posição atual.
+    _markerAnimCtrl.stop();
+    if (_markerAnimListener != null) {
+      _markerAnimCtrl.removeListener(_markerAnimListener!);
+      _markerAnimListener = null;
+    }
+    _markerCurved?.dispose();
+    _markerCurved = null;
+    final snapTarget = _snappedPos ?? _currentPos;
+    if (snapTarget != null) {
+      setState(() { _animPos = snapTarget; _animBearing = _bearing; });
+    }
+    _lastPosUpdateAt = null;
+
     setState(() { _isRerouting = true; _offRouteCount = 0; });
     try {
       final prevDistM = _result.distanceMeters;
