@@ -1347,11 +1347,11 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (_currentPos != null)
         Marker(
           markerId: const MarkerId('user'),
-          position: _snappedPos ?? _currentPos!,
+          position: _animPos,
           icon: _userArrowIcon ??
               BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
           flat: true,
-          rotation: _bearing,
+          rotation: _animBearing,
           anchor: const Offset(0.5, 0.65),
         ),
     };
