@@ -120,6 +120,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   double _animBearing = 0;
   DateTime? _lastPosUpdateAt;
   VoidCallback? _markerAnimListener;
+  CurvedAnimation? _markerCurved;
 
   List<RouteEvent>  _upcomingEvents = [];
   List<Poi>         _routePois      = [];
@@ -183,6 +184,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     FlutterForegroundTask.stopService();
     WakelockPlus.disable();
     _markerAnimCtrl.dispose();
+    _markerCurved?.dispose();
     super.dispose();
   }
 
@@ -598,6 +600,8 @@ class _NavigationScreenState extends State<NavigationScreen>
       _markerAnimCtrl.removeListener(_markerAnimListener!);
       _markerAnimListener = null;
     }
+    _markerCurved?.dispose();
+    _markerCurved = null;
 
     final fromPos     = _animPos;
     final fromBearing = _animBearing;
@@ -615,13 +619,13 @@ class _NavigationScreenState extends State<NavigationScreen>
     final bearingDelta = ((targetBearing - fromBearing + 540) % 360) - 180;
     final bearingTween = Tween<double>(begin: 0, end: bearingDelta);
 
-    final curved = CurvedAnimation(parent: _markerAnimCtrl, curve: Curves.easeOut);
+    _markerCurved = CurvedAnimation(parent: _markerAnimCtrl, curve: Curves.easeOut);
 
     _markerAnimListener = () {
       if (!mounted) return;
       setState(() {
-        _animPos     = LatLng(latTween.evaluate(curved), lngTween.evaluate(curved));
-        _animBearing = fromBearing + bearingTween.evaluate(curved);
+        _animPos     = LatLng(latTween.evaluate(_markerCurved!), lngTween.evaluate(_markerCurved!));
+        _animBearing = fromBearing + bearingTween.evaluate(_markerCurved!);
       });
     };
 
