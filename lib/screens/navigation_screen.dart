@@ -114,6 +114,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
   BitmapDescriptor? _userArrowIcon;
 
+  // Animação suave do marcador (N3)
+  late AnimationController _markerAnimCtrl;
+  LatLng _animPos = const LatLng(-15.788, -47.879);
+  double _animBearing = 0;
+  DateTime? _lastPosUpdateAt;
+  VoidCallback? _markerAnimListener;
+
   List<RouteEvent>  _upcomingEvents = [];
   List<Poi>         _routePois      = [];
   List<PoliceAlert> _policeAhead    = [];
@@ -151,6 +158,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _themeController = context.read<ThemeController>();
     _themeController.addListener(_onThemeChanged);
     _startGps();
+    _markerAnimCtrl = AnimationController(vsync: this, duration: Duration.zero);
     _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
     WakelockPlus.enable();
     _buildUserArrow().then((icon) {
@@ -174,6 +182,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _themeController.removeListener(_onThemeChanged);
     FlutterForegroundTask.stopService();
     WakelockPlus.disable();
+    _markerAnimCtrl.dispose();
     super.dispose();
   }
 
