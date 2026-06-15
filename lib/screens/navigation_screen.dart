@@ -290,9 +290,6 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   void _onThemeChanged() {
-    _mapController?.setMapStyle(
-      _themeController.isNight ? kNightMapStyle : null,
-    );
     if (mounted) setState(() {});
   }
 
@@ -1424,8 +1421,8 @@ class _NavigationScreenState extends State<NavigationScreen>
                         ),
                         onMapCreated: (c) {
                           _mapController = c;
-                          if (_themeController.isNight) c.setMapStyle(kNightMapStyle);
                         },
+                        style: _themeController.isNight ? kNightMapStyle : null,
                         onCameraMove: (pos) => _cameraTarget = pos.target,
                         polylines: polylines,
                         markers: markers,

@@ -221,9 +221,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   void _onThemeChanged() {
-    _mapController?.setMapStyle(
-      _themeController.isNight ? kNightMapStyle : null,
-    );
     if (mounted) setState(() {});
   }
 
@@ -1375,8 +1372,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   initialCameraPosition: _initialPosition,
                   onMapCreated: (c) {
                     _mapController = c;
-                    if (_themeController.isNight) c.setMapStyle(kNightMapStyle);
                   },
+                  style: _themeController.isNight ? kNightMapStyle : null,
                   onCameraMove: (pos) {
                     if ((pos.zoom - _currentZoom).abs() > 0.3) {
                       setState(() => _currentZoom = pos.zoom);
