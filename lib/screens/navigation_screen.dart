@@ -435,12 +435,15 @@ class _NavigationScreenState extends State<NavigationScreen>
         final d = RadarService.haversine(latLng.latitude, latLng.longitude, pts2[end2 - 1].latitude, pts2[end2 - 1].longitude);
         if (d < bd2) { snap2 = pts2[end2 - 1]; }
       }
+      final pausedSnap    = pts2.isNotEmpty ? snap2 : latLng;
+      final pausedBearing = pos.heading;
       setState(() {
         _currentPos = latLng;
-        _snappedPos = pts2.isNotEmpty ? snap2 : latLng;
-        _bearing    = pos.heading;
+        _snappedPos = pausedSnap;
+        _bearing    = pausedBearing;
         _speedKmh   = (pos.speed * 3.6).clamp(0, 300);
       });
+      _animateMarkerTo(pausedSnap, pausedBearing);
       return;
     }
 
@@ -563,6 +566,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       _nearbyBlockedRestriction   = nearestBlocked;
       _visibleRadares             = visibleRadares;
     });
+    _animateMarkerTo(pts.isNotEmpty ? bestSnap : latLng, pos.heading);
     _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
     _checkSpeedAlert(_speedKmh);
