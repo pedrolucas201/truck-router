@@ -192,6 +192,19 @@ class _NavigationScreenState extends State<NavigationScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     _resumedAt = DateTime.now();
+    // Para animação e snapa marcador — evita deslize de posição desatualizada ao retomar.
+    _markerAnimCtrl.stop();
+    if (_markerAnimListener != null) {
+      _markerAnimCtrl.removeListener(_markerAnimListener!);
+      _markerAnimListener = null;
+    }
+    _markerCurved?.dispose();
+    _markerCurved = null;
+    if (_snappedPos != null) {
+      _animPos     = _snappedPos!;
+      _animBearing = _bearing;
+    }
+    _lastPosUpdateAt = null;
     // moveCamera (instantâneo) evita giros: animateCamera competia com
     // os primeiros updates de GPS no resume e causava rotações bruscas.
     if (!_markingMode && _mapController != null) {
