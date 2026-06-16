@@ -49,6 +49,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   late ThemeController _themeController;
   String?   _lastHandledUri;
   DateTime? _lastHandledAt;
+  bool      _openedViaDeepLink = false;
   LatLng? _origin;
   LatLng? _destination;
   String? _originLabel;
@@ -115,7 +116,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   Future<void> _initDeepLinks() async {
     final appLinks = AppLinks();
     final initial = await appLinks.getInitialLink();
-    if (initial != null && mounted) _handleIncomingUri(initial);
+    if (initial != null) {
+      // App process só existe porque o sistema abriu via deep link (cold start) —
+      // distingue do caso "app já aberto recebe novo link" via uriLinkStream abaixo.
+      _openedViaDeepLink = true;
+      if (mounted) _handleIncomingUri(initial);
+    }
     _deepLinkSub = appLinks.uriLinkStream.listen((uri) {
       if (mounted) _handleIncomingUri(uri);
     });
@@ -1361,7 +1367,19 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       ));
     }
 
-    return Scaffold(
+    // N4 (2ª iteração): se o app só existe nesta tela porque o sistema abriu
+    // via deep link (WhatsApp etc.) e o usuário não chegou a calcular rota,
+    // back deve encerrar o app de fato — não só desempilhar/minimizar — para
+    // o sistema voltar o foco pra task de origem (ex.: WhatsApp) em vez de
+    // deixar o Truck Router de pé sobre ela.
+    final exitAppOnBack = _openedViaDeepLink && routeProvider.status == RouteStatus.idle;
+
+    return PopScope(
+      canPop: !exitAppOnBack,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) SystemNavigator.pop();
+      },
+      child: Scaffold(
       body: Column(
         children: [
           // Mapa ocupa todo o espaço disponível — estrutura do Stack nunca muda
@@ -1875,6 +1893,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   ),
           ),
         ],
+      ),
       ),
     );
   }
