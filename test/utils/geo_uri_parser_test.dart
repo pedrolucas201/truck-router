@@ -39,4 +39,42 @@ void main() {
       expect(result, isNull);
     });
   });
+
+  group('parseMapsDestination — maps.google.com?q= (pin do WhatsApp)', () {
+    test('parseia q=lat,lng sem label', () {
+      final uri = Uri.parse('https://maps.google.com/maps?q=-23.5505,-46.6333');
+      final result = parseMapsDestination(uri);
+      expect(result, isNotNull);
+      expect(result!.coords.latitude, closeTo(-23.5505, 0.0001));
+      expect(result.coords.longitude, closeTo(-46.6333, 0.0001));
+      expect(result.label, isNull);
+    });
+
+    test('parseia q=lat,lng(Label) com label', () {
+      final uri =
+          Uri.parse('https://maps.google.com/maps?q=-23.5,-46.6(Posto Graal)');
+      final result = parseMapsDestination(uri);
+      expect(result, isNotNull);
+      expect(result!.coords.latitude, closeTo(-23.5, 0.0001));
+      expect(result.label, 'Posto Graal');
+    });
+
+    test('retorna null para q= texto (sem coordenadas)', () {
+      final uri = Uri.parse('https://maps.google.com/maps?q=pizzaria');
+      final result = parseMapsDestination(uri);
+      expect(result, isNull);
+    });
+
+    test('retorna null sem parâmetro q', () {
+      final uri = Uri.parse('https://maps.google.com/maps?daddr=-23.6,-46.7');
+      final result = parseMapsDestination(uri);
+      expect(result, isNull);
+    });
+
+    test('retorna null para host diferente', () {
+      final uri = Uri.parse('https://example.com/maps?q=-23.5,-46.6');
+      final result = parseMapsDestination(uri);
+      expect(result, isNull);
+    });
+  });
 }

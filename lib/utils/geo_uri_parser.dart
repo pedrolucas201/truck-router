@@ -32,22 +32,38 @@ GeoLocation? parseGeoUri(Uri uri) {
   if (uri.scheme != 'geo') return null;
 
   final q = uri.queryParameters['q'];
-  if (q != null) {
-    String? label;
-    String coords = q;
-    final parenIdx = q.indexOf('(');
-    if (parenIdx != -1) {
-      label = q.substring(parenIdx + 1, q.endsWith(')') ? q.length - 1 : q.length);
-      coords = q.substring(0, parenIdx).trim();
-    }
-    final latLng = _parseLatLng(coords);
-    if (latLng == null) return null;
-    return (coords: latLng, label: label?.isNotEmpty == true ? label : null);
-  }
+  if (q != null) return _parseQ(q);
 
   final latLng = _parseLatLng(uri.path);
   if (latLng == null) return null;
   return (coords: latLng, label: null);
+}
+
+/// Parses a `https://maps.google.com/maps?q=LAT,LNG(Label)` URI — o formato de
+/// pin de localização nativo do WhatsApp (sem saddr/daddr).
+///
+/// Returns null se não for maps.google.com, se não houver `q`, ou se o `q` for
+/// busca textual sem coordenadas (ex: `q=pizzaria`).
+GeoLocation? parseMapsDestination(Uri uri) {
+  if (uri.host != 'maps.google.com') return null;
+  final q = uri.queryParameters['q'];
+  if (q == null) return null;
+  return _parseQ(q);
+}
+
+/// Extrai coords + label opcional de um parâmetro `q` (`LAT,LNG` ou
+/// `LAT,LNG(Label)`), compartilhado entre `geo:` e `maps.google.com?q=`.
+GeoLocation? _parseQ(String q) {
+  String? label;
+  String coords = q;
+  final parenIdx = q.indexOf('(');
+  if (parenIdx != -1) {
+    label = q.substring(parenIdx + 1, q.endsWith(')') ? q.length - 1 : q.length);
+    coords = q.substring(0, parenIdx).trim();
+  }
+  final latLng = _parseLatLng(coords);
+  if (latLng == null) return null;
+  return (coords: latLng, label: label?.isNotEmpty == true ? label : null);
 }
 
 /// Parses a `https://maps.google.com/maps?saddr=...&daddr=...` URI.

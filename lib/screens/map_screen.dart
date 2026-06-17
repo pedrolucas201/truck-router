@@ -141,13 +141,37 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final type = classifyMapsUri(uri);
     if (type == DeepLinkType.route) {
       final route = parseMapsUri(uri);
-      if (route != null) _setDeepLinkRoute(route);
-      return;
+      if (route != null) {
+        _setDeepLinkRoute(route);
+        return;
+      }
+    } else if (type == DeepLinkType.destination) {
+      // Pin de localização do WhatsApp (maps.google.com?q=lat,lng) — vira destino.
+      final dest = parseMapsDestination(uri);
+      if (dest != null) {
+        _handleGeoUri(dest);
+        return;
+      }
+    } else {
+      final geo = parseGeoUri(uri);
+      if (geo != null) {
+        _handleGeoUri(geo);
+        return;
+      }
     }
-    if (type == DeepLinkType.destination) return; // pin simples — abre app, ignora
 
-    final geo = parseGeoUri(uri);
-    if (geo != null) _handleGeoUri(geo);
+    // Nenhum parser reconheceu o link. Mostra o URI cru pra capturar formatos
+    // inesperados em campo (ex: shortlink maps.app.goo.gl).
+    // TODO(N4): após confirmar o formato real do WhatsApp em device, trocar por
+    // mensagem genérica ("Não consegui ler esta localização compartilhada").
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Link não reconhecido: $uriStr'),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    }
   }
 
   void _setDeepLinkRoute(MapsRoute route) {
