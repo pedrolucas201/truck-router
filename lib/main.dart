@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,6 +25,15 @@ void main() async {
   final RestrictionRepository repo = _backendUrl.isNotEmpty
       ? ApiRestrictionRepository(_backendUrl)
       : FirestoreRestrictionRepository();
+
+  LicenseRegistry.addLicense(() async* {
+    yield const LicenseEntryWithLineBreaks(
+      ['truck_router'],
+      'Ícones de caminhão do loader: Twemoji '
+      '(© Twitter/X, mantido por jdecked), licença CC-BY 4.0. '
+      'https://github.com/jdecked/twemoji',
+    );
+  });
 
   runApp(
     MultiProvider(
