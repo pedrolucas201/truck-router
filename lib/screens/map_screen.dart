@@ -36,6 +36,9 @@ import '../services/restriction_service.dart';
 import '../repositories/restriction_repository.dart';
 import '../data/map_styles.dart';
 import '../providers/theme_controller.dart';
+import '../utils/truck_glyph.dart';
+import '../widgets/delayed_appearance.dart';
+import '../widgets/route_loading_indicator.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -1774,23 +1777,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   ),
                 if (routeProvider.status == RouteStatus.loading)
                   Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.all(Radius.circular(24)),
-                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2))],
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 14, height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          SizedBox(width: 10),
-                          Text('Calculando rota...', style: TextStyle(fontSize: 13)),
-                        ],
+                    child: DelayedAppearance(
+                      delay: const Duration(milliseconds: 150),
+                      child: RouteLoadingIndicator(
+                        truckAsset:
+                            assetFor(glyphForProfile(truckProvider.profile)),
                       ),
                     ),
                   ),

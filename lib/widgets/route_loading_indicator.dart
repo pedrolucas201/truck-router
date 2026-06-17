@@ -140,7 +140,7 @@ class _RouteLoadingIndicatorState extends State<RouteLoadingIndicator>
               ? _staticTrack(dotColor)
               : AnimatedBuilder(
                   animation: _controller,
-                  builder: (_, __) => _animatedTrack(_controller.value, dotColor),
+                  builder: (context, w) => _animatedTrack(_controller.value, dotColor),
                 ),
           const SizedBox(width: 12),
           Text(
