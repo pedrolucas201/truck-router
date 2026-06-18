@@ -37,7 +37,6 @@ import '../repositories/restriction_repository.dart';
 import '../data/map_styles.dart';
 import '../providers/theme_controller.dart';
 import '../utils/truck_glyph.dart';
-import '../widgets/delayed_appearance.dart';
 import '../widgets/route_loading_indicator.dart';
 
 class MapScreen extends StatefulWidget {
@@ -1661,20 +1660,20 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                         const SizedBox(height: 8),
                         SizedBox(
                           width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: routeProvider.status == RouteStatus.loading
-                                ? null
-                                : _calculate,
-                            icon: routeProvider.status == RouteStatus.loading
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.white),
-                                  )
-                                : const Icon(Icons.route),
-                            label: const Text('Calcular rota'),
-                          ),
+                          child: routeProvider.status == RouteStatus.loading
+                              ? FilledButton(
+                                  onPressed: null,
+                                  child: RouteLoadingIndicator(
+                                    truckAsset: assetFor(
+                                        glyphForProfile(truckProvider.profile)),
+                                    bare: true,
+                                  ),
+                                )
+                              : FilledButton.icon(
+                                  onPressed: _calculate,
+                                  icon: const Icon(Icons.route),
+                                  label: const Text('Calcular rota'),
+                                ),
                         ),
                         if (routeProvider.status == RouteStatus.error)
                           Container(
@@ -1772,16 +1771,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                  ),
-                if (routeProvider.status == RouteStatus.loading)
-                  Center(
-                    child: DelayedAppearance(
-                      delay: const Duration(milliseconds: 150),
-                      child: RouteLoadingIndicator(
-                        truckAsset:
-                            assetFor(glyphForProfile(truckProvider.profile)),
                       ),
                     ),
                   ),

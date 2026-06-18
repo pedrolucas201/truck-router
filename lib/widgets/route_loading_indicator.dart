@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-/// Loader do overlay "Calculando rota…": um caminhão atravessa uma trilha de
-/// pontinhos comendo cada um (loop). Recebe só o caminho do asset do caminhão —
-/// não conhece perfil nem provider. Respeita dark mode e reduce motion.
+/// Loader "Calculando rota…": caminhão atravessa trilha de pontinhos (loop).
+///
+/// [bare] = false (padrão): pílula com fundo próprio — uso como overlay.
+/// [bare] = true: só a track + texto, cores brancas — uso dentro de FilledButton.
 class RouteLoadingIndicator extends StatefulWidget {
   final String truckAsset;
+  final bool bare;
 
-  const RouteLoadingIndicator({super.key, required this.truckAsset});
+  const RouteLoadingIndicator({
+    super.key,
+    required this.truckAsset,
+    this.bare = false,
+  });
 
   @override
   State<RouteLoadingIndicator> createState() => _RouteLoadingIndicatorState();
@@ -15,15 +21,14 @@ class RouteLoadingIndicator extends StatefulWidget {
 
 class _RouteLoadingIndicatorState extends State<RouteLoadingIndicator>
     with SingleTickerProviderStateMixin {
-  // Geometria da raia (px lógicos).
   static const double _trackW = 130;
   static const double _trackH = 24;
   static const double _dotR = 7;
   static const double _truckSize = 22;
-  static const double _start = -26; // x inicial do caminhão (fora à esquerda)
-  static const double _end = 156; // x final (fora à direita)
-  static const double _front = 17; // offset da frente do caminhão
-  static const double _pop = 10; // distância em que o ponto "popa"
+  static const double _start = -26;
+  static const double _end = 156;
+  static const double _front = 17;
+  static const double _pop = 10;
   static const List<double> _dotsX = [14, 31, 48, 65, 82, 99, 116];
 
   late final AnimationController _controller = AnimationController(
@@ -53,7 +58,7 @@ class _RouteLoadingIndicatorState extends State<RouteLoadingIndicator>
         top: (_trackH - _truckSize) / 2,
         child: Transform(
           alignment: Alignment.center,
-          transform: Matrix4.diagonal3Values(-1, 1, 1), // espelha p/ apontar →
+          transform: Matrix4.diagonal3Values(-1, 1, 1),
           child: SvgPicture.asset(
             widget.truckAsset,
             width: _truckSize,
@@ -120,10 +125,37 @@ class _RouteLoadingIndicatorState extends State<RouteLoadingIndicator>
   Widget build(BuildContext context) {
     final reduce = MediaQuery.of(context).disableAnimations;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final pillColor = dark ? const Color(0xFF2A2A2E) : Colors.white;
-    final textColor = dark ? Colors.white : const Color(0xFF1C1C1E);
-    final dotColor = dark ? const Color(0xFF5A5F66) : const Color(0xFFCFD4D8);
 
+    final Color dotColor;
+    final Color textColor;
+    if (widget.bare) {
+      dotColor = Colors.white70;
+      textColor = Colors.white;
+    } else {
+      dotColor = dark ? const Color(0xFF5A5F66) : const Color(0xFFCFD4D8);
+      textColor = dark ? Colors.white : const Color(0xFF1C1C1E);
+    }
+
+    final track = reduce ? _staticTrack(dotColor) : AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) => _animatedTrack(_controller.value, dotColor),
+    );
+
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        track,
+        const SizedBox(width: 12),
+        Text(
+          'Calculando rota…',
+          style: TextStyle(fontSize: 13, color: textColor),
+        ),
+      ],
+    );
+
+    if (widget.bare) return content;
+
+    final pillColor = dark ? const Color(0xFF2A2A2E) : Colors.white;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
@@ -133,22 +165,7 @@ class _RouteLoadingIndicatorState extends State<RouteLoadingIndicator>
           BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
         ],
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          reduce
-              ? _staticTrack(dotColor)
-              : AnimatedBuilder(
-                  animation: _controller,
-                  builder: (context, w) => _animatedTrack(_controller.value, dotColor),
-                ),
-          const SizedBox(width: 12),
-          Text(
-            'Calculando rota…',
-            style: TextStyle(fontSize: 13, color: textColor),
-          ),
-        ],
-      ),
+      child: content,
     );
   }
 }
