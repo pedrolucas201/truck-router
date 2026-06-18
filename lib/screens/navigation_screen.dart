@@ -391,7 +391,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   void _startGps() {
     const settings = LocationSettings(
       accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 5,
+      distanceFilter: 0,
     );
     _posSub = Geolocator.getPositionStream(locationSettings: settings)
         .listen(_onPositionUpdate);
@@ -1749,9 +1749,9 @@ class _InstructionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg           = isNight ? Colors.black : const Color(0xFF1A237E);
+    const bg           = Colors.black;
     final instrColor   = isNight ? const Color(0xFF4FC3F7) : Colors.white;
-    final distColor    = isNight ? Colors.white : Colors.blue.shade100;
+    final distColor    = isNight ? Colors.white : Colors.white70;
 
     return Container(
       color: bg,
