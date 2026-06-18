@@ -451,7 +451,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         _currentPos = latLng;
         _snappedPos = pausedSnap;
         _bearing    = pausedBearing;
-        _speedKmh   = (pos.speed * 3.6).clamp(0, 300);
+        _speedKmh   = pos.speed * 3.6 < 2.5 ? 0.0 : (pos.speed * 3.6).clamp(0.0, 300.0);
       });
       _animateMarkerTo(pausedSnap, pausedBearing);
       return;
@@ -568,7 +568,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       _currentPos                 = latLng;
       _snappedPos                 = pts.isNotEmpty ? bestSnap : latLng;
       _bearing                    = pos.heading;
-      _speedKmh                   = (pos.speed * 3.6).clamp(0, 300);
+      _speedKmh                   = pos.speed * 3.6 < 2.5 ? 0.0 : (pos.speed * 3.6).clamp(0.0, 300.0);
       _closestPolylineIdx         = bestIdx;
       _maneuverIndex              = nextIdx;
       _distToNextManeuver         = distToNext;
