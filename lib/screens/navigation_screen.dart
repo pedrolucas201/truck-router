@@ -140,7 +140,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   static const _radarAlertM         = 400.0;
   static const _restrictionAlertM   = 300.0;
   static const _radarLookAheadM     = 1500.0;
-  static const _radarCorridorM      = 150.0;
+  static const _radarCorridorM      = 60.0;
   static const _prefAudioLevel = 'nav_audio_level';
   static const _prefZoomLevel  = 'nav_zoom_level';
 
