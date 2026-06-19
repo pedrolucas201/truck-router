@@ -91,6 +91,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   ZoomLevel _zoomLevel = ZoomLevel.medio;
   bool _isRerouting = false;
   Timer? _refreshTimer;
+  DateTime? _lastRerouteAt;
   int _offRouteCount = 0;
   RadarPoint? _upcomingRadar;
   final Set<int> _announced = {};
@@ -134,8 +135,8 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _hasTimeRestrictionAlert  = false;
   bool _timeRestrictionAlertSpoken = false;
 
-  static const _offRouteThresholdM  = 80.0;
-  static const _offRouteCountLimit  = 2;
+  static const _offRouteThresholdM  = 120.0;
+  static const _offRouteCountLimit  = 3;
   static const _radarAlertM         = 400.0;
   static const _restrictionAlertM   = 300.0;
   static const _radarLookAheadM     = 1500.0;
@@ -751,6 +752,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   Future<void> _reroute([LatLng? fromPos]) async {
     final origin = fromPos ?? _currentPos;
     if (_isRerouting || origin == null) return;
+    final now = DateTime.now();
+    if (_lastRerouteAt != null && now.difference(_lastRerouteAt!).inSeconds < 45) return;
+    _lastRerouteAt = now;
 
     // Para animação em andamento e snapa marcador para posição atual.
     _markerAnimCtrl.stop();
