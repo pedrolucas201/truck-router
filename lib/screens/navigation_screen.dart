@@ -737,6 +737,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     } else if (isPedagio) {
       _speak('Pedágio à frente');
     } else {
+      // Silencia o TTS quando dentro do limite. speedKmh == 0 = dado ausente → alerta por cautela.
+      if (radar.speedKmh > 0 && _speedKmh <= radar.speedKmh) return;
       final speed = radar.speedKmh > 0 ? ', ${radar.speedKmh} quilômetros por hora' : '';
       _speak('Radar à frente$speed');
     }
