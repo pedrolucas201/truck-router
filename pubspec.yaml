@@ -74,6 +74,9 @@ flutter:
     - assets/maparadar.csv
     - assets/loader/truck_bau.svg
     - assets/loader/truck_carreta.svg
+    - assets/loader/bus.svg
+    - assets/loader/minibus.svg
+    - assets/loader/tractor.svg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

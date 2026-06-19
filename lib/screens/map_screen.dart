@@ -52,6 +52,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   String?   _lastHandledUri;
   DateTime? _lastHandledAt;
   bool      _openedViaDeepLink = false;
+  String?   _loadingTruckAsset;
   LatLng? _origin;
   LatLng? _destination;
   String? _originLabel;
@@ -998,6 +999,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _calculate() async {
+    _loadingTruckAsset = null;
     if (_origin == null || _destination == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Informe origem e destino')),
@@ -1664,8 +1666,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                               ? FilledButton(
                                   onPressed: null,
                                   child: RouteLoadingIndicator(
-                                    truckAsset: assetFor(
-                                        glyphForProfile(truckProvider.profile)),
+                                    truckAsset: _loadingTruckAsset ??= randomLoaderAsset(),
                                     bare: true,
                                   ),
                                 )
