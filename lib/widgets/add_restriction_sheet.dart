@@ -72,6 +72,9 @@ class _AddRestrictionSheetState extends State<AddRestrictionSheet> {
                   fontSize: 12,
                   color: Colors.grey.shade500,
                   fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Text('Toque para trocar o tipo',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
