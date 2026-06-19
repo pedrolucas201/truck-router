@@ -479,19 +479,20 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (d < bestDist) { bestDist = d; bestIdx = end - 1; bestSnap = pts[end - 1]; }
     }
 
-    // 2. Arrival detection: distância restante na polyline < 30m E velocidade < 5 km/h.
+    // 2. Arrival detection: distância restante na polyline < 50m E velocidade < 10 km/h.
     // Remaining polyline (não linha reta ao destino) evita falso positivo em semáforos
     // antes de curvas — a distância restante na rota ainda é alta nesses casos.
-    if (!_arrived && pos.speed * 3.6 < 5) {
+    // Break em 120m (2x o threshold) para não cortar o cálculo antes de avaliar chegada.
+    if (!_arrived && pos.speed * 3.6 < 10) {
       var remaining = 0.0;
       for (var i = bestIdx; i < pts.length - 1; i++) {
         remaining += RadarService.haversine(
           pts[i].latitude, pts[i].longitude,
           pts[i + 1].latitude, pts[i + 1].longitude,
         );
-        if (remaining > 60) break;
+        if (remaining > 120) break;
       }
-      if (remaining < 30) {
+      if (remaining < 50) {
         _handleArrival();
         return;
       }
