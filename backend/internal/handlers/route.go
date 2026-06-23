@@ -7,11 +7,19 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// HereRoute: GET /route/here — proxy para router.hereapi.com/v8/routes
+// HereRoute: GET /route/here — proxy para router.hereapi.com/v8/routes com cache em memória.
 // Preserva raw query (vehicle[height] usa colchetes literais que não podem ser re-encoded).
+// Cache TTL: 2h; chave derivada da query sem apikey.
 func HereRoute(w http.ResponseWriter, r *http.Request) {
+	key := routeCacheKey(r.URL.RawQuery)
+	if entry, ok := routeCacheGet(key); ok {
+		w.Header().Set("Content-Type", entry.contentType)
+		w.WriteHeader(http.StatusOK)
+		w.Write(entry.body)
+		return
+	}
 	q := appendKey(r.URL.RawQuery, "apikey", os.Getenv("HERE_API_KEY"))
-	forward(w, "https://router.hereapi.com/v8/routes", q)
+	forwardAndCache(w, "https://router.hereapi.com/v8/routes", q, key)
 }
 
 // TomTomRoute: GET /route/tomtom/{locs} — proxy para api.tomtom.com/routing/1/calculateRoute/{locs}/json

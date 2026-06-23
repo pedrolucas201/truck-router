@@ -33,6 +33,41 @@ func forward(w http.ResponseWriter, targetURL string, rawQuery string) {
 	io.Copy(w, resp.Body)
 }
 
+// forwardAndCache faz GET em targetURL e, se a resposta for 200,
+// armazena body + content-type no cache de rotas com a chave fornecida.
+func forwardAndCache(w http.ResponseWriter, targetURL, rawQuery, key string) {
+	req, err := http.NewRequest(http.MethodGet, targetURL+"?"+rawQuery, nil)
+	if err != nil {
+		log.Printf("forwardAndCache build request: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Printf("forwardAndCache do request %s: %v", targetURL, err)
+		http.Error(w, "internal error", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("forwardAndCache read body: %v", err)
+		http.Error(w, "internal error", http.StatusBadGateway)
+		return
+	}
+
+	ct := resp.Header.Get("Content-Type")
+	if resp.StatusCode == http.StatusOK {
+		routeCacheSet(key, body, ct)
+	}
+
+	w.Header().Set("Content-Type", ct)
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
+}
+
 // appendKey adiciona apikey=value ao raw query string existente.
 func appendKey(rawQuery, param, value string) string {
 	if rawQuery == "" {
