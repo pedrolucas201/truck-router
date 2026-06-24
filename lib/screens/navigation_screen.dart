@@ -589,13 +589,16 @@ class _NavigationScreenState extends State<NavigationScreen>
     // Usa pts[bestIdx] (snapped) em vez do GPS bruto — evita que a seta
     // apareça fora da via no zoom aproximado por drift de GPS.
     if (!_markingMode) {
-      final camTarget = pts.isNotEmpty ? bestSnap : latLng;
+      final camTarget  = pts.isNotEmpty ? bestSnap : latLng;
+      final camBearing = pts.length >= 2
+          ? _segmentBearing(pts, bestIdx)
+          : _bearing;
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
           target:  camTarget,
           zoom:    _zoom,
           tilt:    45,
-          bearing: pos.heading,
+          bearing: camBearing,
         )),
       );
     }
@@ -1003,6 +1006,21 @@ class _NavigationScreenState extends State<NavigationScreen>
     final t = ((p.latitude - a.latitude) * dx + (p.longitude - a.longitude) * dy) / lenSq;
     final tc = t.clamp(0.0, 1.0);
     return LatLng(a.latitude + tc * dx, a.longitude + tc * dy);
+  }
+
+  // Bearing do segmento pts[idx] → pts[idx+1] em graus (0°=Norte, 90°=Leste).
+  // Usa fórmula de haversine bearing — estável independente do heading do GPS.
+  static double _segmentBearing(List<LatLng> pts, int idx) {
+    if (pts.length < 2) return 0;
+    final i = idx.clamp(0, pts.length - 2);
+    final a = pts[i];
+    final b = pts[i + 1];
+    final dLng = (b.longitude - a.longitude) * pi / 180;
+    final lat1 = a.latitude * pi / 180;
+    final lat2 = b.latitude * pi / 180;
+    final y = sin(dLng) * cos(lat2);
+    final x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLng);
+    return (atan2(y, x) * 180 / pi + 360) % 360;
   }
 
   // ── Centralizar câmera ────────────────────────────────────────────────────────
