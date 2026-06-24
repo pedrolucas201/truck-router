@@ -628,7 +628,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     final now         = DateTime.now();
     final intervalMs  = now.difference(_lastPosUpdateAt!).inMilliseconds;
     _lastPosUpdateAt  = now;
-    final durationMs  = (intervalMs * 0.8).clamp(100, 600).toInt();
+    final durationMs  = intervalMs.clamp(100, 1500).toInt();
 
     _markerAnimCtrl.duration = Duration(milliseconds: durationMs);
     _markerAnimCtrl.reset();
