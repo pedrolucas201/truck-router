@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
@@ -98,6 +99,7 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   // Cache de ícones para radares
   final _iconCache = <String, BitmapDescriptor>{};
+  Future<List<BitmapDescriptor>>? _radarIconsFuture;
 
   final List<UserRestriction> _userRestrictions = [];
   final _restrictionIconCache = <String, BitmapDescriptor>{};
@@ -150,6 +152,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _result  = widget.result;
     _radares        = List.of(widget.initialRadares);
     _visibleRadares = List.of(widget.initialRadares);
+    _radarIconsFuture = Future.wait(_radares.map(_radarIcon));
     _hasTimeRestrictionAlert = widget.result.hasTimeRestriction;
     WidgetsBinding.instance.addObserver(this);
     _loadAudioLevel();
@@ -566,6 +569,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
 
+    final radarListChanged = !listEquals(visibleRadares, _visibleRadares);
     setState(() {
       _currentPos                 = latLng;
       _snappedPos                 = pts.isNotEmpty ? bestSnap : latLng;
@@ -577,6 +581,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       _upcomingRadar              = upcoming;
       _nearbyBlockedRestriction   = nearestBlocked;
       _visibleRadares             = visibleRadares;
+      if (radarListChanged) {
+        _radarIconsFuture = Future.wait(visibleRadares.map(_radarIcon));
+      }
     });
     _animateMarkerTo(pts.isNotEmpty ? bestSnap : latLng, pos.heading);
     _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
@@ -821,6 +828,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         _lastRadarAlertKey       = null;
         _lastRestrictionAlertKey = null;
         _iconCache.clear();
+        _radarIconsFuture        = null;
       });
       if (newResult.hasTimeRestriction && !_timeRestrictionAlertSpoken) {
         _timeRestrictionAlertSpoken = true;
@@ -1401,7 +1409,7 @@ class _NavigationScreenState extends State<NavigationScreen>
               child: Stack(
                 children: [
                   FutureBuilder<List<BitmapDescriptor>>(
-                    future: Future.wait(_visibleRadares.map(_radarIcon)),
+                    future: _radarIconsFuture ?? Future.value([]),
                     builder: (context, snap) {
                       if (snap.hasData) {
                         for (var i = 0; i < _visibleRadares.length; i++) {
