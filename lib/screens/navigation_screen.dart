@@ -368,7 +368,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (_audioLevel != AudioLevel.silencioso) {
       _tts.speak('Você chegou ao destino');
     }
-    Future.delayed(const Duration(seconds: 3), () {
+    Future.delayed(const Duration(seconds: 1), () {
       if (mounted) Navigator.of(context).pop();
     });
   }
@@ -482,11 +482,20 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (d < bestDist) { bestDist = d; bestIdx = end - 1; bestSnap = pts[end - 1]; }
     }
 
-    // 2. Arrival detection: distância restante na polyline < 50m E velocidade < 10 km/h.
-    // Remaining polyline (não linha reta ao destino) evita falso positivo em semáforos
-    // antes de curvas — a distância restante na rota ainda é alta nesses casos.
-    // Break em 120m (2x o threshold) para não cortar o cálculo antes de avaliar chegada.
+    // 2. Arrival detection: velocidade < 10 km/h E (linha reta ao destino < 80m OU
+    // distância restante na polilinha < 50m). A checagem em linha reta cobre o caso
+    // em que a HERE roteia o pino para dentro da propriedade — o caminhão já está na
+    // "porta" mas o fim da polilinha fica lá dentro. O fallback de polilinha cobre
+    // casos onde o snap do GPS diverge do pino de destino.
     if (!_arrived && pos.speed * 3.6 < 10) {
+      final straightToDestM = RadarService.haversine(
+        latLng.latitude, latLng.longitude,
+        widget.destination.latitude, widget.destination.longitude,
+      );
+      if (straightToDestM < 80) {
+        _handleArrival();
+        return;
+      }
       var remaining = 0.0;
       for (var i = bestIdx; i < pts.length - 1; i++) {
         remaining += RadarService.haversine(
