@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart'
+    show listEquals, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
@@ -118,12 +119,29 @@ class _NavigationScreenState extends State<NavigationScreen>
   BitmapDescriptor? _userArrowIcon;
 
   // Animação suave do marcador (N3)
-  late AnimationController _markerAnimCtrl;
+  // Dead-reckoning: a seta é extrapolada por velocidade constante AO LONGO da
+  // rota a 60fps, a partir do último fix GPS (anchor). Elimina o lag de ~1
+  // intervalo que a animação por tween introduzia (seta sempre atrás do carro).
+  // Guardas: não prevê parado (anti-freada) e congela após _maxPredictMs sem
+  // fix novo (anti-viaduto/perda de sinal), evitando a seta deslizar sozinha.
+  late AnimationController _predTicker; // driver de 60fps (.repeat)
   LatLng _animPos = const LatLng(-15.788, -47.879);
   double _animBearing = 0;
-  DateTime? _lastPosUpdateAt;
-  VoidCallback? _markerAnimListener;
-  CurvedAnimation? _markerCurved;
+  LatLng? _anchorPos;          // posição snapped do último fix
+  int _anchorIdx = 0;          // índice na polyline do último fix
+  double _anchorSpeedMps = 0;  // velocidade do último fix (m/s)
+  DateTime? _lastPosUpdateAt;  // hora do último fix (= anchor time)
+  static const double _stopKmh = 3.0;
+  static const int _maxPredictMs = 2500;
+
+  // Cache dos overlays do mapa (polylines/circles). A animação do marcador
+  // dispara setState a 60fps; sem cache, o build() realocava as sublists da
+  // rota toda a cada frame e o google_maps_flutter re-enviava a geometria
+  // pelo platform channel. Recomputamos só quando o índice/raio muda.
+  Set<Polyline> _polylines = {};
+  Set<Circle> _radarCircles = {};
+  int? _overlaysSplitIdx;
+  RadarPoint? _overlaysRadar;
 
   List<RouteEvent>  _upcomingEvents = [];
   List<Poi>         _routePois      = [];
@@ -163,7 +181,9 @@ class _NavigationScreenState extends State<NavigationScreen>
     _themeController = context.read<ThemeController>();
     _themeController.addListener(_onThemeChanged);
     _startGps();
-    _markerAnimCtrl = AnimationController(vsync: this, duration: Duration.zero);
+    _predTicker = AnimationController(vsync: this, duration: const Duration(seconds: 1))
+      ..addListener(_predictTick)
+      ..repeat();
     _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
     WakelockPlus.enable();
     _buildUserArrow().then((icon) {
@@ -187,8 +207,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _themeController.removeListener(_onThemeChanged);
     FlutterForegroundTask.stopService();
     WakelockPlus.disable();
-    _markerAnimCtrl.dispose();
-    _markerCurved?.dispose();
+    _predTicker.dispose();
     super.dispose();
   }
 
@@ -196,17 +215,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     _resumedAt = DateTime.now();
-    // Para animação e snapa marcador — evita deslize de posição desatualizada ao retomar.
-    _markerAnimCtrl.stop();
-    if (_markerAnimListener != null) {
-      _markerAnimCtrl.removeListener(_markerAnimListener!);
-      _markerAnimListener = null;
-    }
-    _markerCurved?.dispose();
-    _markerCurved = null;
+    // Re-anchora o marcador na posição atual — evita que a predição continue
+    // de uma posição desatualizada ao retomar o app.
     if (_snappedPos != null) {
       _animPos     = _snappedPos!;
       _animBearing = _bearing;
+      _anchorPos   = _snappedPos;
+      _anchorSpeedMps = 0;
     }
     _lastPosUpdateAt = null;
     // moveCamera (instantâneo) evita giros: animateCamera competia com
@@ -393,10 +408,19 @@ class _NavigationScreenState extends State<NavigationScreen>
   // ── GPS ──────────────────────────────────────────────────────────────────────
 
   void _startGps() {
-    const settings = LocationSettings(
-      accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 0,
-    );
+    // No Android, intervalDuration explícito força a frequência de updates do
+    // fused provider (a LocationSettings base não controla isso). 1Hz é o teto
+    // prático do GPS da maioria dos aparelhos — pedir menos garante esse mínimo.
+    final LocationSettings settings = defaultTargetPlatform == TargetPlatform.android
+        ? AndroidSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
+            distanceFilter: 0,
+            intervalDuration: const Duration(milliseconds: 1000),
+          )
+        : const LocationSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
+            distanceFilter: 0,
+          );
     _posSub = Geolocator.getPositionStream(locationSettings: settings)
         .listen(_onPositionUpdate);
   }
@@ -450,14 +474,17 @@ class _NavigationScreenState extends State<NavigationScreen>
         if (d < bd2) { snap2 = pts2[end2 - 1]; }
       }
       final pausedSnap    = pts2.isNotEmpty ? snap2 : latLng;
-      final pausedBearing = pos.heading;
+      final pausedBearing = pts2.length >= 2
+          ? _segmentBearing(pts2, _closestPolylineIdx.clamp(0, pts2.length - 1))
+          : pos.heading;
       setState(() {
         _currentPos = latLng;
         _snappedPos = pausedSnap;
         _bearing    = pausedBearing;
         _speedKmh   = pos.speed * 3.6 < 2.5 ? 0.0 : (pos.speed * 3.6).clamp(0.0, 300.0);
       });
-      _animateMarkerTo(pausedSnap, pausedBearing);
+      // Pausado: ancora sem velocidade — marcador fica parado no snap, sem prever.
+      _setAnchor(pausedSnap, _closestPolylineIdx, pausedBearing, 0);
       return;
     }
 
@@ -594,7 +621,11 @@ class _NavigationScreenState extends State<NavigationScreen>
         _radarIconsFuture = Future.wait(visibleRadares.map(_radarIcon));
       }
     });
-    _animateMarkerTo(pts.isNotEmpty ? bestSnap : latLng, pos.heading);
+    // Bearing único para seta e câmera: o segmento da rota (estável), não o
+    // heading bruto do GPS. Evita a "pescadinha" — a seta balançando em cima
+    // de um mapa que já gira suave. Fallback para heading só sem rota.
+    final routeBearing = pts.length >= 2 ? _segmentBearing(pts, bestIdx) : pos.heading;
+    _setAnchor(pts.isNotEmpty ? bestSnap : latLng, bestIdx, routeBearing, pos.speed);
     _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
     _checkSpeedAlert(_speedKmh);
@@ -606,9 +637,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     // apareça fora da via no zoom aproximado por drift de GPS.
     if (!_markingMode) {
       final camTarget  = pts.isNotEmpty ? bestSnap : latLng;
-      final camBearing = pts.length >= 2
-          ? _segmentBearing(pts, bestIdx)
-          : _bearing;
+      final camBearing = routeBearing;
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
           target:  camTarget,
@@ -620,53 +649,85 @@ class _NavigationScreenState extends State<NavigationScreen>
     }
   }
 
-  void _animateMarkerTo(LatLng target, double targetBearing) {
-    // Primeiro fix: sem animação — posiciona marcador diretamente.
-    if (_lastPosUpdateAt == null) {
-      _lastPosUpdateAt = DateTime.now();
-      if (mounted) setState(() { _animPos = target; _animBearing = targetBearing; });
+  // Registra um novo fix GPS como âncora da predição. O _predTicker passa a
+  // extrapolar a partir daqui. Velocidade <= 0 (ou parado) → marcador não anda.
+  void _setAnchor(LatLng pos, int idx, double bearing, double speedMps) {
+    final pts = _result.polylinePoints;
+    final firstFix = _lastPosUpdateAt == null;
+    _anchorPos       = pos;
+    _anchorIdx       = pts.isEmpty ? 0 : idx.clamp(0, pts.length - 1);
+    _anchorSpeedMps  = (speedMps.isFinite && speedMps > 0) ? speedMps : 0.0;
+    _lastPosUpdateAt = DateTime.now();
+    // Primeiro fix: posiciona direto (sai do default de Brasília sem deslizar).
+    if (firstFix && mounted) {
+      setState(() { _animPos = pos; _animBearing = bearing; });
+    }
+  }
+
+  // Extrapola a posição da seta a 60fps a partir da âncora, andando ao longo
+  // da rota. Guarda anti-freada (não prevê parado) e anti-viaduto (congela
+  // após _maxPredictMs sem fix). Não faz setState quando a posição não muda
+  // (parado/pausado) — evita rebuild de 60fps à toa.
+  void _predictTick() {
+    if (!mounted) return;
+    final anchor = _anchorPos;
+    final anchorTime = _lastPosUpdateAt;
+    if (anchor == null || anchorTime == null) return;
+    final pts = _result.polylinePoints;
+    if (pts.length < 2) return;
+
+    final elapsedMs = DateTime.now()
+        .difference(anchorTime)
+        .inMilliseconds
+        .clamp(0, _maxPredictMs);
+    final advanceM = (_anchorSpeedMps * 3.6 >= _stopKmh)
+        ? _anchorSpeedMps * (elapsedMs / 1000.0)
+        : 0.0;
+
+    final (predPos, predIdx) = _advanceAlongRoute(pts, _anchorIdx, anchor, advanceM);
+    final predBearing = _segmentBearing(pts, predIdx);
+
+    if (_sameLatLng(predPos, _animPos) && (predBearing - _animBearing).abs() < 0.1) {
       return;
     }
-
-    _markerAnimCtrl.stop();
-
-    // Remove listener anterior para evitar acúmulo de callbacks a cada GPS update.
-    if (_markerAnimListener != null) {
-      _markerAnimCtrl.removeListener(_markerAnimListener!);
-      _markerAnimListener = null;
-    }
-    _markerCurved?.dispose();
-    _markerCurved = null;
-
-    final fromPos     = _animPos;
-    final fromBearing = _animBearing;
-
-    final now         = DateTime.now();
-    final intervalMs  = now.difference(_lastPosUpdateAt!).inMilliseconds;
-    _lastPosUpdateAt  = now;
-    final durationMs  = intervalMs.clamp(100, 1500).toInt();
-
-    _markerAnimCtrl.duration = Duration(milliseconds: durationMs);
-    _markerAnimCtrl.reset();
-
-    final latTween     = Tween<double>(begin: fromPos.latitude,  end: target.latitude);
-    final lngTween     = Tween<double>(begin: fromPos.longitude, end: target.longitude);
-    final bearingDelta = ((targetBearing - fromBearing + 540) % 360) - 180;
-    final bearingTween = Tween<double>(begin: 0, end: bearingDelta);
-
-    _markerCurved = CurvedAnimation(parent: _markerAnimCtrl, curve: Curves.easeOut);
-
-    _markerAnimListener = () {
-      if (!mounted) return;
-      setState(() {
-        _animPos     = LatLng(latTween.evaluate(_markerCurved!), lngTween.evaluate(_markerCurved!));
-        _animBearing = fromBearing + bearingTween.evaluate(_markerCurved!);
-      });
-    };
-
-    _markerAnimCtrl.addListener(_markerAnimListener!);
-    _markerAnimCtrl.forward();
+    setState(() {
+      _animPos     = predPos;
+      _animBearing = predBearing;
+    });
   }
+
+  // Caminha `distM` à frente pela polyline a partir de (startIdx, startPos).
+  // Retorna a posição interpolada e o índice do segmento onde caiu. Cap no fim.
+  (LatLng, int) _advanceAlongRoute(
+      List<LatLng> pts, int startIdx, LatLng startPos, double distM) {
+    var idx = startIdx.clamp(0, pts.length - 2);
+    if (distM <= 0) return (startPos, idx);
+    var remaining = distM;
+    var cur = startPos;
+    while (idx < pts.length - 1) {
+      final next = pts[idx + 1];
+      final segLeft = RadarService.haversine(
+          cur.latitude, cur.longitude, next.latitude, next.longitude);
+      if (remaining <= segLeft) {
+        final t = segLeft > 0 ? remaining / segLeft : 0.0;
+        return (
+          LatLng(
+            cur.latitude  + (next.latitude  - cur.latitude)  * t,
+            cur.longitude + (next.longitude - cur.longitude) * t,
+          ),
+          idx,
+        );
+      }
+      remaining -= segLeft;
+      idx++;
+      cur = pts[idx];
+    }
+    return (pts.last, pts.length - 2);
+  }
+
+  bool _sameLatLng(LatLng a, LatLng b) =>
+      (a.latitude - b.latitude).abs() < 1e-7 &&
+      (a.longitude - b.longitude).abs() < 1e-7;
 
   // ── TTS por threshold de distância ───────────────────────────────────────────
 
@@ -778,17 +839,12 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (_lastRerouteAt != null && now.difference(_lastRerouteAt!).inSeconds < 45) return;
     _lastRerouteAt = now;
 
-    // Para animação em andamento e snapa marcador para posição atual.
-    _markerAnimCtrl.stop();
-    if (_markerAnimListener != null) {
-      _markerAnimCtrl.removeListener(_markerAnimListener!);
-      _markerAnimListener = null;
-    }
-    _markerCurved?.dispose();
-    _markerCurved = null;
+    // Snapa marcador para posição atual e re-anchora — geometria vai mudar.
     final snapTarget = _snappedPos ?? _currentPos;
     if (snapTarget != null) {
       setState(() { _animPos = snapTarget; _animBearing = _bearing; });
+      _anchorPos = snapTarget;
+      _anchorSpeedMps = 0;
     }
     _lastPosUpdateAt = null;
 
@@ -830,6 +886,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         _result                  = newResult;
         _radares                 = nearby;
         _closestPolylineIdx      = 0;
+        _overlaysSplitIdx        = null; // invalida cache de overlays: geometria mudou
         _maneuverIndex           = 0;
         _distToNextManeuver      = double.infinity;
         _hasTimeRestrictionAlert = newResult.hasTimeRestriction;
@@ -1026,6 +1083,50 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   // Bearing do segmento pts[idx] → pts[idx+1] em graus (0°=Norte, 90°=Leste).
+  // Rastro percorrido em cinza (estilo Google) + rota à frente em azul.
+  // O cinza ajuda a se orientar em trevos: mostra de onde veio vs. pra onde ir.
+  Set<Polyline> _buildPolylines(List<LatLng> pts, int splitIdx) {
+    return {
+      if (splitIdx >= 1)
+        Polyline(
+          polylineId: const PolylineId('nav_traveled'),
+          points: pts.sublist(0, splitIdx + 1),
+          color: Colors.blueGrey.shade300,
+          width: 7,
+        ),
+      if (splitIdx < pts.length - 1)
+        Polyline(
+          polylineId: const PolylineId('nav_remaining_halo'),
+          points: pts.sublist(splitIdx),
+          color: const Color(0xFF1565C0).withAlpha(90),
+          width: 18,
+        ),
+      if (splitIdx < pts.length - 1)
+        Polyline(
+          polylineId: const PolylineId('nav_remaining'),
+          points: pts.sublist(splitIdx),
+          color: const Color(0xFF1565C0),
+          width: 10,
+        ),
+    };
+  }
+
+  Set<Circle> _buildRadarCircles() {
+    final r = _upcomingRadar;
+    if (r == null) return {};
+    final isLombada = r.type.toLowerCase().contains('lombada');
+    return {
+      Circle(
+        circleId: const CircleId('radar_alert'),
+        center: LatLng(r.lat, r.lng),
+        radius: 80.0,
+        fillColor: (isLombada ? Colors.orange : Colors.red).withAlpha(35),
+        strokeColor: isLombada ? Colors.orange.shade400 : Colors.red.shade400,
+        strokeWidth: 2,
+      ),
+    };
+  }
+
   // Usa fórmula de haversine bearing — estável independente do heading do GPS.
   static double _segmentBearing(List<LatLng> pts, int idx) {
     if (pts.length < 2) return 0;
@@ -1335,46 +1436,18 @@ class _NavigationScreenState extends State<NavigationScreen>
 
     final pts = _result.polylinePoints;
     final splitIdx = _closestPolylineIdx.clamp(0, pts.length - 1);
-    final polylines = <Polyline>{
-      if (splitIdx >= 1)
-        Polyline(
-          polylineId: const PolylineId('nav_traveled'),
-          points: pts.sublist(0, splitIdx + 1),
-          color: Colors.blueGrey.shade300,
-          width: 7,
-        ),
-      if (splitIdx < pts.length - 1)
-        Polyline(
-          polylineId: const PolylineId('nav_remaining_halo'),
-          points: pts.sublist(splitIdx),
-          color: const Color(0xFF1565C0).withAlpha(90),
-          width: 18,
-        ),
-      if (splitIdx < pts.length - 1)
-        Polyline(
-          polylineId: const PolylineId('nav_remaining'),
-          points: pts.sublist(splitIdx),
-          color: const Color(0xFF1565C0),
-          width: 10,
-        ),
-    };
-
-    final radarCircles = <Circle>{
-      if (_upcomingRadar != null)
-        Circle(
-          circleId: const CircleId('radar_alert'),
-          center: LatLng(_upcomingRadar!.lat, _upcomingRadar!.lng),
-          radius: 80.0,
-          fillColor: (_upcomingRadar!.type.toLowerCase().contains('lombada')
-                  ? Colors.orange
-                  : Colors.red)
-              .withAlpha(35),
-          strokeColor: _upcomingRadar!.type.toLowerCase().contains('lombada')
-              ? Colors.orange.shade400
-              : Colors.red.shade400,
-          strokeWidth: 2,
-        ),
-    };
+    // Memoização: recomputa overlays só quando o trecho/raio realmente muda
+    // (≈1Hz do GPS), não a cada frame da animação do marcador (60fps).
+    // Mantendo a mesma instância de Set entre frames, o google_maps_flutter
+    // não re-difunde a geometria pelo channel.
+    if (_overlaysSplitIdx != splitIdx || !identical(_overlaysRadar, _upcomingRadar)) {
+      _overlaysSplitIdx = splitIdx;
+      _overlaysRadar    = _upcomingRadar;
+      _polylines        = _buildPolylines(pts, splitIdx);
+      _radarCircles     = _buildRadarCircles();
+    }
+    final polylines    = _polylines;
+    final radarCircles = _radarCircles;
 
     final markers = <Marker>{
       Marker(
@@ -1793,7 +1866,7 @@ class _InstructionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     const bg           = Colors.black;
     final instrColor   = isNight ? const Color(0xFF4FC3F7) : Colors.white;
-    final distColor    = isNight ? Colors.white : Colors.white70;
+    final distColor    = Colors.white;
 
     return Container(
       color: bg,
@@ -1838,7 +1911,10 @@ class _InstructionBar extends StatelessWidget {
                       if (distance.isFinite && distance < 50000)
                         Text(
                           'Em ${fmtDist(distance)}',
-                          style: TextStyle(color: distColor, fontSize: 13),
+                          style: TextStyle(
+                              color: distColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold),
                         ),
                     ],
                   ),
