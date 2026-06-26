@@ -161,7 +161,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   static const _radarAlertM         = 400.0;
   static const _restrictionAlertM   = 300.0;
   static const _radarLookAheadM     = 1500.0;
-  static const _radarCorridorM      = 60.0;
+  // Distância perpendicular máxima do radar ao segmento da rota para contar
+  // como "na via" (~largura de pista + erro de GPS). Antes era raio a pontos
+  // soltos (60m), que vazava pra ruas paralelas. Tunável em campo.
+  static const _radarCorridorM      = 22.0;
   static const _prefAudioLevel = 'nav_audio_level';
   static const _prefZoomLevel  = 'nav_zoom_level';
 
@@ -567,18 +570,18 @@ class _NavigationScreenState extends State<NavigationScreen>
       _checkTts(nextIdx, distToNext, nextManeuver);
     }
 
-    // 5. Radares visíveis: próximos 1500m da polyline com corredor de 150m
-    // Computado antes de upcoming para que upcoming use o mesmo filtro de corredor,
-    // eliminando falsos positivos em vias paralelas.
+    // 5. Radares visíveis: até 1500m à frente na polyline, restritos ao corredor
+    // da rota medido pela distância PERPENDICULAR ao segmento (não raio a pontos
+    // soltos) — elimina falso positivo em via paralela.
     final aheadPts = <LatLng>[];
     for (var i = bestIdx; i < pts.length; i++) {
       if (RadarService.haversine(latLng.latitude, latLng.longitude,
               pts[i].latitude, pts[i].longitude) > _radarLookAheadM) { break; }
       aheadPts.add(pts[i]);
     }
-    final visibleRadares = _radares.where((r) => aheadPts.any((p) =>
-        RadarService.haversine(r.lat, r.lng, p.latitude, p.longitude) <=
-            _radarCorridorM)).toList();
+    final visibleRadares = _radares.where((r) =>
+        RadarService.distanceToPath(r.lat, r.lng, aheadPts) <= _radarCorridorM
+    ).toList();
 
     // 6. Radar à frente — restrito ao corredor da rota (sem falso positivo em paralelas)
     RadarPoint? upcoming;
@@ -1347,7 +1350,11 @@ class _NavigationScreenState extends State<NavigationScreen>
 
     double bestRadarDist = double.infinity;
     for (final r in _radares) {
-      if (!isAhead(r.lat, r.lng, 100)) continue;
+      if (!isAhead(r.lat, r.lng, 100)) continue; // prefiltro barato
+      // Mesmo corredor perpendicular do alerta — sem falso radar de via paralela.
+      if (RadarService.distanceToPath(r.lat, r.lng, aheadPts) > _radarCorridorM) {
+        continue;
+      }
       final d = distFrom(r.lat, r.lng);
       if (d < bestRadarDist) bestRadarDist = d;
     }
