@@ -33,7 +33,8 @@ import '../models/route_event.dart';
 import '../providers/theme_controller.dart';
 import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
-import '../widgets/route_timeline.dart';
+import '../widgets/next_event_strip.dart';
+import '../widgets/upcoming_dots.dart';
 
 @pragma('vm:entry-point')
 void _navForegroundCallback() {
@@ -1486,6 +1487,10 @@ class _NavigationScreenState extends State<NavigationScreen>
               fmtDist:      _fmtDist,
             ),
 
+            // ── Faixa do próximo evento (degraus FAR/MID/NEAR) ──────────────
+            if (_upcomingEvents.isNotEmpty && !_markingMode)
+              NextEventStrip(event: _upcomingEvents.first),
+
             // ── Mapa ────────────────────────────────────────────────────────
             Expanded(
               child: Stack(
@@ -1682,11 +1687,11 @@ class _NavigationScreenState extends State<NavigationScreen>
                         ),
                       ),
                     ),
-                  if (_upcomingEvents.isNotEmpty && !_markingMode)
+                  if (_upcomingEvents.length > 1 && !_markingMode)
                     Positioned(
                       right: 8,
                       top: 8,
-                      child: RouteTimeline(events: _upcomingEvents),
+                      child: UpcomingDots(events: _upcomingEvents.skip(1).toList()),
                     ),
                   if (!_markingMode) ...[
                     // Botão pausar/retomar
