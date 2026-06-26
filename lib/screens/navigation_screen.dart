@@ -111,6 +111,12 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _markingMode = false;
   bool _paused = false;
   bool _arrived = false;
+  // Estado "chegando": contador ancorado antes de finalizar (não mata o GPS —
+  // o motorista ainda manobra / dá a volta no quarteirão).
+  bool _arriving = false;
+  LatLng? _arrivalAnchor;
+  Timer? _arrivalTimer;
+  double _arrivalProgress = 0.0; // 0→1 ao longo da contagem
   bool _ttsActive = false;
   bool _speedAlertActive = false;
   DateTime? _lastSpeedAlertAt;
@@ -169,6 +175,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   // _offRouteCount (precisa de 3 fixes novos) + guarda _isRerouting.
   static const _rerouteThrottleSec     = 10;
   static const _rerouteUrgentFloorSec  = 4;
+  // Chegada: contador de 15s antes de finalizar; se o caminhão se afastar mais
+  // que 40m da âncora durante a contagem, cancela e reroteia (deu a volta).
+  static const _arrivalCountdownMs = 15000;
+  static const _arrivalMoveM       = 40.0;
   static const _radarAlertM         = 400.0;
   static const _restrictionAlertM   = 300.0;
   static const _radarLookAheadM     = 1500.0;
@@ -216,6 +226,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _policeTimelineTimer?.cancel();
+    _arrivalTimer?.cancel();
     _posSub?.cancel();
     _tts.stop();
     _ttsActive = false;
@@ -389,18 +400,129 @@ class _NavigationScreenState extends State<NavigationScreen>
     _tts.speak(text);
   }
 
-  void _handleArrival() {
-    if (_arrived) return;
-    _arrived = true;
-    _posSub?.cancel();
-    _tts.stop();
-    _ttsActive = false;
+  // Entra no estado "chegando": ancora a posição, fala uma vez e arma a contagem.
+  // NÃO cancela o GPS — _onPositionUpdate continua pra detectar se o caminhão
+  // se afasta (manobra / volta no quarteirão) e cancelar a finalização.
+  void _beginArrival(LatLng anchor) {
+    if (_arrived || _arriving) return;
+    _arriving = true;
+    _arrivalAnchor = anchor;
+    _arrivalProgress = 0.0;
     if (_audioLevel != AudioLevel.silencioso) {
       _tts.speak('Você chegou ao destino');
     }
+    setState(() {});
+    final start = DateTime.now();
+    _arrivalTimer?.cancel();
+    // Timer, NÃO AnimationController: o SingleTickerProviderStateMixin já é
+    // consumido pelo _predTicker.
+    _arrivalTimer = Timer.periodic(const Duration(milliseconds: 100), (t) {
+      if (!mounted) { t.cancel(); return; }
+      final elapsed = DateTime.now().difference(start).inMilliseconds;
+      setState(() => _arrivalProgress = (elapsed / _arrivalCountdownMs).clamp(0.0, 1.0));
+      if (elapsed >= _arrivalCountdownMs) {
+        t.cancel();
+        _finalizeArrival();
+      }
+    });
+  }
+
+  // Caminhão se afastou da âncora durante a contagem: cancela e reroteia pra
+  // guiá-lo de volta (típico de dar a volta no quarteirão pra entrar no pátio).
+  void _cancelArrival() {
+    if (!_arriving) return;
+    _arrivalTimer?.cancel();
+    _arrivalTimer = null;
+    _arriving = false;
+    _arrivalAnchor = null;
+    _arrivalProgress = 0.0;
+    _tts.stop();
+    _ttsActive = false;
+    _lastRerouteAt = null; // fura o throttle: precisa reorientar já
+    if (mounted) setState(() {});
+    if (_currentPos != null) _reroute(fromPos: _currentPos, urgent: true);
+  }
+
+  void _finalizeArrival() {
+    if (_arrived) return;
+    _arrived = true;
+    _arrivalTimer?.cancel();
+    _arrivalTimer = null;
+    _arriving = false;
+    _posSub?.cancel();
+    _tts.stop();
+    _ttsActive = false;
+    // Sem speak aqui: "Você chegou ao destino" já foi dito em _beginArrival.
+    if (mounted) setState(() {});
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) Navigator.of(context).pop();
     });
+  }
+
+  Widget _buildArrivalBanner() {
+    final secs = ((_arrivalCountdownMs * (1 - _arrivalProgress)) / 1000).ceil();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B5E20),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(color: Colors.black38, blurRadius: 12, offset: Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.flag, color: Colors.white, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Você chegou ao destino',
+                      style: TextStyle(
+                          color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      'Finalizando em ${secs}s',
+                      style: const TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: 1 - _arrivalProgress,
+              minHeight: 6,
+              backgroundColor: Colors.white24,
+              valueColor: const AlwaysStoppedAnimation(Colors.white),
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: _finalizeArrival,
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF1B5E20),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: const Text(
+              'Finalizar agora',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _checkSpeedAlert(double kmh) {
@@ -503,6 +625,22 @@ class _NavigationScreenState extends State<NavigationScreen>
       return;
     }
 
+    // Estado "chegando": contador ancorado. Não roda nav normal; só vigia se o
+    // caminhão se afasta da âncora (cancela + reroteia) — senão deixa contar.
+    if (_arriving) {
+      final anchor = _arrivalAnchor ?? latLng;
+      final fromAnchorM = RadarService.haversine(
+        latLng.latitude, latLng.longitude, anchor.latitude, anchor.longitude,
+      );
+      if (fromAnchorM > _arrivalMoveM) {
+        _cancelArrival();
+        return;
+      }
+      setState(() { _currentPos = latLng; _snappedPos = latLng; });
+      _setAnchor(latLng, _closestPolylineIdx, _bearing, 0);
+      return;
+    }
+
     // 1. Segmento mais próximo na polyline (projeção, não só vértice)
     final pts  = _result.polylinePoints;
     final start = (_closestPolylineIdx - 5).clamp(0, pts.length - 1);
@@ -529,13 +667,13 @@ class _NavigationScreenState extends State<NavigationScreen>
     // em que a HERE roteia o pino para dentro da propriedade — o caminhão já está na
     // "porta" mas o fim da polilinha fica lá dentro. O fallback de polilinha cobre
     // casos onde o snap do GPS diverge do pino de destino.
-    if (!_arrived && pos.speed * 3.6 < 10) {
+    if (!_arrived && !_arriving && pos.speed * 3.6 < 10) {
       final straightToDestM = RadarService.haversine(
         latLng.latitude, latLng.longitude,
         widget.destination.latitude, widget.destination.longitude,
       );
       if (straightToDestM < 80) {
-        _handleArrival();
+        _beginArrival(latLng);
         return;
       }
       var remaining = 0.0;
@@ -547,7 +685,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         if (remaining > 120) break;
       }
       if (remaining < 50) {
-        _handleArrival();
+        _beginArrival(latLng);
         return;
       }
     }
@@ -1721,7 +1859,12 @@ class _NavigationScreenState extends State<NavigationScreen>
                       top: 8,
                       child: UpcomingDots(events: _upcomingEvents.skip(1).toList()),
                     ),
-                  if (!_markingMode) ...[
+                  if (_arriving)
+                    Positioned(
+                      left: 0, right: 0, bottom: 0,
+                      child: SafeArea(child: _buildArrivalBanner()),
+                    ),
+                  if (!_markingMode && !_arriving) ...[
                     // Botão pausar/retomar
                     Positioned(
                       bottom: 168,
