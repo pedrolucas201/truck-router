@@ -22,6 +22,7 @@ import '../models/truck_profile.dart';
 import '../models/user_restriction.dart';
 import '../repositories/restriction_repository.dart';
 import '../services/auth_service.dart';
+import '../services/field_log.dart';
 import '../services/here_routing_service.dart';
 import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
@@ -641,6 +642,17 @@ class _NavigationScreenState extends State<NavigationScreen>
       return;
     }
 
+    // Recálculo em andamento: a polyline atual é a antiga (vai ser trocada em
+    // _reroute). Rodar detecção de desvio/radar/manobra contra ela é trabalho
+    // jogado fora — e pior, re-incrementa _offRouteCount e fica re-disparando o
+    // reroute (storm) num caminhão que já está fora do corredor. Só atualiza a
+    // posição e deixa o recálculo terminar. O marcador já está ancorado parado
+    // por _reroute, então o ticker continua renderizando sem travar a thread.
+    if (_isRerouting) {
+      _currentPos = latLng;
+      return;
+    }
+
     // 1. Segmento mais próximo na polyline (projeção, não só vértice)
     final pts  = _result.polylinePoints;
     final start = (_closestPolylineIdx - 5).clamp(0, pts.length - 1);
@@ -692,7 +704,10 @@ class _NavigationScreenState extends State<NavigationScreen>
 
     // 3. Desvio de rota
     if (bestDist > _offRouteThresholdM) {
-      if (_offRouteCount == 0) _offRouteSince = DateTime.now();
+      if (_offRouteCount == 0) {
+        _offRouteSince = DateTime.now();
+        FieldLog.event('off_route', {'distM': bestDist.round()});
+      }
       _offRouteCount++;
       if (_offRouteCount >= _offRouteCountLimit) _reroute(fromPos: latLng, urgent: true);
     } else {
@@ -992,10 +1007,15 @@ class _NavigationScreenState extends State<NavigationScreen>
     final now = DateTime.now();
     // Desvio real (urgent) usa piso curto; refresh de background usa throttle cheio.
     final floorSec = urgent ? _rerouteUrgentFloorSec : _rerouteThrottleSec;
-    if (_lastRerouteAt != null && now.difference(_lastRerouteAt!).inSeconds < floorSec) return;
+    if (_lastRerouteAt != null && now.difference(_lastRerouteAt!).inSeconds < floorSec) {
+      // Throttle barrou: se isto aparecer em rajada nos breadcrumbs, é storm.
+      FieldLog.event('reroute_skip', {'urgent': urgent, 'floorSec': floorSec});
+      return;
+    }
     _lastRerouteAt = now;
     // Instrumentação P0: tempo de detecção (saiu do corredor → disparou o reroute).
     final detectMs = _offRouteSince != null ? now.difference(_offRouteSince!).inMilliseconds : -1;
+    FieldLog.event('reroute_start', {'urgent': urgent, 'detectMs': detectMs});
     final recalcSw = Stopwatch()..start();
 
     // Snapa marcador para posição atual e re-anchora — geometria vai mudar.
@@ -1059,6 +1079,13 @@ class _NavigationScreenState extends State<NavigationScreen>
       // detecção (corredor) vs recálculo (HERE + Firestore enrichment).
       debugPrint('[REROUTE] urgent=$urgent detecção=${detectMs}ms '
           'recálculo=${recalcSw.elapsedMilliseconds}ms');
+      FieldLog.event('reroute_done', {
+        'urgent':   urgent,
+        'detectMs': detectMs,
+        'recalcMs': recalcSw.elapsedMilliseconds,
+        'points':   newResult.polylinePoints.length,
+        'distM':    newResult.distanceMeters.round(),
+      });
       if (newResult.hasTimeRestriction && !_timeRestrictionAlertSpoken) {
         _timeRestrictionAlertSpoken = true;
         _speak('Atenção! Restrição para caminhões nesta via');
@@ -1072,7 +1099,10 @@ class _NavigationScreenState extends State<NavigationScreen>
           (newResult.distanceMeters - prevDistM).abs() > 500) {
         _speak('Rota recalculada');
       }
-    } catch (_) {
+    } catch (e, st) {
+      // Não vaza pro usuário (princípio do Márcio), mas não some: sobe como
+      // non-fatal pro Crashlytics + breadcrumb. Antes era catch(_) {} mudo.
+      FieldLog.error('reroute', e, st);
     } finally {
       if (mounted) setState(() => _isRerouting = false);
     }
