@@ -25,6 +25,7 @@ import '../services/auth_service.dart';
 import '../services/here_routing_service.dart';
 import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
+import '../utils/radar_tts.dart';
 import '../services/restriction_service.dart';
 import '../data/map_styles.dart';
 import '../data/pois.dart';
@@ -824,8 +825,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     } else {
       // Silencia o TTS quando dentro do limite. speedKmh == 0 = dado ausente → alerta por cautela.
       if (radar.speedKmh > 0 && _speedKmh <= radar.speedKmh) return;
-      final speed = radar.speedKmh > 0 ? ', ${radar.speedKmh} quilômetros por hora' : '';
-      _speak('Radar à frente$speed');
+      _speak(radarAlertPhrase(radar.speedKmh));
     }
   }
 
