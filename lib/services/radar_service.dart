@@ -100,6 +100,29 @@ class RadarService {
     return result;
   }
 
+  /// Distância perpendicular (em metros) de um ponto ao SEGMENTO a→b.
+  /// Projeção equiretangular local — precisa o suficiente na escala de rua.
+  /// Diferente de medir distância a um ponto solto da polyline: aqui a
+  /// separação entre vias vira a distância real, então radar em rua paralela
+  /// cai fora do corredor (mata o falso-positivo de paralela).
+  static double distanceToSegment(
+    double pLat, double pLng,
+    double aLat, double aLng,
+    double bLat, double bLng,
+  ) {
+    const mPerLat = 111320.0;
+    final mPerLng = 111320.0 * cos(aLat * pi / 180);
+    // Projeta para metros locais com origem em a.
+    final px = (pLng - aLng) * mPerLng, py = (pLat - aLat) * mPerLat;
+    final bx = (bLng - aLng) * mPerLng, by = (bLat - aLat) * mPerLat;
+    final segLen2 = bx * bx + by * by;
+    var t = segLen2 == 0 ? 0.0 : (px * bx + py * by) / segLen2;
+    t = t.clamp(0.0, 1.0); // clampa na ponta: ponto além do segmento mede até a ponta
+    final cx = t * bx, cy = t * by;
+    final dx = px - cx, dy = py - cy;
+    return sqrt(dx * dx + dy * dy);
+  }
+
   static double haversine(double lat1, double lng1, double lat2, double lng2) {
     const r = 6371000.0;
     final dLat = (lat2 - lat1) * pi / 180;
