@@ -97,6 +97,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   Timer? _refreshTimer;
   DateTime? _lastRerouteAt;
   int _offRouteCount = 0;
+  DateTime? _offRouteSince; // instrumentação: quando o caminhão saiu do corredor
   RadarPoint? _upcomingRadar;
   final Set<int> _announced = {};
 
@@ -157,8 +158,17 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _hasTimeRestrictionAlert  = false;
   bool _timeRestrictionAlertSpoken = false;
 
-  static const _offRouteThresholdM  = 120.0;
+  // Corredor de desvio: 40m (era 120m). 120m deixava o caminhão errar um
+  // quarteirão inteiro numa rua paralela antes de a contagem sequer começar —
+  // causa raiz do reroute de 63s no teste de campo. 40m ≈ comportamento Waze.
+  // O debounce de 3 fixes (_offRouteCountLimit) segura ruído de GPS.
+  static const _offRouteThresholdM  = 40.0;
   static const _offRouteCountLimit  = 3;
+  // Throttle do reroute: 10s pro refresh periódico/background; piso curto de 4s
+  // pra desvio real (urgent), que já é naturalmente limitado pelo re-arm do
+  // _offRouteCount (precisa de 3 fixes novos) + guarda _isRerouting.
+  static const _rerouteThrottleSec     = 10;
+  static const _rerouteUrgentFloorSec  = 4;
   static const _radarAlertM         = 400.0;
   static const _restrictionAlertM   = 300.0;
   static const _radarLookAheadM     = 1500.0;
@@ -544,10 +554,12 @@ class _NavigationScreenState extends State<NavigationScreen>
 
     // 3. Desvio de rota
     if (bestDist > _offRouteThresholdM) {
+      if (_offRouteCount == 0) _offRouteSince = DateTime.now();
       _offRouteCount++;
-      if (_offRouteCount >= _offRouteCountLimit) _reroute(latLng);
+      if (_offRouteCount >= _offRouteCountLimit) _reroute(fromPos: latLng, urgent: true);
     } else {
       _offRouteCount = 0;
+      _offRouteSince = null;
     }
 
     // 4. Manobra atual — busca monotônica: mIdx só avança, nunca retrocede.
@@ -836,12 +848,17 @@ class _NavigationScreenState extends State<NavigationScreen>
     await _reroute();
   }
 
-  Future<void> _reroute([LatLng? fromPos]) async {
+  Future<void> _reroute({LatLng? fromPos, bool urgent = false}) async {
     final origin = fromPos ?? _currentPos;
     if (_isRerouting || origin == null) return;
     final now = DateTime.now();
-    if (_lastRerouteAt != null && now.difference(_lastRerouteAt!).inSeconds < 45) return;
+    // Desvio real (urgent) usa piso curto; refresh de background usa throttle cheio.
+    final floorSec = urgent ? _rerouteUrgentFloorSec : _rerouteThrottleSec;
+    if (_lastRerouteAt != null && now.difference(_lastRerouteAt!).inSeconds < floorSec) return;
     _lastRerouteAt = now;
+    // Instrumentação P0: tempo de detecção (saiu do corredor → disparou o reroute).
+    final detectMs = _offRouteSince != null ? now.difference(_offRouteSince!).inMilliseconds : -1;
+    final recalcSw = Stopwatch()..start();
 
     // Snapa marcador para posição atual e re-anchora — geometria vai mudar.
     final snapTarget = _snappedPos ?? _currentPos;
@@ -900,6 +917,10 @@ class _NavigationScreenState extends State<NavigationScreen>
         _iconCache.clear();
         _radarIconsFuture        = null;
       });
+      // Instrumentação P0 (logcat / `flutter logs`): separa os 63s em
+      // detecção (corredor) vs recálculo (HERE + Firestore enrichment).
+      debugPrint('[REROUTE] urgent=$urgent detecção=${detectMs}ms '
+          'recálculo=${recalcSw.elapsedMilliseconds}ms');
       if (newResult.hasTimeRestriction && !_timeRestrictionAlertSpoken) {
         _timeRestrictionAlertSpoken = true;
         _speak('Atenção! Restrição para caminhões nesta via');
@@ -1425,7 +1446,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _restrictionIconCache[key] = icon;
     setState(() => _userRestrictions.add(r));
     _recenter();
-    if (_currentPos != null) await _reroute(_currentPos);
+    if (_currentPos != null) await _reroute(fromPos: _currentPos, urgent: true);
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
