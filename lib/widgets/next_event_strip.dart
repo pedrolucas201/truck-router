@@ -3,13 +3,14 @@ import '../models/route_event.dart';
 import 'route_event_style.dart';
 
 /// Degrau de proximidade do próximo evento. Controla visibilidade e destaque
-/// da faixa. Breakpoints iniciais (tunáveis em campo): 2 km / 800 m.
+/// da faixa. Breakpoints ajustados com o feedback do Gilberto (25/06): badge
+/// vinho aparece em ~1 km, vira vermelho perto. Tunáveis no teste de estrada.
 enum BadgeTier { far, mid, near }
 
-/// FAR: > 2 km · MID: 800 m–2 km (inclusivo nas pontas) · NEAR: < 800 m.
+/// FAR: > 1 km · MID (vinho): 500 m–1 km (inclusivo nas pontas) · NEAR (vermelho): < 500 m.
 BadgeTier tierFor(double distanceM) {
-  if (distanceM < 800) return BadgeTier.near;
-  if (distanceM <= 2000) return BadgeTier.mid;
+  if (distanceM < 500) return BadgeTier.near;
+  if (distanceM <= 1000) return BadgeTier.mid;
   return BadgeTier.far;
 }
 

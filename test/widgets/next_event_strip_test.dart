@@ -7,12 +7,12 @@ void main() {
   group('tierFor', () {
     test('mapeia distância para o degrau certo', () {
       expect(tierFor(350), BadgeTier.near);
-      expect(tierFor(799), BadgeTier.near);
-      expect(tierFor(800), BadgeTier.mid);   // limite inferior do MID (inclusivo)
-      expect(tierFor(1200), BadgeTier.mid);
-      expect(tierFor(2000), BadgeTier.mid);  // limite superior do MID (inclusivo)
-      expect(tierFor(2001), BadgeTier.far);
-      expect(tierFor(5000), BadgeTier.far);
+      expect(tierFor(499), BadgeTier.near);
+      expect(tierFor(500), BadgeTier.mid);   // limite inferior do MID (inclusivo)
+      expect(tierFor(800), BadgeTier.mid);
+      expect(tierFor(1000), BadgeTier.mid);  // limite superior do MID (inclusivo)
+      expect(tierFor(1001), BadgeTier.far);
+      expect(tierFor(2000), BadgeTier.far);
     });
   });
 
@@ -30,10 +30,10 @@ void main() {
     testWidgets('MID mostra ícone + palavra + distância (auto-suficiente no mudo)',
         (tester) async {
       await tester.pumpWidget(
-          wrap(const RouteEvent(type: RouteEventType.radar, distanceM: 1200)));
+          wrap(const RouteEvent(type: RouteEventType.radar, distanceM: 800)));
       expect(find.byIcon(Icons.camera_alt), findsOneWidget);
       expect(find.text('RADAR'), findsOneWidget);
-      expect(find.text('1,2 km'), findsOneWidget);
+      expect(find.text('800 m'), findsOneWidget);
       expect(find.byKey(const ValueKey('next-event-glow')), findsNothing);
     });
 
