@@ -123,6 +123,26 @@ class RadarService {
     return sqrt(dx * dx + dy * dy);
   }
 
+  /// Menor distância perpendicular (metros) de um ponto ao trajeto (sequência
+  /// de segmentos). É o teste de "está na via": compara contra os segmentos da
+  /// rota, não contra pontos soltos.
+  static double distanceToPath(double lat, double lng, List<LatLng> path) {
+    if (path.isEmpty) return double.infinity;
+    if (path.length == 1) {
+      return haversine(lat, lng, path[0].latitude, path[0].longitude);
+    }
+    var best = double.infinity;
+    for (var i = 0; i < path.length - 1; i++) {
+      final d = distanceToSegment(
+        lat, lng,
+        path[i].latitude, path[i].longitude,
+        path[i + 1].latitude, path[i + 1].longitude,
+      );
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
   static double haversine(double lat1, double lng1, double lat2, double lng2) {
     const r = 6371000.0;
     final dLat = (lat2 - lat1) * pi / 180;
