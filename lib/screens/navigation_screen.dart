@@ -101,6 +101,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _offRouteSince; // instrumentação: quando o caminhão saiu do corredor
   RadarPoint? _upcomingRadar;
   final Set<int> _announced = {};
+  int _lastTickMs = 0; // throttle do _predictTick (cap ~30fps, alivia main thread/channel)
 
   // Cache de ícones para radares
   final _iconCache = <String, BitmapDescriptor>{};
@@ -846,6 +847,13 @@ class _NavigationScreenState extends State<NavigationScreen>
     final pts = _result.polylinePoints;
     if (pts.length < 2) return;
 
+    // Cap ~30fps: a 60fps cada tick faz setState→build→update do marker pelo
+    // method channel; em device fraco isso satura a main thread e a seta atrasa.
+    // 30fps é liso pra um puck e corta o tráfego/rebuild pela metade.
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastTickMs < 30) return;
+    _lastTickMs = nowMs;
+
     final elapsedMs = DateTime.now()
         .difference(anchorTime)
         .inMilliseconds
@@ -1072,9 +1080,26 @@ class _NavigationScreenState extends State<NavigationScreen>
         _announced.clear();
         _lastRadarAlertKey       = null;
         _lastRestrictionAlertKey = null;
-        _iconCache.clear();
+        // NÃO limpar _iconCache: é keyed por conteúdo (tipo+velocidade), não por
+        // rota — os mesmos bitmaps servem após o reroute. Limpar forçava regerar
+        // todos via PictureRecorder.toImage() = pico de main thread a cada
+        // recálculo (pior no storm). _radarIconsFuture rebuilda com cache-hit.
         _radarIconsFuture        = null;
       });
+      // Pós-reroute: não re-anunciar (storm "Em 500 metros") manobra que já
+      // estamos em cima. Semeia os tiers já ultrapassados no instante do
+      // recálculo — só fala quando o caminhão chegar MAIS perto. (maneuvers em
+      // ordem de rota → para de semear ao passar de 500m.)
+      for (var i = 0; i < newResult.maneuvers.length; i++) {
+        final mv = newResult.maneuvers[i];
+        if (mv.action == 'depart' || mv.action == 'arrive') continue;
+        final d = RadarService.haversine(origin.latitude, origin.longitude,
+            mv.position.latitude, mv.position.longitude);
+        if (d > 500) break;
+        _announced.add(i * 10 + 0);
+        if (d <= 200) _announced.add(i * 10 + 1);
+        if (d <= 50)  _announced.add(i * 10 + 2);
+      }
       // Instrumentação P0 (logcat / `flutter logs`): separa os 63s em
       // detecção (corredor) vs recálculo (HERE + Firestore enrichment).
       debugPrint('[REROUTE] urgent=$urgent detecção=${detectMs}ms '
@@ -1695,11 +1720,19 @@ class _NavigationScreenState extends State<NavigationScreen>
                     future: _radarIconsFuture ?? Future.value([]),
                     builder: (context, snap) {
                       if (snap.hasData) {
-                        for (var i = 0; i < _visibleRadares.length; i++) {
+                        // _visibleRadares e os ícones (snap.data) são listas
+                        // PARALELAS montadas em momentos diferentes. No reroute
+                        // _radarIconsFuture vira null → Future.value([]) → ícones
+                        // vazios enquanto _visibleRadares ainda tem radar; indexar
+                        // snap.data![i] com i de _visibleRadares dava RangeError
+                        // TODO FRAME e pintava o mapa de cinza. Limita ao menor.
+                        final icons = snap.data!;
+                        final n = min(_visibleRadares.length, icons.length);
+                        for (var i = 0; i < n; i++) {
                           markers.add(Marker(
                             markerId: MarkerId('r_${_visibleRadares[i].lat}_${_visibleRadares[i].lng}'),
                             position: LatLng(_visibleRadares[i].lat, _visibleRadares[i].lng),
-                            icon: snap.data![i],
+                            icon: icons[i],
                             infoWindow: InfoWindow(
                               title: _visibleRadares[i].speedKmh > 0
                                   ? '${_visibleRadares[i].speedKmh} km/h'
