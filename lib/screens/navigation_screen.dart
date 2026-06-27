@@ -127,7 +127,6 @@ class _NavigationScreenState extends State<NavigationScreen>
   PoliceAlert? _nearestPoliceAlert;
   bool _hasFirstFix = false;
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
-  BitmapDescriptor? _userArrowIcon;
 
   // Animação suave do marcador (N3)
   // Dead-reckoning: a seta é extrapolada por velocidade constante AO LONGO da
@@ -213,9 +212,6 @@ class _NavigationScreenState extends State<NavigationScreen>
       ..repeat();
     _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
     WakelockPlus.enable();
-    _buildUserArrow().then((icon) {
-      if (mounted) setState(() => _userArrowIcon = icon);
-    });
     _loadRoutePois();
     _policeTimelineTimer = Timer.periodic(
       const Duration(minutes: 2),
@@ -803,21 +799,9 @@ class _NavigationScreenState extends State<NavigationScreen>
     _checkPoliceAlerts(latLng);
     _buildUpcomingEvents();
 
-    // 8. Câmera segue o usuário (pausada no modo crosshair)
-    // Usa pts[bestIdx] (snapped) em vez do GPS bruto — evita que a seta
-    // apareça fora da via no zoom aproximado por drift de GPS.
-    if (!_markingMode) {
-      final camTarget  = pts.isNotEmpty ? bestSnap : latLng;
-      final camBearing = routeBearing;
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(CameraPosition(
-          target:  camTarget,
-          zoom:    _zoom,
-          tilt:    45,
-          bearing: camBearing,
-        )),
-      );
-    }
+    // 8. Câmera: o follow é feito no _predictTick (segue a predição a ~30fps,
+    // com o puck fixo embaixo). Aqui só atualizamos a âncora (acima, _setAnchor);
+    // o animateCamera de 1Hz foi removido pra não brigar com o follow contínuo.
   }
 
   // Registra um novo fix GPS como âncora da predição. O _predTicker passa a
@@ -868,10 +852,21 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (_sameLatLng(predPos, _animPos) && (predBearing - _animBearing).abs() < 0.1) {
       return;
     }
-    setState(() {
-      _animPos     = predPos;
-      _animBearing = predBearing;
-    });
+    // Sem Marker pra animar: NÃO faz setState (o puck é widget estático). Só move
+    // a câmera seguindo a predição a ~30fps → o mapa desliza liso sob o puck fixo,
+    // e some o rebuild de 60fps que saturava a main thread do device fraco.
+    _animPos     = predPos;
+    _animBearing = predBearing;
+    if (!_markingMode && !_paused) {
+      _mapController?.moveCamera(
+        CameraUpdate.newCameraPosition(CameraPosition(
+          target:  predPos,
+          zoom:    _zoom,
+          tilt:    45,
+          bearing: predBearing,
+        )),
+      );
+    }
   }
 
   // Caminha `distM` à frente pela polyline a partir de (startIdx, startPos).
@@ -1252,40 +1247,6 @@ class _NavigationScreenState extends State<NavigationScreen>
     final icon  = BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
     _iconCache[key] = icon;
     return icon;
-  }
-
-  // ── Seta do usuário (Waze-style) ─────────────────────────────────────────────
-
-  static Future<BitmapDescriptor> _buildUserArrow() async {
-    const size = 48.0;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    final path = Path()
-      ..moveTo(size / 2, 2)           // ponta superior (frente)
-      ..lineTo(size - 4, size - 6)    // canto direito
-      ..lineTo(size / 2, size * 0.60) // entalhe central
-      ..lineTo(4, size - 6)           // canto esquerdo
-      ..close();
-
-    // Outline branco
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5
-        ..strokeJoin = StrokeJoin.round,
-    );
-    // Preenchimento azul
-    canvas.drawPath(
-      path,
-      Paint()..color = const Color(0xFF1565C0),
-    );
-
-    final img   = await recorder.endRecording().toImage(size.toInt(), size.toInt());
-    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
   // ── Projeção no segmento mais próximo ────────────────────────────────────────
@@ -1678,16 +1639,10 @@ class _NavigationScreenState extends State<NavigationScreen>
         infoWindow: InfoWindow(title: 'Destino', snippet: widget.destinationLabel),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       ),
-      if (_currentPos != null && _lastPosUpdateAt != null)
-        Marker(
-          markerId: const MarkerId('user'),
-          position: _animPos,
-          icon: _userArrowIcon ??
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-          flat: true,
-          rotation: _animBearing,
-          anchor: const Offset(0.5, 0.65),
-        ),
+      // Puck do usuário NÃO é mais um Marker. Atualizar posição de Marker via
+      // method channel a cada frame era o gargalo do lag (flutter#33430). Agora
+      // é um widget Flutter fixo (NavPuck) sobreposto no Stack — câmera segue a
+      // posição (com padding pra deixar a seta embaixo). Só o destino é Marker.
     };
 
     return Scaffold(
@@ -1762,27 +1717,43 @@ class _NavigationScreenState extends State<NavigationScreen>
                           ));
                         }
                       }
-                      return GoogleMap(
-                        initialCameraPosition: CameraPosition(
-                          target: _currentPos ?? widget.destination,
-                          zoom: 17,
-                          tilt: 45,
+                      // padding.top empurra o alvo da câmera (= posição do
+                      // caminhão) pra ~85% da altura → puck embaixo, pista à
+                      // frente (UX Márcio). O nativo trata o tilt corretamente.
+                      return LayoutBuilder(
+                        builder: (context, c) => GoogleMap(
+                          initialCameraPosition: CameraPosition(
+                            target: _currentPos ?? widget.destination,
+                            zoom: 17,
+                            tilt: 45,
+                          ),
+                          padding: EdgeInsets.only(
+                            top: c.maxHeight * (2 * _puckYFrac - 1),
+                          ),
+                          onMapCreated: (ctrl) {
+                            _mapController = ctrl;
+                          },
+                          style: _themeController.isNight ? kNightMapStyle : null,
+                          onCameraMove: (pos) => _cameraTarget = pos.target,
+                          polylines: polylines,
+                          markers: markers,
+                          circles: radarCircles,
+                          trafficEnabled: false,
+                          myLocationButtonEnabled: false,
+                          zoomControlsEnabled: false,
+                          compassEnabled: false,
                         ),
-                        onMapCreated: (c) {
-                          _mapController = c;
-                        },
-                        style: _themeController.isNight ? kNightMapStyle : null,
-                        onCameraMove: (pos) => _cameraTarget = pos.target,
-                        polylines: polylines,
-                        markers: markers,
-                        circles: radarCircles,
-                        trafficEnabled: false,
-                        myLocationButtonEnabled: false,
-                        zoomControlsEnabled: false,
-                        compassEnabled: false,
                       );
                     },
                   ),
+                  // ── Puck do usuário: widget Flutter fixo (fora do channel) ──
+                  // Câmera heading-up → a seta aponta sempre pra cima; o mapa gira
+                  // por baixo. Posição na tela casa com o padding do mapa.
+                  if (_currentPos != null && _lastPosUpdateAt != null && !_markingMode)
+                    Align(
+                      alignment: const Alignment(0, 2 * _puckYFrac - 1),
+                      child: const IgnorePointer(child: NavPuck()),
+                    ),
                   // ── Alerta restrição bloqueada / horário ────────────────
                   if ((_nearbyBlockedRestriction != null || _hasTimeRestrictionAlert) && !_markingMode)
                     Positioned(
@@ -2366,4 +2337,51 @@ class _BarItem extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Fração vertical (0=topo, 1=base) onde o puck fica na tela. ~0.85 = seta
+/// embaixo, ~90% de pista à frente (pedido UX do Márcio). O padding.top do
+/// GoogleMap e o Alignment do puck derivam disto: ambos usam (2*_puckYFrac-1).
+const _puckYFrac = 0.85;
+
+/// Puck (seta) do usuário como widget Flutter fixo, FORA do method channel do
+/// mapa. Atualizar posição de um Marker a cada frame era o gargalo do lag
+/// (flutter#33430); aqui a seta é estática e o mapa desliza por baixo. Câmera é
+/// heading-up, então a seta sempre aponta pra cima. Réplica de _buildUserArrow.
+class NavPuck extends StatelessWidget {
+  const NavPuck({super.key});
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(
+        width: 40,
+        height: 40,
+        child: CustomPaint(painter: _PuckPainter()),
+      );
+}
+
+class _PuckPainter extends CustomPainter {
+  const _PuckPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width;
+    final path = Path()
+      ..moveTo(s / 2, 2)            // ponta superior (frente)
+      ..lineTo(s - 4, s - 6)       // canto direito
+      ..lineTo(s / 2, s * 0.60)    // entalhe central
+      ..lineTo(4, s - 6)           // canto esquerdo
+      ..close();
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5
+        ..strokeJoin = StrokeJoin.round,
+    );
+    canvas.drawPath(path, Paint()..color = const Color(0xFF1565C0));
+  }
+
+  @override
+  bool shouldRepaint(covariant _PuckPainter oldDelegate) => false;
 }
