@@ -919,31 +919,34 @@ class _NavigationScreenState extends State<NavigationScreen>
                    m.action == 'keepLeft' || m.action == 'keepRight';
 
     if (isTurn) {
-      // 500m só no nível completo
-      if (_audioLevel == AudioLevel.completo && distM <= 500 && !_announced.contains(k500)) {
+      // Threshold mais próximo primeiro: ao iniciar/reentrar já perto da manobra
+      // (ex.: 184m), evita soltar "Em 500 metros" espúrio. Cada ramo semeia os
+      // thresholds mais longes, então a aproximação normal anuncia 500→200→50.
+      if (distM <= 50 && !_announced.contains(k50)) {
+        _announced.add(k50);
+        _announced.add(k200);
         _announced.add(k500);
-        _speak('Em 500 metros. ${m.instruction}');
+        _speak(m.instruction);
       } else if (distM <= 200 && !_announced.contains(k200)) {
         _announced.add(k200);
         _announced.add(k500);
         _speak('Em 200 metros. ${m.instruction}');
-      } else if (distM <= 50 && !_announced.contains(k50)) {
+      } else if (_audioLevel == AudioLevel.completo && distM <= 500 && !_announced.contains(k500)) {
+        // 500m só no nível completo
+        _announced.add(k500);
+        _speak('Em 500 metros. ${m.instruction}');
+      }
+    } else if (isExit) {
+      // Saídas: 200m no completo, 50m em ambos — mais próximo primeiro (idem acima)
+      if (distM <= 50 && !_announced.contains(k50)) {
         _announced.add(k50);
         _announced.add(k200);
         _announced.add(k500);
         _speak(m.instruction);
-      }
-    } else if (isExit) {
-      // Saídas: 200m no completo, 50m em ambos
-      if (_audioLevel == AudioLevel.completo && distM <= 200 && !_announced.contains(k200)) {
+      } else if (_audioLevel == AudioLevel.completo && distM <= 200 && !_announced.contains(k200)) {
         _announced.add(k200);
         _announced.add(k500);
         _speak('Em 200 metros. ${m.instruction}');
-      } else if (distM <= 50 && !_announced.contains(k50)) {
-        _announced.add(k50);
-        _announced.add(k200);
-        _announced.add(k500);
-        _speak(m.instruction);
       }
     }
     // continue/keep/straight: silêncio total — só aparece na _InstructionBar
