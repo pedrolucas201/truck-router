@@ -13,6 +13,15 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${googleMapsApiKey}"/>
+        <!-- Impeller OFF (volta pro Skia/GLES). Medido em device (Redmi Note 11,
+             Adreno 610): com Impeller/Vulkan a platform view do google_maps_flutter
+             trasha o compositor — ~7.5k erros 'unrecognized IGraphicBufferProducer'
+             por sessão de navegação = lag de render real da seta/mapa. Com Skia
+             cai a ~0. O opt-out é "deprecated" no Flutter atual mas funciona;
+             revisitar quando o combo Impeller+platform view amadurecer ou ao migrar. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"
