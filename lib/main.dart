@@ -16,6 +16,7 @@ import 'screens/map_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'providers/theme_controller.dart';
 import 'services/field_log.dart';
+import 'services/auth_service.dart';
 
 const _backendUrl = String.fromEnvironment('BACKEND_URL');
 
@@ -40,6 +41,11 @@ void main() async {
     // a mesma sessão aparece nos dois lados, então o trace do crash linka direto
     // na sequência de eventos que levou nele.
     FirebaseCrashlytics.instance.setCustomKey('session', FieldLog.sessionId);
+
+    // Sign-in anônimo já no startup: garante auth pra todo caminho de navegação
+    // (o Histórico não passa por geocoding/routing, que faziam o login lazy) —
+    // senão os writes de telemetria (field_logs) tomam permission-denied mudo.
+    unawaited(AuthService.ensureSignedIn());
 
     final prefs = await SharedPreferences.getInstance();
     final onboardingDone = prefs.getBool('onboarding_done') ?? false;

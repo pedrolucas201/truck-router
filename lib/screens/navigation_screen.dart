@@ -27,6 +27,8 @@ import '../services/here_routing_service.dart';
 import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
 import '../utils/radar_tts.dart';
+import '../utils/geo_angle.dart';
+import '../utils/maneuver_phrase.dart';
 import '../services/restriction_service.dart';
 import '../data/map_styles.dart';
 import '../data/pois.dart';
@@ -96,12 +98,16 @@ class _NavigationScreenState extends State<NavigationScreen>
   ZoomLevel _zoomLevel = ZoomLevel.medio;
   bool _isRerouting = false;
   Timer? _refreshTimer;
+  Timer? _heartbeatTimer;
   DateTime? _lastRerouteAt;
   int _offRouteCount = 0;
   DateTime? _offRouteSince; // instrumentação: quando o caminhão saiu do corredor
   RadarPoint? _upcomingRadar;
   final Set<int> _announced = {};
   int _lastTickMs = 0; // throttle do _predictTick (cap ~30fps, alivia main thread/channel)
+  // Histórico curto de posições projetadas na rota (tempoMs, snap) p/ detectar
+  // "parado" pelo avanço líquido ao longo da rota — imune ao jitter de velocidade.
+  final List<(int, LatLng)> _snapHistory = [];
 
   // Cache de ícones para radares
   final _iconCache = <String, BitmapDescriptor>{};
@@ -143,6 +149,14 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _lastPosUpdateAt;  // hora do último fix (= anchor time)
   static const double _stopKmh = 3.0;
   static const int _maxPredictMs = 2500;
+  // Suavização da rotação da câmera (heading-up). Lerp por tick (~30fps) e
+  // antecipação do rumo à frente — mata o "salto" de bearing na curva.
+  static const double _bearingLerp = 0.2;
+  static const double _bearingLookAheadM = 20.0;
+  // Detecção de parado por progresso ao longo da rota (não pela velocidade do GPS,
+  // que dá spikes de 6-22 km/h parado). Calibráveis no device.
+  static const int _stopWindowMs = 2500;
+  static const double _stopNetM = 7.0;
 
   // Cache dos overlays do mapa (polylines/circles). A animação do marcador
   // dispara setState a 60fps; sem cache, o build() realocava as sublists da
@@ -194,6 +208,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   void initState() {
     super.initState();
     _result  = widget.result;
+    // Telemetria: marca o início do drive — garante rastro mesmo num trajeto
+    // limpo (sem reroute), pra diagnosticar "travou" onde o heartbeat parar.
+    FieldLog.event('nav_start', {
+      'points': _result.polylinePoints.length,
+      'distM':  _result.distanceMeters,
+      'durS':   _result.durationSeconds,
+    });
     _radares        = List.of(widget.initialRadares);
     _visibleRadares = List.of(widget.initialRadares);
     _radarIconsFuture = Future.wait(_radares.map(_radarIcon));
@@ -217,6 +238,18 @@ class _NavigationScreenState extends State<NavigationScreen>
       const Duration(minutes: 2),
       (_) => _refreshPoliceTimeline(),
     );
+    // Heartbeat de campo: posição/velocidade a cada 30s enquanto navega de fato.
+    // Num freeze, o último heartbeat marca ONDE travou (o motorista não captura
+    // logcat dirigindo). A 60 km/h, 30s ≈ 500m de resolução.
+    // NOTA: em produção com muitos usuários, gatear/aumentar o intervalo.
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_paused || _arrived || _currentPos == null) return;
+      FieldLog.event('heartbeat', {
+        'idx':  _closestPolylineIdx,
+        'kmh':  _speedKmh.round(),
+        'remM': _remainingDistanceM().round(),
+      });
+    });
   }
 
   @override
@@ -224,6 +257,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _policeTimelineTimer?.cancel();
+    _heartbeatTimer?.cancel();
     _arrivalTimer?.cancel();
     _posSub?.cancel();
     _tts.stop();
@@ -280,8 +314,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (m.action == 'depart' || m.action == 'arrive') return;
     final dist = _distToNextManeuver;
     final text = dist.isFinite && dist < 50000
-        ? 'Em ${_fmtDist(dist)}. ${m.instruction}'
-        : m.instruction;
+        ? 'Em ${_fmtDist(dist)}. ${_speech(m)}'
+        : _speech(m);
     _speak(text);
     // Marca os thresholds já anunciados para _checkTts não repetir no próximo GPS update.
     final idx = _maneuverIndex;
@@ -404,6 +438,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   void _beginArrival(LatLng anchor) {
     if (_arrived || _arriving) return;
     _arriving = true;
+    FieldLog.event('arrival');
     _arrivalAnchor = anchor;
     _arrivalProgress = 0.0;
     if (_audioLevel != AudioLevel.silencioso) {
@@ -429,6 +464,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   // guiá-lo de volta (típico de dar a volta no quarteirão pra entrar no pátio).
   void _cancelArrival() {
     if (!_arriving) return;
+    FieldLog.event('arrival_cancel');
     _arrivalTimer?.cancel();
     _arrivalTimer = null;
     _arriving = false;
@@ -444,6 +480,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   void _finalizeArrival() {
     if (_arrived) return;
     _arrived = true;
+    FieldLog.event('arrival_done');
     _arrivalTimer?.cancel();
     _arrivalTimer = null;
     _arriving = false;
@@ -699,6 +736,28 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
 
+    // 2.5 Parado vs andando — pelo PROGRESSO AO LONGO DA ROTA, não pela velocidade
+    // do GPS (que mente parado: jitter vira spikes de 6-22 km/h). bestSnap já é a
+    // projeção na rota, então o jitter lateral some; só o avanço líquido na janela
+    // conta. Parado → velocidade efetiva 0 → predição congela (puck para de andar
+    // sozinho) e o TTS não dispara (mata o "Em 500m" espúrio). Tradeoff: abaixo de
+    // ~_stopNetM/_stopWindowMs (~10 km/h) o puck pode ficar um tico duro — aceitável
+    // p/ caminhão (phantom parado no semáforo é pior que crawl levemente travado).
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _snapHistory.add((nowMs, bestSnap));
+    _snapHistory.removeWhere((e) => nowMs - e.$1 > _stopWindowMs);
+    final winStart = _snapHistory.first;
+    final netAdvanceM = RadarService.haversine(
+        winStart.$2.latitude, winStart.$2.longitude, bestSnap.latitude, bestSnap.longitude);
+    // Só confia no veredito "parado" quando a janela já encheu (~>60%); antes disso
+    // (início da nav) cai no gate de velocidade pra não congelar à toa.
+    final windowReady = (nowMs - winStart.$1) >= (_stopWindowMs * 0.6);
+    // Antes da janela encher (~1,5s do início) NÃO caímos na pos.speed (fantasma)
+    // — assumimos parado. Senão o jitter no start reabre o phantom/TTS espúrio
+    // exatamente quando a nav abre perto da 1ª manobra.
+    final movingByRoute = windowReady && netAdvanceM >= _stopNetM;
+    final effSpeedMps = movingByRoute ? pos.speed : 0.0;
+
     // 3. Desvio de rota
     if (bestDist > _offRouteThresholdM) {
       if (_offRouteCount == 0) {
@@ -730,7 +789,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         latLng.latitude, latLng.longitude,
         nextManeuver.position.latitude, nextManeuver.position.longitude,
       );
-      _checkTts(nextIdx, distToNext, nextManeuver);
+      if (movingByRoute) _checkTts(nextIdx, distToNext, nextManeuver);
     }
 
     // 5. Radares visíveis: até 1500m à frente na polyline, restritos ao corredor
@@ -777,7 +836,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       _currentPos                 = latLng;
       _snappedPos                 = pts.isNotEmpty ? bestSnap : latLng;
       _bearing                    = pos.heading;
-      _speedKmh                   = pos.speed * 3.6 < 2.5 ? 0.0 : (pos.speed * 3.6).clamp(0.0, 300.0);
+      _speedKmh                   = effSpeedMps * 3.6 < 2.5 ? 0.0 : (effSpeedMps * 3.6).clamp(0.0, 300.0);
       _closestPolylineIdx         = bestIdx;
       _maneuverIndex              = nextIdx;
       _distToNextManeuver         = distToNext;
@@ -792,7 +851,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     // heading bruto do GPS. Evita a "pescadinha" — a seta balançando em cima
     // de um mapa que já gira suave. Fallback para heading só sem rota.
     final routeBearing = pts.length >= 2 ? _segmentBearing(pts, bestIdx) : pos.heading;
-    _setAnchor(pts.isNotEmpty ? bestSnap : latLng, bestIdx, routeBearing, pos.speed);
+    _setAnchor(pts.isNotEmpty ? bestSnap : latLng, bestIdx, routeBearing, effSpeedMps);
     _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
     _checkSpeedAlert(_speedKmh);
@@ -847,23 +906,32 @@ class _NavigationScreenState extends State<NavigationScreen>
         : 0.0;
 
     final (predPos, predIdx) = _advanceAlongRoute(pts, _anchorIdx, anchor, advanceM);
-    final predBearing = _segmentBearing(pts, predIdx);
+    // Antecipação: mira o rumo do segmento ~_bearingLookAheadM à frente, não o de
+    // baixo do puck. Assim a câmera começa a girar ANTES de entrar na curva (como
+    // Waze), compensando o lag natural do lerp.
+    final (_, lookIdx) = _advanceAlongRoute(pts, predIdx, predPos, _bearingLookAheadM);
+    final targetBearing = _segmentBearing(pts, lookIdx);
 
-    if (_sameLatLng(predPos, _animPos) && (predBearing - _animBearing).abs() < 0.1) {
+    // Menor arco entre o bearing atual e o alvo: se já convergiu (e a posição não
+    // mudou), não há o que mover.
+    final bearingDelta = ((targetBearing - _animBearing + 540) % 360) - 180;
+    if (_sameLatLng(predPos, _animPos) && bearingDelta.abs() < 0.1) {
       return;
     }
     // Sem Marker pra animar: NÃO faz setState (o puck é widget estático). Só move
     // a câmera seguindo a predição a ~30fps → o mapa desliza liso sob o puck fixo,
     // e some o rebuild de 60fps que saturava a main thread do device fraco.
+    // O bearing vai por lerp angular (menor arco) → o degrau por-segmento vira
+    // giro contínuo, matando o "salto" na curva.
     _animPos     = predPos;
-    _animBearing = predBearing;
+    _animBearing = lerpAngleDeg(_animBearing, targetBearing, _bearingLerp);
     if (!_markingMode && !_paused) {
       _mapController?.moveCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
           target:  predPos,
           zoom:    _zoom,
           tilt:    45,
-          bearing: predBearing,
+          bearing: _animBearing,
         )),
       );
     }
@@ -904,6 +972,11 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   // ── TTS por threshold de distância ───────────────────────────────────────────
 
+  // Texto falado/exibido da manobra: usa a instrução da HERE; se vier vazia
+  // (acontece no truck routing), sintetiza de action+direction ("vire à direita").
+  String _speech(RouteManeuver m) =>
+      resolveManeuverText(m.instruction, m.action, m.direction);
+
   void _checkTts(int idx, double distM, RouteManeuver m) {
     if (m.action == 'depart' || m.action == 'arrive') return;
     final k500 = idx * 10 + 0;
@@ -926,15 +999,15 @@ class _NavigationScreenState extends State<NavigationScreen>
         _announced.add(k50);
         _announced.add(k200);
         _announced.add(k500);
-        _speak(m.instruction);
+        _speak(_speech(m));
       } else if (distM <= 200 && !_announced.contains(k200)) {
         _announced.add(k200);
         _announced.add(k500);
-        _speak('Em 200 metros. ${m.instruction}');
+        _speak('Em 200 metros. ${_speech(m)}');
       } else if (_audioLevel == AudioLevel.completo && distM <= 500 && !_announced.contains(k500)) {
         // 500m só no nível completo
         _announced.add(k500);
-        _speak('Em 500 metros. ${m.instruction}');
+        _speak('Em 500 metros. ${_speech(m)}');
       }
     } else if (isExit) {
       // Saídas: 200m no completo, 50m em ambos — mais próximo primeiro (idem acima)
@@ -942,11 +1015,11 @@ class _NavigationScreenState extends State<NavigationScreen>
         _announced.add(k50);
         _announced.add(k200);
         _announced.add(k500);
-        _speak(m.instruction);
+        _speak(_speech(m));
       } else if (_audioLevel == AudioLevel.completo && distM <= 200 && !_announced.contains(k200)) {
         _announced.add(k200);
         _announced.add(k500);
-        _speak('Em 200 metros. ${m.instruction}');
+        _speak('Em 200 metros. ${_speech(m)}');
       }
     }
     // continue/keep/straight: silêncio total — só aparece na _InstructionBar
@@ -2115,7 +2188,9 @@ class _InstructionBar extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        maneuver?.instruction ?? '—',
+                        maneuver == null
+                            ? '—'
+                            : resolveManeuverText(maneuver!.instruction, maneuver!.action, maneuver!.direction),
                         style: TextStyle(
                             color: instrColor, fontSize: 16, fontWeight: FontWeight.w600),
                         maxLines: 2,
