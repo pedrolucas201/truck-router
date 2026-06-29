@@ -2152,22 +2152,6 @@ class _NavigationScreenState extends State<NavigationScreen>
                       left: 0, right: 0, bottom: 0,
                       child: SafeArea(child: _buildArrivalBanner()),
                     ),
-                  // Botão centralizar — só no olhar-ao-redor, em destaque.
-                  if (_freeLook && !_markingMode && !_arriving)
-                    Positioned(
-                      bottom: 220,
-                      right: 12,
-                      child: FloatingActionButton.extended(
-                        heroTag: 'nav_recenter',
-                        backgroundColor: Colors.blue.shade700,
-                        foregroundColor: Colors.white,
-                        elevation: 4,
-                        tooltip: 'Voltar a seguir',
-                        onPressed: _recenter,
-                        icon: const Icon(Icons.my_location),
-                        label: const Text('Centralizar'),
-                      ),
-                    ),
                   if (!_markingMode && !_arriving) ...[
                     // Botão pausar/retomar
                     Positioned(
@@ -2219,18 +2203,32 @@ class _NavigationScreenState extends State<NavigationScreen>
                         child: const Icon(Icons.add_location_alt),
                       ),
                     ),
-                    // Botão centralizar
+                    // Botão centralizar — mesmo canto sempre (memória muscular).
+                    // Seguindo: pequeno e neutro. Free-look: cresce e fica azul
+                    // pra deixar óbvio que dá pra voltar a seguir.
                     Positioned(
                       bottom: 12,
                       right: 12,
-                      child: FloatingActionButton.small(
-                        heroTag: 'nav_recenter',
-                        backgroundColor: Colors.white,
-                        foregroundColor: const Color(0xFF1565C0),
-                        elevation: 4,
-                        onPressed: _recenter,
-                        child: const Icon(Icons.my_location),
-                      ),
+                      child: _freeLook
+                          ? FloatingActionButton.extended(
+                              heroTag: 'nav_recenter',
+                              backgroundColor: Colors.blue.shade700,
+                              foregroundColor: Colors.white,
+                              elevation: 4,
+                              tooltip: 'Voltar a seguir',
+                              onPressed: _recenter,
+                              icon: const Icon(Icons.my_location),
+                              label: const Text('Centralizar'),
+                            )
+                          : FloatingActionButton.small(
+                              heroTag: 'nav_recenter',
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF1565C0),
+                              elevation: 4,
+                              tooltip: 'Centralizar',
+                              onPressed: _recenter,
+                              child: const Icon(Icons.my_location),
+                            ),
                     ),
                   ],
                   if (_markingMode) ...[
