@@ -49,15 +49,25 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="geo"/>
             </intent-filter>
-            <!-- maps.google.com — aparece no chooser ao receber link de rota compartilhada -->
+            <!-- Localização/rota compartilhada (WhatsApp etc). maps.google.com e o
+                 shortlink maps.app.goo.gl: qualquer path (inclui /?q= na raiz). -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data
-                    android:scheme="https"
-                    android:host="maps.google.com"
-                    android:pathPrefix="/maps"/>
+                <data android:scheme="https"/>
+                <data android:host="maps.google.com"/>
+                <data android:host="maps.app.goo.gl"/>
+            </intent-filter>
+            <!-- www.google.com/maps e google.com/maps: restrito a /maps pra não
+                 aparecer no chooser de QUALQUER link google.com. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"/>
+                <data android:host="www.google.com" android:pathPrefix="/maps"/>
+                <data android:host="google.com" android:pathPrefix="/maps"/>
             </intent-filter>
         </activity>
         <service

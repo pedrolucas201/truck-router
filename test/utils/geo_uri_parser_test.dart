@@ -11,6 +11,27 @@ void main() {
     });
   });
 
+  group('hosts alargados (WhatsApp compartilha em vários)', () {
+    test('parseMapsDestination aceita www.google.com/maps?q=', () {
+      final uri = Uri.parse('https://www.google.com/maps?q=-8.05,-34.9(Recife)');
+      final result = parseMapsDestination(uri);
+      expect(result, isNotNull);
+      expect(result!.coords.latitude, closeTo(-8.05, 0.0001));
+      expect(result.label, 'Recife');
+    });
+
+    test('classifyMapsUri reconhece destino em google.com/maps', () {
+      final uri = Uri.parse('https://google.com/maps?q=-8.05,-34.9');
+      expect(classifyMapsUri(uri), DeepLinkType.destination);
+    });
+
+    test('shortlink maps.app.goo.gl NÃO parseia (cai na captura)', () {
+      final uri = Uri.parse('https://maps.app.goo.gl/abc123');
+      expect(classifyMapsUri(uri), DeepLinkType.unknown);
+      expect(parseMapsDestination(uri), isNull);
+    });
+  });
+
   group('parseMapsUri — maps.google.com', () {
     test('parseia saddr e daddr', () {
       final uri = Uri.parse(

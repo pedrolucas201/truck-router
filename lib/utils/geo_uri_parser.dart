@@ -6,13 +6,19 @@ typedef MapsRoute = ({LatLng? origin, LatLng destination});
 
 enum DeepLinkType { route, destination, unknown }
 
+// Hosts do Google Maps que carregam coords em ?q= ou saddr/daddr. Shortlink
+// (maps.app.goo.gl) NÃO entra aqui: precisa resolver o redirect antes — cai no
+// fallback de captura até confirmarmos o formato real em device.
+const _mapsHosts = {'maps.google.com', 'www.google.com', 'google.com'};
+bool _isMapsHost(Uri uri) => _mapsHosts.contains(uri.host);
+
 /// Classifica uma URL maps.google.com por tipo de conteúdo.
 ///
 /// - [route]       — tem saddr + daddr (rota compartilhada pelo despachante)
 /// - [destination] — tem q= (pin de localização simples)
 /// - [unknown]     — formato não reconhecido
 DeepLinkType classifyMapsUri(Uri uri) {
-  if (uri.host != 'maps.google.com') return DeepLinkType.unknown;
+  if (!_isMapsHost(uri)) return DeepLinkType.unknown;
   final p = uri.queryParameters;
   if (p.containsKey('saddr') && p.containsKey('daddr')) return DeepLinkType.route;
   if (p.containsKey('q'))                               return DeepLinkType.destination;
@@ -45,7 +51,7 @@ GeoLocation? parseGeoUri(Uri uri) {
 /// Returns null se não for maps.google.com, se não houver `q`, ou se o `q` for
 /// busca textual sem coordenadas (ex: `q=pizzaria`).
 GeoLocation? parseMapsDestination(Uri uri) {
-  if (uri.host != 'maps.google.com') return null;
+  if (!_isMapsHost(uri)) return null;
   final q = uri.queryParameters['q'];
   if (q == null) return null;
   return _parseQ(q);
@@ -69,7 +75,7 @@ GeoLocation? _parseQ(String q) {
 /// Parses a `https://maps.google.com/maps?saddr=...&daddr=...` URI.
 /// Returns null if daddr is missing or unparseable.
 MapsRoute? parseMapsUri(Uri uri) {
-  if (uri.host != 'maps.google.com') return null;
+  if (!_isMapsHost(uri)) return null;
 
   final daddrStr = uri.queryParameters['daddr'];
   if (daddrStr == null) return null;
