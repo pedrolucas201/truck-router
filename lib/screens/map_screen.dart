@@ -20,6 +20,7 @@ import '../models/route_history.dart';
 import '../models/route_result.dart';
 import '../models/truck_profile.dart';
 import '../services/history_service.dart';
+import '../services/places_service.dart';
 import '../providers/route_provider.dart';
 import '../providers/truck_profile_provider.dart';
 import '../services/here_geocoding_service.dart';
@@ -97,9 +98,22 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _loadPoiIcons();
     _loadUserRestrictions();
     _loadTruckTip();
+    _seedPlaces();
     _initDeepLinks();
     _themeController = context.read<ThemeController>();
     _themeController.addListener(_onThemeChanged);
+  }
+
+  // Semeia a memória de lugares a partir do histórico de rotas (uma vez), pra
+  // os recentes/sugestões já funcionarem com o que o usuário usou no passado.
+  Future<void> _seedPlaces() async {
+    final h = await HistoryService.load(); // recente primeiro
+    final pairs = <(String, LatLng)>[];
+    for (final e in h) {
+      pairs.add((e.destinationLabel, e.destinationPosition));
+      pairs.add((e.originLabel, e.originPosition));
+    }
+    await PlacesService.seedIfEmpty(pairs);
   }
 
   Future<void> _loadTruckTip() async {
