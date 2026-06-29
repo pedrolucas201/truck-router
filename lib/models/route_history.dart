@@ -29,6 +29,7 @@ class RouteHistory {
   final String distanceText;
   final String durationText;
   final DateTime calculatedAt;
+  final String? name; // apelido (só nas favoritas, ex: "Casa → Obra")
 
   const RouteHistory({
     required this.originLabel,
@@ -40,7 +41,21 @@ class RouteHistory {
     required this.distanceText,
     required this.durationText,
     required this.calculatedAt,
+    this.name,
   });
+
+  RouteHistory copyWith({String? name}) => RouteHistory(
+        originLabel: originLabel,
+        originPosition: originPosition,
+        waypoints: waypoints,
+        destinationLabel: destinationLabel,
+        destinationPosition: destinationPosition,
+        departureTime: departureTime,
+        distanceText: distanceText,
+        durationText: durationText,
+        calculatedAt: calculatedAt,
+        name: name ?? this.name,
+      );
 
   Map<String, dynamic> toJson() => {
     'originLabel':        originLabel,
@@ -54,6 +69,7 @@ class RouteHistory {
     'distanceText':       distanceText,
     'durationText':       durationText,
     'calculatedAt':       calculatedAt.toIso8601String(),
+    'name':               name,
   };
 
   factory RouteHistory.fromJson(Map<String, dynamic> j) => RouteHistory(
@@ -70,6 +86,7 @@ class RouteHistory {
     distanceText:        j['distanceText'] as String,
     durationText:        j['durationText'] as String,
     calculatedAt:        DateTime.parse(j['calculatedAt'] as String),
+    name:                j['name'] as String?,
   );
 
   static List<RouteHistory> listFromJson(String raw) =>

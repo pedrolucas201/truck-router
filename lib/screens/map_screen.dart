@@ -21,6 +21,7 @@ import '../models/route_result.dart';
 import '../models/truck_profile.dart';
 import '../services/history_service.dart';
 import '../services/places_service.dart';
+import '../services/favorites_service.dart';
 import '../providers/route_provider.dart';
 import '../providers/truck_profile_provider.dart';
 import '../services/here_geocoding_service.dart';
@@ -953,9 +954,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _showHistory() async {
-    final history = await HistoryService.load();
+    final history   = await HistoryService.load();
+    final favorites = await FavoritesService.load();
     if (!mounted) return;
-    if (history.isEmpty) {
+    if (history.isEmpty && favorites.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Nenhuma rota salva ainda')),
       );
@@ -965,11 +967,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       context: context,
       builder: (_) => _HistorySheet(
         history: history,
+        favorites: favorites,
         onSelect: (h) {
           Navigator.pop(context);
           _restoreHistory(h);
         },
         onDelete: (index) => HistoryService.remove(index),
+        onFavorite: (h) => FavoritesService.add(h),
+        onUnfavorite: (h) => FavoritesService.remove(h),
       ),
     );
   }
@@ -2039,13 +2044,19 @@ class _InfoItem extends StatelessWidget {
 
 class _HistorySheet extends StatefulWidget {
   final List<RouteHistory> history;
+  final List<RouteHistory> favorites;
   final ValueChanged<RouteHistory> onSelect;
   final ValueChanged<int> onDelete;
+  final ValueChanged<RouteHistory> onFavorite;   // h já com .name
+  final ValueChanged<RouteHistory> onUnfavorite;
 
   const _HistorySheet({
     required this.history,
+    required this.favorites,
     required this.onSelect,
     required this.onDelete,
+    required this.onFavorite,
+    required this.onUnfavorite,
   });
 
   @override
@@ -2054,6 +2065,8 @@ class _HistorySheet extends StatefulWidget {
 
 class _HistorySheetState extends State<_HistorySheet> {
   late final List<RouteHistory> _items = List.of(widget.history);
+  late final List<RouteHistory> _favs = List.of(widget.favorites);
+  late final Set<String> _favKeys = _favs.map(FavoritesService.keyOf).toSet();
 
   String _formatDate(DateTime dt) =>
       '${dt.day.toString().padLeft(2, '0')}/'
@@ -2061,51 +2074,153 @@ class _HistorySheetState extends State<_HistorySheet> {
       '${dt.hour.toString().padLeft(2, '0')}h'
       '${dt.minute.toString().padLeft(2, '0')}';
 
+  String _routeText(RouteHistory h) => '${h.originLabel} → ${h.destinationLabel}';
+
+  Future<void> _addFavorite(RouteHistory h) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final ctrl = TextEditingController();
+        return AlertDialog(
+          title: const Text('Salvar rota'),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              labelText: 'Nome (opcional)',
+              hintText: 'ex: Casa → Obra',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: const Text('Salvar'),
+            ),
+          ],
+        );
+      },
+    );
+    if (name == null || !mounted) return; // cancelou
+    final fav = h.copyWith(name: name.isEmpty ? null : name);
+    setState(() {
+      _favKeys.add(FavoritesService.keyOf(fav));
+      _favs.insert(0, fav);
+    });
+    widget.onFavorite(fav);
+  }
+
+  void _removeFavorite(RouteHistory h) {
+    final k = FavoritesService.keyOf(h);
+    setState(() {
+      _favKeys.remove(k);
+      _favs.removeWhere((e) => FavoritesService.keyOf(e) == k);
+    });
+    widget.onUnfavorite(h);
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Recentes = histórico que NÃO está favoritado (favorita já aparece no topo).
+    final recents = <(int, RouteHistory)>[
+      for (var i = 0; i < _items.length; i++)
+        if (!_favKeys.contains(FavoritesService.keyOf(_items[i]))) (i, _items[i]),
+    ];
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text('Histórico', style: Theme.of(context).textTheme.titleMedium),
+          child: Text('Rotas', style: Theme.of(context).textTheme.titleMedium),
         ),
         const Divider(height: 1),
         Flexible(
-          child: ListView.separated(
+          child: ListView(
             shrinkWrap: true,
-            itemCount: _items.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (_, i) {
-              final h = _items[i];
-              return ListTile(
-                leading: const Icon(Icons.route, size: 20),
-                title: Text(
-                  '${h.originLabel} → ${h.destinationLabel}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13),
+            padding: EdgeInsets.zero,
+            children: [
+              if (_favs.isNotEmpty) ...[
+                _sectionLabel(context, 'Favoritas'),
+                for (final h in _favs)
+                  ListTile(
+                    leading: Icon(Icons.star, size: 20, color: Colors.amber.shade700),
+                    title: Text(
+                      h.name?.isNotEmpty == true ? h.name! : _routeText(h),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      h.name?.isNotEmpty == true
+                          ? _routeText(h)
+                          : '${h.distanceText}  •  ${h.durationText}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    trailing: IconButton(
+                      icon: Icon(Icons.star, size: 20, color: Colors.amber.shade700),
+                      tooltip: 'Remover dos favoritos',
+                      onPressed: () => _removeFavorite(h),
+                    ),
+                    onTap: () => widget.onSelect(h),
+                  ),
+              ],
+              if (recents.isNotEmpty) _sectionLabel(context, 'Recentes'),
+              for (final (i, h) in recents)
+                ListTile(
+                  leading: const Icon(Icons.route, size: 20),
+                  title: Text(
+                    _routeText(h),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  subtitle: Text(
+                    '${h.distanceText}  •  ${h.durationText}  •  ${_formatDate(h.calculatedAt)}',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.star_border, size: 20),
+                        tooltip: 'Favoritar',
+                        onPressed: () => _addFavorite(h),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        onPressed: () {
+                          widget.onDelete(i);
+                          setState(() => _items.removeAt(i));
+                        },
+                      ),
+                    ],
+                  ),
+                  onTap: () => widget.onSelect(h),
                 ),
-                subtitle: Text(
-                  '${h.distanceText}  •  ${h.durationText}  •  ${_formatDate(h.calculatedAt)}',
-                  style: const TextStyle(fontSize: 11),
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  onPressed: () {
-                    widget.onDelete(i);
-                    setState(() => _items.removeAt(i));
-                  },
-                ),
-                onTap: () => widget.onSelect(h),
-              );
-            },
+            ],
           ),
         ),
         const SizedBox(height: 8),
       ],
     );
   }
+
+  Widget _sectionLabel(BuildContext context, String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Text(
+          text,
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade500,
+              letterSpacing: 0.5),
+        ),
+      );
 }
 
 // ── Helpers de POI (nível de arquivo) ────────────────────────────────────────
