@@ -581,6 +581,30 @@ class _NavigationScreenState extends State<NavigationScreen>
     );
   }
 
+  // Confirma antes de encerrar: o X é pequeno e fácil de tocar sem querer
+  // dirigindo — sem isso, um toque errado mata a navegação inteira.
+  Future<void> _confirmFinish() async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Encerrar a rota?'),
+        content: const Text('A navegação será finalizada.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Continuar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Encerrar'),
+          ),
+        ],
+      ),
+    );
+    if (yes == true && mounted) Navigator.of(context).pop();
+  }
+
   void _checkSpeedAlert(double kmh) {
     if (kmh >= 90) {
       final now = DateTime.now();
@@ -1893,7 +1917,7 @@ class _NavigationScreenState extends State<NavigationScreen>
               rerouting:    _isRerouting,
               isNight:      _themeController.isNight,
               onAudioCycle: _cycleAudioLevel,
-              onClose:      () => Navigator.of(context).pop(),
+              onClose:      _confirmFinish,
               fmtDist:      _fmtDist,
             ),
 
