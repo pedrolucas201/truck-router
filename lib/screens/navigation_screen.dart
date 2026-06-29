@@ -150,10 +150,11 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _lastPosUpdateAt;  // hora do último fix (= anchor time)
   static const double _stopKmh = 3.0;
   static const int _maxPredictMs = 2500;
-  // Suavização da rotação da câmera (heading-up). Lerp por tick (~30fps) e
-  // antecipação do rumo à frente — mata o "salto" de bearing na curva.
+  // Suavização da rotação da câmera (heading-up). Lerp angular por tick (~30fps):
+  // o degrau de bearing por-segmento vira giro contínuo, matando o "salto" na curva.
+  // ponytail: knob de calibração de campo — subir (0.3-0.4) reduz o lag da câmera
+  // em curva fechada; baixar deixa mais lisa porém mais atrasada.
   static const double _bearingLerp = 0.2;
-  static const double _bearingLookAheadM = 20.0;
   // Detecção de parado por progresso ao longo da rota (não pela velocidade do GPS,
   // que dá spikes de 6-22 km/h parado). Calibráveis no device.
   static const int _stopWindowMs = 2500;
@@ -907,11 +908,10 @@ class _NavigationScreenState extends State<NavigationScreen>
         : 0.0;
 
     final (predPos, predIdx) = _advanceAlongRoute(pts, _anchorIdx, anchor, advanceM);
-    // Antecipação: mira o rumo do segmento ~_bearingLookAheadM à frente, não o de
-    // baixo do puck. Assim a câmera começa a girar ANTES de entrar na curva (como
-    // Waze), compensando o lag natural do lerp.
-    final (_, lookIdx) = _advanceAlongRoute(pts, predIdx, predPos, _bearingLookAheadM);
-    final targetBearing = _segmentBearing(pts, lookIdx);
+    // Rumo do segmento SOB o puck (não à frente): o puck é fixo apontando pra cima,
+    // então a câmera tem que girar NA posição. Mirar à frente girava a estrada antes
+    // da curva e o puck saía de lado ("derrapava" — relato de campo 2026-06-29).
+    final targetBearing = _segmentBearing(pts, predIdx);
 
     // Menor arco entre o bearing atual e o alvo: se já convergiu (e a posição não
     // mudou), não há o que mover.
