@@ -198,6 +198,9 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
   }
 
   Widget _buildDropdown(BuildContext context) {
+    // Já confirmado: o texto do campo é o próprio lugar selecionado e daria
+    // match em si mesmo na lista de conhecidos. Nada a sugerir.
+    if (_confirmed) return const SizedBox.shrink();
     final q = _controller.text.trim().toLowerCase();
     // Lugares conhecidos: campo vazio+focado → recentes; digitando → match local.
     final List<(String, LatLng)> known = q.isEmpty
