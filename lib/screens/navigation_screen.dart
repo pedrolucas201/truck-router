@@ -28,6 +28,7 @@ import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
 import '../utils/radar_tts.dart';
 import '../utils/geo_angle.dart';
+import '../utils/geo_bounds.dart';
 import '../utils/maneuver_phrase.dart';
 import '../services/restriction_service.dart';
 import '../data/map_styles.dart';
@@ -1504,14 +1505,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     final pts = _result.polylinePoints;
     if (pts.isEmpty) return;
 
-    var minLat = pts[0].latitude, maxLat = pts[0].latitude;
-    var minLng = pts[0].longitude, maxLng = pts[0].longitude;
-    for (final p in pts) {
-      if (p.latitude  < minLat) minLat = p.latitude;
-      if (p.latitude  > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
+    final (:minLat, :maxLat, :minLng, :maxLng) = boundsOf(pts);
     const buf = 0.003;
 
     final sampled = <LatLng>[];
@@ -1542,14 +1536,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     final ahead    = pts.sublist(startIdx, endIdx + 1);
     if (ahead.isEmpty) return;
 
-    var minLat = ahead[0].latitude, maxLat = ahead[0].latitude;
-    var minLng = ahead[0].longitude, maxLng = ahead[0].longitude;
-    for (final p in ahead) {
-      if (p.latitude  < minLat) minLat = p.latitude;
-      if (p.latitude  > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
+    final (:minLat, :maxLat, :minLng, :maxLng) = boundsOf(ahead);
     const buf = 0.005;
 
     try {
@@ -1572,14 +1559,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       return;
     }
 
-    var minLat = aheadPts[0].latitude, maxLat = aheadPts[0].latitude;
-    var minLng = aheadPts[0].longitude, maxLng = aheadPts[0].longitude;
-    for (final p in aheadPts) {
-      if (p.latitude  < minLat) minLat = p.latitude;
-      if (p.latitude  > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
+    final (:minLat, :maxLat, :minLng, :maxLng) = boundsOf(aheadPts);
     const buf = 0.002;
 
     bool isAhead(double lat, double lng, double corridorM) {

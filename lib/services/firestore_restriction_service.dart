@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../utils/geo_bounds.dart';
 import '../models/bridge_restriction.dart';
 import '../models/user_restriction.dart';
 import 'radar_service.dart';
@@ -15,14 +16,7 @@ class FirestoreRestrictionService {
       List<LatLng> points) async {
     if (points.isEmpty) return [];
 
-    double minLat = points[0].latitude, maxLat = points[0].latitude;
-    double minLng = points[0].longitude, maxLng = points[0].longitude;
-    for (final p in points) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
+    final (:minLat, :maxLat, :minLng, :maxLng) = boundsOf(points);
     const pad = 0.05; // ~5 km de margem
 
     try {

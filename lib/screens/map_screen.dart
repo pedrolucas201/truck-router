@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../utils/geo_uri_parser.dart';
+import '../utils/geo_bounds.dart';
 import '../data/pois.dart';
 import '../models/bridge_restriction.dart';
 import '../models/poi.dart';
@@ -354,14 +355,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5,
     );
-    final IconData iconData;
-    if (isPedagio) {
-      iconData = Icons.toll;
-    } else if (speedKmh == 0) {
-      iconData = Icons.camera_alt;
-    } else {
-      iconData = Icons.circle; // não usado — exibe texto abaixo
-    }
+    // Só lido no branch else (isPedagio || speedKmh == 0); no caso de texto
+    // (speedKmh > 0) nunca é usado.
+    final iconData = isPedagio ? Icons.toll : Icons.camera_alt;
 
     if (!isPedagio && speedKmh > 0) {
       final tp = TextPainter(textDirection: TextDirection.ltr)
@@ -456,14 +452,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
     if (local.isNotEmpty && mounted) {
       try {
-        var minLat = local[0].lat, maxLat = local[0].lat;
-        var minLng = local[0].lng, maxLng = local[0].lng;
-        for (final r in local) {
-          if (r.lat < minLat) minLat = r.lat;
-          if (r.lat > maxLat) maxLat = r.lat;
-          if (r.lng < minLng) minLng = r.lng;
-          if (r.lng > maxLng) maxLng = r.lng;
-        }
+        final (:minLat, :maxLat, :minLng, :maxLng) =
+            boundsOf(local.map((r) => LatLng(r.lat, r.lng)).toList());
         const pad = 0.01;
         final remote = await context.read<RestrictionRepository>().fetchByBounds(
           minLat - pad, maxLat + pad, minLng - pad, maxLng + pad,
@@ -1087,14 +1077,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             ...routeResult.dirtRoadAlternative!.polylinePoints,
         ];
         final pts = allPts;
-        double minLat = pts[0].latitude, maxLat = pts[0].latitude;
-        double minLng = pts[0].longitude, maxLng = pts[0].longitude;
-        for (final p in pts) {
-          if (p.latitude < minLat) minLat = p.latitude;
-          if (p.latitude > maxLat) maxLat = p.latitude;
-          if (p.longitude < minLng) minLng = p.longitude;
-          if (p.longitude > maxLng) maxLng = p.longitude;
-        }
+        final (:minLat, :maxLat, :minLng, :maxLng) = boundsOf(pts);
         final center = LatLng(
           (minLat + maxLat) / 2,
           (minLng + maxLng) / 2,

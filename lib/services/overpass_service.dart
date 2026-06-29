@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../utils/geo_bounds.dart';
 import '../models/bridge_restriction.dart';
 import 'radar_service.dart';
 
@@ -99,16 +100,9 @@ class OverpassService {
 
   static ({double s, double w, double n, double e}) _routeBbox(
       List<LatLng> pts) {
-    var s = pts[0].latitude,  n = pts[0].latitude;
-    var w = pts[0].longitude, e = pts[0].longitude;
-    for (final p in pts) {
-      if (p.latitude  < s) s = p.latitude;
-      if (p.latitude  > n) n = p.latitude;
-      if (p.longitude < w) w = p.longitude;
-      if (p.longitude > e) e = p.longitude;
-    }
+    final b = boundsOf(pts);
     const pad = 0.001; // ~110 m de margem em cada lado
-    return (s: s - pad, w: w - pad, n: n + pad, e: e + pad);
+    return (s: b.minLat - pad, w: b.minLng - pad, n: b.maxLat + pad, e: b.maxLng + pad);
   }
 
   static String _buildQuery(

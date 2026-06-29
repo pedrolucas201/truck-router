@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../utils/geo_bounds.dart';
 import '../models/radar_point.dart';
 
 class RadarService {
@@ -61,16 +62,7 @@ class RadarService {
 
     // Bounding box com buffer (~500m em graus)
     const buffer = 0.005;
-    var minLat = polyline[0].latitude;
-    var maxLat = polyline[0].latitude;
-    var minLng = polyline[0].longitude;
-    var maxLng = polyline[0].longitude;
-    for (final p in polyline) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
+    var (:minLat, :maxLat, :minLng, :maxLng) = boundsOf(polyline);
     minLat -= buffer; maxLat += buffer;
     minLng -= buffer; maxLng += buffer;
 
