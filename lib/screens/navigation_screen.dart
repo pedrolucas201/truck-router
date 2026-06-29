@@ -121,6 +121,11 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _markingMode = false;
   bool _paused = false;
   bool _arrived = false;
+  // Olhar-ao-redor: o usuário moveu o mapa (pinch/arrasto) → para de seguir a
+  // câmera até ele tocar "centralizar" ou passar o timeout sem mexer.
+  bool _freeLook = false;
+  DateTime? _lastUserGestureAt;   // marca o último gesto, p/ auto-retorno
+  DateTime? _ignoreGestureUntil;  // ignora os frames do _recenter (não re-entra)
   // Estado "chegando": contador ancorado antes de finalizar (não mata o GPS —
   // o motorista ainda manobra / dá a volta no quarteirão).
   bool _arriving = false;
@@ -200,6 +205,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   // ponytail: knob de campo — se 5s ainda encadear, subir; se atrasar correção
   // legítima, baixar.
   static const _rerouteGraceMs         = 5000;
+  // Olhar-ao-redor: volta a seguir sozinho após Xs sem o usuário tocar o mapa.
+  // ponytail: knob de campo — subir se ele reclamar que volta cedo demais.
+  static const _freeLookAutoReturnMs   = 10000;
   // Chegada: contador de 15s antes de finalizar; se o caminhão se afastar mais
   // que 40m da âncora durante a contagem, cancela e reroteia (deu a volta).
   static const _arrivalCountdownMs = 15000;
@@ -915,6 +923,17 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (nowMs - _lastTickMs < 30) return;
     _lastTickMs = nowMs;
 
+    // Olhar-ao-redor: não seguimos a câmera (o usuário está explorando o mapa).
+    // Volta sozinho após _freeLookAutoReturnMs sem ele tocar.
+    if (_freeLook) {
+      if (_lastUserGestureAt != null &&
+          DateTime.now().difference(_lastUserGestureAt!).inMilliseconds >=
+              _freeLookAutoReturnMs) {
+        _recenter();
+      }
+      return;
+    }
+
     final elapsedMs = DateTime.now()
         .difference(anchorTime)
         .inMilliseconds
@@ -1419,7 +1438,30 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   // ── Centralizar câmera ────────────────────────────────────────────────────────
 
+  // O follow comanda sempre zoom==_zoom e target==_animPos. Se o onCameraMove
+  // reporta algo divergente, foi o dedo do usuário (pinch/arrasto) → olhar-ao-redor.
+  void _onCameraMove(CameraPosition pos) {
+    _cameraTarget = pos.target;
+    if (_markingMode || _paused || _arrived) return;
+    if (_ignoreGestureUntil != null &&
+        DateTime.now().isBefore(_ignoreGestureUntil!)) {
+      return;
+    }
+    final zoomDiverged = (pos.zoom - _zoom).abs() > 0.2;
+    final panDiverged = RadarService.haversine(
+            pos.target.latitude, pos.target.longitude,
+            _animPos.latitude, _animPos.longitude) > 40;
+    if (zoomDiverged || panDiverged) {
+      _lastUserGestureAt = DateTime.now();
+      if (!_freeLook) setState(() => _freeLook = true);
+    }
+  }
+
   void _recenter() {
+    // Qualquer retomada de câmera sai do olhar-ao-redor; os frames do
+    // animateCamera abaixo não devem re-disparar o free-look (_ignoreGestureUntil).
+    if (_freeLook) setState(() => _freeLook = false);
+    _ignoreGestureUntil = DateTime.now().add(const Duration(milliseconds: 900));
     final pos = _snappedPos ?? _currentPos;
     if (pos == null || _mapController == null) return;
     _mapController!.animateCamera(
@@ -1495,7 +1537,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   void _enterMarkingMode() {
     final pos = _currentPos ?? widget.destination;
     _cameraTarget = pos;
-    setState(() => _markingMode = true);
+    setState(() { _markingMode = true; _freeLook = false; });
     _mapController?.animateCamera(
       CameraUpdate.newCameraPosition(CameraPosition(
         target: pos,
@@ -1719,6 +1761,15 @@ class _NavigationScreenState extends State<NavigationScreen>
       // method channel a cada frame era o gargalo do lag (flutter#33430). Agora
       // é um widget Flutter fixo (NavPuck) sobreposto no Stack — câmera segue a
       // posição (com padding pra deixar a seta embaixo). Só o destino é Marker.
+      // Exceção: no olhar-ao-redor a câmera descola da posição, então o puck fixo
+      // mentiria — mostramos um pino ancorado no mapa (fica certo ao pan/zoom).
+      if (_freeLook && _currentPos != null)
+        Marker(
+          markerId: const MarkerId('you_freelook'),
+          position: _snappedPos ?? _currentPos!,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          anchor: const Offset(0.5, 0.5),
+        ),
     };
 
     return Scaffold(
@@ -1810,7 +1861,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                             _mapController = ctrl;
                           },
                           style: _themeController.isNight ? kNightMapStyle : null,
-                          onCameraMove: (pos) => _cameraTarget = pos.target,
+                          onCameraMove: _onCameraMove,
                           polylines: polylines,
                           markers: markers,
                           circles: radarCircles,
@@ -1825,7 +1876,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                   // ── Puck do usuário: widget Flutter fixo (fora do channel) ──
                   // Câmera heading-up → a seta aponta sempre pra cima; o mapa gira
                   // por baixo. Posição na tela casa com o padding do mapa.
-                  if (_currentPos != null && _lastPosUpdateAt != null && !_markingMode)
+                  if (_currentPos != null && _lastPosUpdateAt != null && !_markingMode && !_freeLook)
                     Align(
                       alignment: const Alignment(0, 2 * _puckYFrac - 1),
                       child: const IgnorePointer(child: NavPuck()),
@@ -1973,6 +2024,22 @@ class _NavigationScreenState extends State<NavigationScreen>
                     Positioned(
                       left: 0, right: 0, bottom: 0,
                       child: SafeArea(child: _buildArrivalBanner()),
+                    ),
+                  // Botão centralizar — só no olhar-ao-redor, em destaque.
+                  if (_freeLook && !_markingMode && !_arriving)
+                    Positioned(
+                      bottom: 220,
+                      right: 12,
+                      child: FloatingActionButton.extended(
+                        heroTag: 'nav_recenter',
+                        backgroundColor: Colors.blue.shade700,
+                        foregroundColor: Colors.white,
+                        elevation: 4,
+                        tooltip: 'Voltar a seguir',
+                        onPressed: _recenter,
+                        icon: const Icon(Icons.my_location),
+                        label: const Text('Centralizar'),
+                      ),
                     ),
                   if (!_markingMode && !_arriving) ...[
                     // Botão pausar/retomar
