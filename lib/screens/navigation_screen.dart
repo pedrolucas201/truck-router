@@ -26,6 +26,7 @@ import '../services/field_log.dart';
 import '../services/here_routing_service.dart';
 import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
+import '../services/firestore_radar_service.dart';
 import '../utils/radar_tts.dart';
 import '../utils/geo_angle.dart';
 import '../utils/geo_bounds.dart';
@@ -37,6 +38,7 @@ import '../models/poi.dart';
 import '../models/route_event.dart';
 import '../providers/theme_controller.dart';
 import '../widgets/add_restriction_sheet.dart';
+import '../widgets/add_radar_sheet.dart';
 import '../widgets/crosshair.dart';
 import '../widgets/next_event_strip.dart';
 import '../widgets/upcoming_dots.dart';
@@ -119,6 +121,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   final _restrictionIconCache = <String, BitmapDescriptor>{};
 
   bool _markingMode = false;
+  bool _markingRadar = false; // marcando radar (true) vs restrição (false)
   bool _paused = false;
   bool _arrived = false;
   // Olhar-ao-redor: o usuário moveu o mapa (pinch/arrasto) → para de seguir a
@@ -1172,9 +1175,10 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
 
       final allRadares = await RadarService.load();
-      final nearby = RadarService.deduplicateNearby(
+      final csvNearby = RadarService.deduplicateNearby(
         RadarService.filterNearRoute(allRadares, newResult.polylinePoints),
       ).where((r) => !(r.type.toLowerCase().contains('lombada') && r.speedKmh == 0)).toList();
+      final nearby = await FirestoreRadarService.mergeCrowd(csvNearby, newResult.polylinePoints);
       if (!mounted) return;
       setState(() {
         _result                  = newResult;
@@ -1532,12 +1536,37 @@ class _NavigationScreenState extends State<NavigationScreen>
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
-  // ── Marcar restrição — fluxo crosshair ───────────────────────────────────────
+  // ── Marcar restrição / radar — fluxo crosshair ───────────────────────────────
 
-  void _enterMarkingMode() {
+  // Um FAB só: escolhe o que marcar antes de entrar no crosshair (UI glanceável).
+  Future<void> _startMarking() async {
+    final kind = await showModalBottomSheet<String>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.add_road, color: Colors.teal),
+            title: const Text('Restrição'),
+            subtitle: const Text('Altura, peso, largura, terra…'),
+            onTap: () => Navigator.pop(context, 'restriction'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.camera_alt, color: Colors.red),
+            title: const Text('Radar'),
+            subtitle: const Text('Radar fixo ou lombada'),
+            onTap: () => Navigator.pop(context, 'radar'),
+          ),
+        ]),
+      ),
+    );
+    if (kind == null || !mounted) return;
+    _enterMarkingMode(radar: kind == 'radar');
+  }
+
+  void _enterMarkingMode({bool radar = false}) {
     final pos = _currentPos ?? widget.destination;
     _cameraTarget = pos;
-    setState(() { _markingMode = true; _freeLook = false; });
+    setState(() { _markingMode = true; _markingRadar = radar; _freeLook = false; });
     _mapController?.animateCamera(
       CameraUpdate.newCameraPosition(CameraPosition(
         target: pos,
@@ -1548,7 +1577,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   void _exitMarkingMode() {
-    setState(() => _markingMode = false);
+    setState(() { _markingMode = false; _markingRadar = false; });
     _recenter();
   }
 
@@ -1694,7 +1723,9 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   Future<void> _confirmMarkingPosition() async {
     final pos = _cameraTarget;
-    setState(() => _markingMode = false);
+    final isRadar = _markingRadar;
+    setState(() { _markingMode = false; _markingRadar = false; });
+    if (isRadar) { await _confirmRadarMark(pos); return; }
     final repo = context.read<RestrictionRepository>();
     final r = await showModalBottomSheet<UserRestriction>(
       context: context,
@@ -1719,6 +1750,82 @@ class _NavigationScreenState extends State<NavigationScreen>
     setState(() => _userRestrictions.add(r));
     _recenter();
     if (_currentPos != null) await _reroute(fromPos: _currentPos, urgent: true);
+  }
+
+  Future<void> _confirmRadarMark(LatLng pos) async {
+    final radar = await showModalBottomSheet<RadarPoint>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => AddRadarSheet(position: pos),
+    );
+    if (radar == null || !mounted) { _recenter(); return; }
+    String? id;
+    try {
+      final uid = await AuthService.getUid();
+      id = await FirestoreRadarService.add(
+        lat: radar.lat, lng: radar.lng, type: radar.type,
+        speedKmh: radar.speedKmh, uid: uid,
+      );
+    } catch (_) {/* sem auth: mostra local nesta sessão, sem id (não compartilha) */}
+    if (!mounted) return;
+    // Mostra já localmente (com o id do doc, pra permitir remover depois).
+    final local = RadarPoint(lat: radar.lat, lng: radar.lng, type: radar.type,
+        speedKmh: radar.speedKmh, id: id, source: 'user');
+    setState(() {
+      _radares.add(local);
+      _visibleRadares = List.of(_visibleRadares)..add(local);
+      _radarIconsFuture = Future.wait(_visibleRadares.map(_radarIcon));
+    });
+    _recenter();
+  }
+
+  // Toque num radar: confirmar que existe (sobe confiança) ou votar "não existe".
+  Future<void> _onRadarTap(RadarPoint r) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.camera_alt),
+            title: Text(r.speedKmh > 0
+                ? 'Radar ${r.speedKmh} km/h'
+                : (r.type.isEmpty ? 'Radar' : r.type)),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.check_circle, color: Colors.green),
+            title: const Text('Confirmar que existe'),
+            onTap: () => Navigator.pop(context, 'confirm'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.cancel, color: Colors.red),
+            title: const Text('Não existe aqui'),
+            onTap: () => Navigator.pop(context, 'remove'),
+          ),
+        ]),
+      ),
+    );
+    if (action == null || !mounted) return;
+    if (action == 'confirm') {
+      if (r.id != null) await FirestoreRadarService.confirm(r.id!);
+      return;
+    }
+    // Voto "não existe": radar crowd → report(id); radar do CSV → dismiss por local.
+    if (r.id != null) {
+      await FirestoreRadarService.report(r.id!);
+    } else {
+      await FirestoreRadarService.dismissCsv(r.lat, r.lng);
+    }
+    if (!mounted) return;
+    bool sameAs(RadarPoint x) => x.lat == r.lat && x.lng == r.lng && x.type == r.type;
+    setState(() {
+      _radares.removeWhere(sameAs);
+      _visibleRadares = List.of(_visibleRadares)..removeWhere(sameAs);
+      _radarIconsFuture = Future.wait(_visibleRadares.map(_radarIcon));
+    });
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
@@ -1811,16 +1918,12 @@ class _NavigationScreenState extends State<NavigationScreen>
                         final icons = snap.data!;
                         final n = min(_visibleRadares.length, icons.length);
                         for (var i = 0; i < n; i++) {
+                          final radar = _visibleRadares[i];
                           markers.add(Marker(
-                            markerId: MarkerId('r_${_visibleRadares[i].lat}_${_visibleRadares[i].lng}'),
-                            position: LatLng(_visibleRadares[i].lat, _visibleRadares[i].lng),
+                            markerId: MarkerId('r_${radar.lat}_${radar.lng}'),
+                            position: LatLng(radar.lat, radar.lng),
                             icon: icons[i],
-                            infoWindow: InfoWindow(
-                              title: _visibleRadares[i].speedKmh > 0
-                                  ? '${_visibleRadares[i].speedKmh} km/h'
-                                  : _visibleRadares[i].type,
-                              snippet: _visibleRadares[i].type,
-                            ),
+                            onTap: () => _onRadarTap(radar),
                           ));
                         }
                       }
@@ -2087,8 +2190,8 @@ class _NavigationScreenState extends State<NavigationScreen>
                         backgroundColor: Colors.white,
                         foregroundColor: Colors.teal.shade700,
                         elevation: 4,
-                        tooltip: 'Marcar restrição',
-                        onPressed: _enterMarkingMode,
+                        tooltip: 'Marcar restrição ou radar',
+                        onPressed: _startMarking,
                         child: const Icon(Icons.add_location_alt),
                       ),
                     ),
