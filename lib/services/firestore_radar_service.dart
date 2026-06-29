@@ -12,7 +12,6 @@ class FirestoreRadarService {
   static final _db = FirebaseFirestore.instance;
   static const _radarsCol     = 'radars';
   static const _dismissalsCol = 'radar_dismissals';
-  static const _corridorM     = 80.0;   // mesmo corredor do FirestoreRestrictionService
   static const _dismissMatchM = 40.0;   // raio p/ casar dispensa↔radar do CSV
 
   // ponytail: limiar de votos pra sumir global. 1 enquanto há ~1 usuário; subir
@@ -38,7 +37,7 @@ class FirestoreRadarService {
             return lng >= minLng - pad &&
                 lng <= maxLng + pad &&
                 reported < _hideThreshold &&
-                _isNearRoute((m['lat'] as num).toDouble(), lng, points);
+                RadarService.isNearRoute((m['lat'] as num).toDouble(), lng, points);
           })
           .map((d) {
             final m = d.data();
@@ -149,18 +148,4 @@ class FirestoreRadarService {
     } catch (_) {}
   }
 
-  static bool _isNearRoute(double lat, double lng, List<LatLng> polyline) {
-    for (var i = 0; i < polyline.length; i += 5) {
-      if (RadarService.haversine(lat, lng, polyline[i].latitude, polyline[i].longitude) <= _corridorM) {
-        return true;
-      }
-    }
-    if (polyline.isNotEmpty) {
-      final last = polyline.last;
-      if (RadarService.haversine(lat, lng, last.latitude, last.longitude) <= _corridorM) {
-        return true;
-      }
-    }
-    return false;
-  }
 }

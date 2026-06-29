@@ -144,4 +144,22 @@ class RadarService {
         sin(dLng / 2) * sin(dLng / 2);
     return r * 2 * atan2(sqrt(a), sqrt(1 - a));
   }
+
+  /// Ponto está dentro do corredor [corridorM] da [polyline]? Amostra a cada 5
+  /// vértices (perf) + checa o último. Compartilhado pelos services de crowd.
+  static bool isNearRoute(double lat, double lng, List<LatLng> polyline,
+      {double corridorM = 80.0}) {
+    for (var i = 0; i < polyline.length; i += 5) {
+      if (haversine(lat, lng, polyline[i].latitude, polyline[i].longitude) <= corridorM) {
+        return true;
+      }
+    }
+    if (polyline.isNotEmpty) {
+      final last = polyline.last;
+      if (haversine(lat, lng, last.latitude, last.longitude) <= corridorM) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
