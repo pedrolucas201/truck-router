@@ -103,6 +103,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _lastRerouteAt;
   int _offRouteCount = 0;
   DateTime? _offRouteSince; // instrumentação: quando o caminhão saiu do corredor
+  DateTime? _rerouteGraceUntil; // janela de carência pós-reroute (anti-encadeamento)
   RadarPoint? _upcomingRadar;
   final Set<int> _announced = {};
   int _lastTickMs = 0; // throttle do _predictTick (cap ~30fps, alivia main thread/channel)
@@ -192,6 +193,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   // _offRouteCount (precisa de 3 fixes novos) + guarda _isRerouting.
   static const _rerouteThrottleSec     = 10;
   static const _rerouteUrgentFloorSec  = 4;
+  // Carência pós-reroute: depois que a rota nova cai, origem/GPS ainda estão
+  // defasados e o caminhão pode aparecer fora do corredor por 1-2s — o que
+  // re-disparava 2-3 reroutes encadeados (field 2026-06-29, ~20s "atualizando").
+  // Segura o re-disparo até a rota assentar; encerra cedo se snapar de volta.
+  // ponytail: knob de campo — se 5s ainda encadear, subir; se atrasar correção
+  // legítima, baixar.
+  static const _rerouteGraceMs         = 5000;
   // Chegada: contador de 15s antes de finalizar; se o caminhão se afastar mais
   // que 40m da âncora durante a contagem, cancela e reroteia (deu a volta).
   static const _arrivalCountdownMs = 15000;
@@ -761,7 +769,14 @@ class _NavigationScreenState extends State<NavigationScreen>
     final effSpeedMps = movingByRoute ? pos.speed : 0.0;
 
     // 3. Desvio de rota
-    if (bestDist > _offRouteThresholdM) {
+    // Carência pós-reroute: a rota nova recém-aplicada + origem/GPS defasados
+    // faziam o caminhão reaparecer fora do corredor e re-disparar 2-3 reroutes
+    // encadeados (field 2026-06-29). Durante a janela não conta nem dispara;
+    // ao expirar, se ainda estiver fora, a detecção reinicia do zero (detectMs
+    // honesto). Snapar de volta ao corredor encerra a janela cedo (else).
+    final inRerouteGrace = _rerouteGraceUntil != null &&
+        DateTime.now().isBefore(_rerouteGraceUntil!);
+    if (bestDist > _offRouteThresholdM && !inRerouteGrace) {
       if (_offRouteCount == 0) {
         _offRouteSince = DateTime.now();
         FieldLog.event('off_route', {'distM': bestDist.round()});
@@ -771,6 +786,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     } else {
       _offRouteCount = 0;
       _offRouteSince = null;
+      if (bestDist <= _offRouteThresholdM) _rerouteGraceUntil = null;
     }
 
     // 4. Manobra atual — busca monotônica: mIdx só avança, nunca retrocede.
@@ -1158,6 +1174,10 @@ class _NavigationScreenState extends State<NavigationScreen>
         // recálculo (pior no storm). _radarIconsFuture rebuilda com cache-hit.
         _radarIconsFuture        = null;
       });
+      // Abre a carência: segura o re-disparo enquanto a rota nova assenta e o
+      // GPS/âncora alcançam (anti-encadeamento, field 2026-06-29).
+      _rerouteGraceUntil = DateTime.now().add(
+          const Duration(milliseconds: _rerouteGraceMs));
       // Pós-reroute: não re-anunciar (storm "Em 500 metros") manobra que já
       // estamos em cima. Semeia os tiers já ultrapassados no instante do
       // recálculo — só fala quando o caminhão chegar MAIS perto. (maneuvers em
