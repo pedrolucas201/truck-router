@@ -177,6 +177,11 @@ class _NavigationScreenState extends State<NavigationScreen>
   Set<Circle> _radarCircles = {};
   int? _overlaysSplitIdx;
   RadarPoint? _overlaysRadar;
+  // Rastro cinza colado na seta: a divisa segue o predIdx interpolado (onde a
+  // seta está), não o _closestPolylineIdx do GPS (1Hz, que saltava atrás). O
+  // rebuild é throttled (~250ms) pra não voltar ao setState de 60fps no Adreno.
+  int _predIdx = 0;
+  int _lastTrailMs = 0;
 
   List<RouteEvent>  _upcomingEvents = [];
   List<Poi>         _routePois      = [];
@@ -1012,6 +1017,17 @@ class _NavigationScreenState extends State<NavigationScreen>
     // giro contínuo, matando o "salto" na curva.
     _animPos     = predPos;
     _animBearing = lerpAngleDeg(_animBearing, targetBearing, _bearingLerp);
+    // Rastro segue a seta: reparte a polyline no predIdx (onde a seta está), não
+    // no _closestPolylineIdx do GPS. Throttle ~250ms — colado o suficiente sem
+    // re-difundir a geometria pelo channel a cada frame (perf Adreno 610).
+    _predIdx = predIdx;
+    if (!_markingMode && !_paused && predIdx != _overlaysSplitIdx) {
+      final tMs = DateTime.now().millisecondsSinceEpoch;
+      if (tMs - _lastTrailMs >= 250 && mounted) {
+        _lastTrailMs = tMs;
+        setState(() {}); // build() reparte a rota no _predIdx; memoização cuida do resto
+      }
+    }
     if (!_markingMode && !_paused) {
       _mapController?.moveCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
@@ -1232,6 +1248,8 @@ class _NavigationScreenState extends State<NavigationScreen>
         _result                  = newResult;
         _radares                 = nearby;
         _closestPolylineIdx      = 0;
+        _predIdx                 = 0; // rota nova começa na posição atual (índice 0)
+        _anchorIdx               = 0;
         _overlaysSplitIdx        = null; // invalida cache de overlays: geometria mudou
         _maneuverIndex           = 0;
         _distToNextManeuver      = double.infinity;
@@ -1918,7 +1936,9 @@ class _NavigationScreenState extends State<NavigationScreen>
     final remSec    = (_result.durationSeconds * fraction).round();
 
     final pts = _result.polylinePoints;
-    final splitIdx = _closestPolylineIdx.clamp(0, pts.length - 1);
+    // Split segue o predIdx interpolado (a seta), não o _closestPolylineIdx do
+    // GPS — assim o rastro cinza cola na seta. O tick throttla o rebuild.
+    final splitIdx = _predIdx.clamp(0, pts.length - 1);
     // Memoização: recomputa overlays só quando o trecho/raio realmente muda
     // (≈1Hz do GPS), não a cada frame da animação do marcador (60fps).
     // Mantendo a mesma instância de Set entre frames, o google_maps_flutter
