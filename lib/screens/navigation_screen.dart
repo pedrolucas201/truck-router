@@ -190,11 +190,15 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _hasTimeRestrictionAlert  = false;
   bool _timeRestrictionAlertSpoken = false;
 
-  // Corredor de desvio: 40m (era 120m). 120m deixava o caminhão errar um
-  // quarteirão inteiro numa rua paralela antes de a contagem sequer começar —
-  // causa raiz do reroute de 63s no teste de campo. 40m ≈ comportamento Waze.
-  // O debounce de 3 fixes (_offRouteCountLimit) segura ruído de GPS.
-  static const _offRouteThresholdM  = 40.0;
+  // Corredor de desvio: 70m. Histórico: 120m (errava um quarteirão inteiro numa
+  // rua paralela) → 40m (rápido demais) → 70m. O 40m era apertado pra pista
+  // dupla: na Fernão Dias a linha da HERE fica ~45m do lado onde o caminhão roda
+  // (field_logs 01/07: off_route em rajada, distM cravado 40-49m → storm de
+  // reroute a cada ~7s). 70m ignora a separação de pista mas ainda pega rua
+  // errada (quarteirão é 80-120m). O debounce de 3 fixes segura ruído de GPS.
+  // ponytail: knob de campo — se voltar a storm no log, subir; se atrasar
+  // correção legítima de rua errada, baixar.
+  static const _offRouteThresholdM  = 70.0;
   static const _offRouteCountLimit  = 3;
   // Throttle do reroute: 10s pro refresh periódico/background; piso curto de 4s
   // pra desvio real (urgent), que já é naturalmente limitado pelo re-arm do
@@ -616,8 +620,16 @@ class _NavigationScreenState extends State<NavigationScreen>
   int? get _currentLimitKmh => _result.limitAt(_closestPolylineIdx);
 
   void _checkSpeedAlert(double kmh) {
-    // Sem dado da via: mantém o piso antigo de 90 pra não regredir a segurança.
-    final limit = _currentLimitKmh ?? 90;
+    // Alerta de excesso por VOZ só em área de radar (pedido do Gilberto): fora de
+    // radar o excesso fica só no visual (barra vermelha), sem repetir voz.
+    // _upcomingRadar != null == a mensagenzinha de radar está na tela.
+    final radar = _upcomingRadar;
+    if (radar == null) {
+      _speedAlertActive = false;
+      return;
+    }
+    // Limite que vale ali: o do radar (o que multa), senão o da via; piso 90 sem dado.
+    final limit = (radar.speedKmh > 0 ? radar.speedKmh : _currentLimitKmh) ?? 90;
     if (kmh >= limit + 2) { // +2: folga de arredondamento, evita nag no limite exato
       final now = DateTime.now();
       if (!_speedAlertActive) {
