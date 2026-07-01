@@ -8,7 +8,10 @@ import (
 	"time"
 )
 
-const routeCacheTTL = 2 * time.Hour
+// 3min: a rota agora carrega trânsito (dynamicSpeedInfo). Cache longo serviria
+// congestionamento velho. 3min ainda dedupa rajada (reroute/retry) mas mantém
+// o trânsito fresco o suficiente pra navegação.
+const routeCacheTTL = 3 * time.Minute
 
 type cacheEntry struct {
 	body        []byte

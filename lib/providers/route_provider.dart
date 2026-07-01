@@ -135,7 +135,8 @@ class RouteProvider extends ChangeNotifier {
           restrictionsAvoided: result.restrictionsAvoided,
           // restrictionsBlocked zerado: enrichment rodou sobre a polyline HERE,
           // não sobre a TomTom — herdar geraria alertas de proximidade errados.
-          speedLimits: result.speedLimits,
+          // speedLimits/trafficSpans NÃO herdados: são offsets da polyline HERE,
+          // que não batem com a geometria (outra) da TomTom.
         );
       }
 

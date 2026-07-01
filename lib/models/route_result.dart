@@ -11,6 +11,29 @@ class SpeedLimitSpan {
   const SpeedLimitSpan(this.offset, this.kmh);
 }
 
+/// Nível de trânsito de um trecho (trafficSpeed vs baseSpeed da HERE).
+enum TrafficLevel {
+  free,
+  slow,
+  heavy;
+
+  /// Classifica pela razão trafficSpeed/baseSpeed: >=0.85 flui, >=0.5 lento,
+  /// abaixo é pesado/parado.
+  static TrafficLevel fromRatio(double ratio) => ratio >= 0.85
+      ? TrafficLevel.free
+      : ratio >= 0.5
+          ? TrafficLevel.slow
+          : TrafficLevel.heavy;
+}
+
+/// Trânsito por trecho a partir de um offset da polyline. `free` não é pintado
+/// (a linha base já aparece) — só `slow` (laranja) e `heavy` (vermelho).
+class TrafficSpan {
+  final int offset;
+  final TrafficLevel level;
+  const TrafficSpan(this.offset, this.level);
+}
+
 class RouteResult {
   final List<LatLng> polylinePoints;
   final int distanceMeters;
@@ -22,6 +45,7 @@ class RouteResult {
   final bool hasTimeRestriction;
   final RouteResult? dirtRoadAlternative;
   final List<SpeedLimitSpan> speedLimits;
+  final List<TrafficSpan> trafficSpans;
 
   const RouteResult({
     required this.polylinePoints,
@@ -34,6 +58,7 @@ class RouteResult {
     this.hasTimeRestriction   = false,
     this.dirtRoadAlternative  ,
     this.speedLimits          = const [],
+    this.trafficSpans         = const [],
   });
 
   RouteResult copyWith({
@@ -47,6 +72,7 @@ class RouteResult {
     bool? hasTimeRestriction,
     RouteResult? dirtRoadAlternative,
     List<SpeedLimitSpan>? speedLimits,
+    List<TrafficSpan>? trafficSpans,
   }) => RouteResult(
     polylinePoints:      polylinePoints      ?? this.polylinePoints,
     distanceMeters:      distanceMeters      ?? this.distanceMeters,
@@ -58,6 +84,7 @@ class RouteResult {
     hasTimeRestriction:  hasTimeRestriction  ?? this.hasTimeRestriction,
     dirtRoadAlternative: dirtRoadAlternative ?? this.dirtRoadAlternative,
     speedLimits:         speedLimits         ?? this.speedLimits,
+    trafficSpans:        trafficSpans        ?? this.trafficSpans,
   );
 
   /// Limite de caminhão vigente em [polylineIdx]: o último span cujo offset

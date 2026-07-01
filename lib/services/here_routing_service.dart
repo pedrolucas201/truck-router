@@ -25,7 +25,8 @@ class HereRoutingService {
       'return':          'polyline,summary,actions',
       // spans é parâmetro PRÓPRIO — NÃO vai dentro de 'return' (isso dá E605001).
       // Com transportMode=truck a HERE já devolve o limite do CAMINHÃO por trecho.
-      'spans':           'speedLimit',
+      // dynamicSpeedInfo (sem departureTime) traz baseSpeed vs trafficSpeed = trânsito.
+      'spans':           'speedLimit,dynamicSpeedInfo',
       'lang':            'pt-BR',
       if (avoidDirtRoad) 'avoid[features]': 'dirtRoad',
       ...truck.toHereParams(),
@@ -79,6 +80,7 @@ class HereRoutingService {
     var totalDistance = 0;
     var totalDuration = 0;
     final speedLimits = <SpeedLimitSpan>[];
+    final trafficSpans = <TrafficSpan>[];
 
     for (final s in sections) {
       final section      = s as Map<String, dynamic>;
@@ -117,10 +119,22 @@ class HereRoutingService {
       final spans = section['spans'] as List<dynamic>? ?? [];
       for (final sp in spans) {
         final span = sp as Map<String, dynamic>;
-        final speedMs = (span['speedLimit'] as num?)?.toDouble();
-        if (speedMs == null || speedMs <= 0) continue;
         final offset = sectionOffset + ((span['offset'] as num?)?.toInt() ?? 0);
-        speedLimits.add(SpeedLimitSpan(offset, (speedMs * 3.6).round()));
+
+        final speedMs = (span['speedLimit'] as num?)?.toDouble();
+        if (speedMs != null && speedMs > 0) {
+          speedLimits.add(SpeedLimitSpan(offset, (speedMs * 3.6).round()));
+        }
+
+        // Trânsito: razão trafficSpeed/baseSpeed. Guarda TODOS os spans (inclusive
+        // free) — o free serve de fronteira p/ o render saber onde o trecho lento
+        // termina; só free não é pintado.
+        final dsi = span['dynamicSpeedInfo'] as Map<String, dynamic>?;
+        final base = (dsi?['baseSpeed'] as num?)?.toDouble();
+        final traffic = (dsi?['trafficSpeed'] as num?)?.toDouble();
+        if (base != null && base > 0 && traffic != null) {
+          trafficSpans.add(TrafficSpan(offset, TrafficLevel.fromRatio(traffic / base)));
+        }
       }
     }
 
@@ -131,6 +145,7 @@ class HereRoutingService {
       maneuvers:         allManeuvers,
       hasTimeRestriction: hasTimeRestriction,
       speedLimits:        speedLimits,
+      trafficSpans:       trafficSpans,
     );
   }
 }

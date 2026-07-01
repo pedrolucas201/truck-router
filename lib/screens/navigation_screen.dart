@@ -1455,7 +1455,34 @@ class _NavigationScreenState extends State<NavigationScreen>
           color: const Color(0xFF1565C0),
           width: 10,
         ),
+      // Trânsito: pinta só os trechos lentos à frente por cima do azul.
+      ..._trafficOverlays(pts, splitIdx),
     };
+  }
+
+  // Overlay de trânsito: um Polyline por trecho lento/parado da parte AINDA não
+  // percorrida (>= splitIdx). free não pinta — a linha azul base aparece. Cada
+  // span vale do seu offset até o offset do próximo (por isso o serviço guarda
+  // os free como fronteira). Bounds defensivos (RangeError já mordeu aqui antes).
+  Iterable<Polyline> _trafficOverlays(List<LatLng> pts, int splitIdx) sync* {
+    final spans = _result.trafficSpans;
+    for (var i = 0; i < spans.length; i++) {
+      if (spans[i].level == TrafficLevel.free) continue;
+      final start = spans[i].offset.clamp(0, pts.length - 1);
+      final end = (i + 1 < spans.length ? spans[i + 1].offset : pts.length - 1)
+          .clamp(0, pts.length - 1);
+      final from = start < splitIdx ? splitIdx : start; // só o que falta andar
+      if (from >= end) continue;
+      yield Polyline(
+        polylineId: PolylineId('traffic_$i'),
+        points: pts.sublist(from, end + 1),
+        color: spans[i].level == TrafficLevel.heavy
+            ? Colors.red.shade600
+            : Colors.orange.shade600,
+        width: 10,
+        zIndex: 2, // acima do nav_remaining (azul)
+      );
+    }
   }
 
   Set<Circle> _buildRadarCircles() {

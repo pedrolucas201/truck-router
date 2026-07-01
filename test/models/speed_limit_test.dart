@@ -45,4 +45,15 @@ void main() {
       expect(r.maxTruckSpeedKmh, 90);
     });
   });
+
+  group('TrafficLevel.fromRatio', () {
+    test('classifica fluindo / lento / pesado nos limiares', () {
+      expect(TrafficLevel.fromRatio(1.0), TrafficLevel.free);
+      expect(TrafficLevel.fromRatio(0.85), TrafficLevel.free); // limiar inferior de free
+      expect(TrafficLevel.fromRatio(0.84), TrafficLevel.slow);
+      expect(TrafficLevel.fromRatio(0.5), TrafficLevel.slow);   // limiar inferior de slow
+      expect(TrafficLevel.fromRatio(0.49), TrafficLevel.heavy);
+      expect(TrafficLevel.fromRatio(0.1), TrafficLevel.heavy);
+    });
+  });
 }
