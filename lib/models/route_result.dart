@@ -2,6 +2,15 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'bridge_restriction.dart';
 import 'route_maneuver.dart';
 
+/// Limite de velocidade de caminhão (km/h) a partir de um offset da polyline.
+/// A HERE já devolve o limite ciente do modo (transportMode=truck) por segmento —
+/// não é o limite de carro, é o do caminhão naquele trecho.
+class SpeedLimitSpan {
+  final int offset; // índice em polylinePoints onde este limite passa a valer
+  final int kmh;
+  const SpeedLimitSpan(this.offset, this.kmh);
+}
+
 class RouteResult {
   final List<LatLng> polylinePoints;
   final int distanceMeters;
@@ -12,7 +21,7 @@ class RouteResult {
   final bool usedTomTomData;
   final bool hasTimeRestriction;
   final RouteResult? dirtRoadAlternative;
-  final int? maxTruckSpeedKmh;
+  final List<SpeedLimitSpan> speedLimits;
 
   const RouteResult({
     required this.polylinePoints,
@@ -24,7 +33,7 @@ class RouteResult {
     this.usedTomTomData       = false,
     this.hasTimeRestriction   = false,
     this.dirtRoadAlternative  ,
-    this.maxTruckSpeedKmh,
+    this.speedLimits          = const [],
   });
 
   RouteResult copyWith({
@@ -37,7 +46,7 @@ class RouteResult {
     bool? usedTomTomData,
     bool? hasTimeRestriction,
     RouteResult? dirtRoadAlternative,
-    int? maxTruckSpeedKmh,
+    List<SpeedLimitSpan>? speedLimits,
   }) => RouteResult(
     polylinePoints:      polylinePoints      ?? this.polylinePoints,
     distanceMeters:      distanceMeters      ?? this.distanceMeters,
@@ -48,8 +57,29 @@ class RouteResult {
     usedTomTomData:      usedTomTomData      ?? this.usedTomTomData,
     hasTimeRestriction:  hasTimeRestriction  ?? this.hasTimeRestriction,
     dirtRoadAlternative: dirtRoadAlternative ?? this.dirtRoadAlternative,
-    maxTruckSpeedKmh:    maxTruckSpeedKmh    ?? this.maxTruckSpeedKmh,
+    speedLimits:         speedLimits         ?? this.speedLimits,
   );
+
+  /// Limite de caminhão vigente em [polylineIdx]: o último span cujo offset
+  /// já começou (offset <= idx). Null quando a rota não trouxe dados de limite.
+  int? limitAt(int polylineIdx) {
+    int? kmh;
+    for (final s in speedLimits) {
+      if (s.offset > polylineIdx) break;
+      kmh = s.kmh;
+    }
+    return kmh;
+  }
+
+  /// Maior limite de caminhão da rota — usado no resumo/compartilhar.
+  int? get maxTruckSpeedKmh {
+    if (speedLimits.isEmpty) return null;
+    var m = 0;
+    for (final s in speedLimits) {
+      if (s.kmh > m) m = s.kmh;
+    }
+    return m;
+  }
 
   String get distanceText {
     if (distanceMeters >= 1000) {

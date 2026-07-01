@@ -303,6 +303,12 @@ class _NavigationScreenState extends State<NavigationScreen>
       _anchorSpeedMps = 0;
     }
     _lastPosUpdateAt = null;
+    // Re-arma o seguir ao voltar do background: sem isso, se o motorista mexeu
+    // no mapa antes de sair (free-look), o app não voltava a seguir sozinho e
+    // exigia toque manual em "centralizar". _ignoreGestureUntil tranca o gesto
+    // pro moveCamera abaixo não re-disparar o free-look que acabamos de limpar.
+    _freeLook = false;
+    _ignoreGestureUntil = DateTime.now().add(const Duration(milliseconds: 900));
     // moveCamera (instantâneo) evita giros: animateCamera competia com
     // os primeiros updates de GPS no resume e causava rotações bruscas.
     if (!_markingMode && _mapController != null) {
@@ -605,8 +611,14 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (yes == true && mounted) Navigator.of(context).pop();
   }
 
+  /// Limite de caminhão vigente na posição atual (HERE, por trecho).
+  /// Null quando a rota não trouxe dados de limite.
+  int? get _currentLimitKmh => _result.limitAt(_closestPolylineIdx);
+
   void _checkSpeedAlert(double kmh) {
-    if (kmh >= 90) {
+    // Sem dado da via: mantém o piso antigo de 90 pra não regredir a segurança.
+    final limit = _currentLimitKmh ?? 90;
+    if (kmh >= limit + 2) { // +2: folga de arredondamento, evita nag no limite exato
       final now = DateTime.now();
       if (!_speedAlertActive) {
         _speedAlertActive = true;
@@ -617,7 +629,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         _lastSpeedAlertAt = now;
         _speak('Velocidade acima do limite para caminhão');
       }
-    } else if (kmh < 85) {
+    } else if (kmh < limit - 3) { // histerese: só rearma bem abaixo do limite
       _speedAlertActive = false;
     }
   }
@@ -2304,6 +2316,7 @@ class _NavigationScreenState extends State<NavigationScreen>
             // ── Barra inferior ──────────────────────────────────────────────
             _BottomBar(
               speedKmh:      _speedKmh,
+              limitKmh:      _currentLimitKmh,
               remainingDist: _fmtDist(remaining),
               eta:           _fmtEta(remSec),
               radarAlert:    _upcomingRadar,
@@ -2426,12 +2439,14 @@ class _InstructionBar extends StatelessWidget {
 
 class _BottomBar extends StatefulWidget {
   final double speedKmh;
+  final int? limitKmh; // limite de caminhão do trecho atual (null = sem dado)
   final String remainingDist;
   final String eta;
   final RadarPoint? radarAlert;
 
   const _BottomBar({
     required this.speedKmh,
+    required this.limitKmh,
     required this.remainingDist,
     required this.eta,
     required this.radarAlert,
@@ -2458,12 +2473,15 @@ class _BottomBarState extends State<_BottomBar>
     );
   }
 
+  // Limite do trecho atual; sem dado, cai no piso antigo de 90 (não regride).
+  int get _limit => widget.limitKmh ?? 90;
+
   @override
   void didUpdateWidget(_BottomBar old) {
     super.didUpdateWidget(old);
-    if (widget.speedKmh >= 90 && !_pulseCtrl.isAnimating) {
+    if (widget.speedKmh >= _limit && !_pulseCtrl.isAnimating) {
       _pulseCtrl.repeat(reverse: true);
-    } else if (widget.speedKmh < 88 && _pulseCtrl.isAnimating) {
+    } else if (widget.speedKmh < _limit - 2 && _pulseCtrl.isAnimating) {
       _pulseCtrl.stop();
       _pulseCtrl.reset();
     }
@@ -2476,15 +2494,15 @@ class _BottomBarState extends State<_BottomBar>
   }
 
   Color get _borderColor {
-    if (widget.speedKmh >= 90) return Colors.red.shade600;
-    if (widget.speedKmh >= 80) return Colors.amber.shade600;
+    if (widget.speedKmh >= _limit) return Colors.red.shade600;
+    if (widget.speedKmh >= _limit - 10) return Colors.amber.shade600;
     return Colors.white24;
   }
 
   @override
   Widget build(BuildContext context) {
-    final isOver = widget.speedKmh >= 90;
-    final isWarn = widget.speedKmh >= 80;
+    final isOver = widget.speedKmh >= _limit;
+    final isWarn = widget.speedKmh >= _limit - 10;
     final isLombada = widget.radarAlert != null &&
         widget.radarAlert!.type.toLowerCase().contains('lombada');
 
@@ -2542,6 +2560,29 @@ class _BottomBarState extends State<_BottomBar>
               );
             },
           ),
+          // Placa de limite da via (só quando a HERE trouxe dado do trecho).
+          if (widget.limitKmh != null) ...[
+            const SizedBox(width: 12),
+            Container(
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                border: Border.all(color: Colors.red.shade700, width: 4),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '${widget.limitKmh}',
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(width: 16),
           Expanded(
             child: widget.radarAlert != null

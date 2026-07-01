@@ -774,7 +774,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     buf.writeln('Distância: ${result.distanceText}');
     buf.writeln('Duração: ${result.durationText}');
     if (result.maxTruckSpeedKmh != null) {
-      buf.writeln('Vel. máx. caminhão: 90 km/h (pista dupla) / 80 km/h (pista simples)');
+      buf.writeln('Vel. máx. caminhão na rota: ${result.maxTruckSpeedKmh} km/h');
     }
     buf.writeln();
     buf.write(
