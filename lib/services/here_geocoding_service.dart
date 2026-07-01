@@ -43,6 +43,16 @@ class HereGeocodingService {
       }
     }
 
+    // Endereço de rodovia por km (ex: "Fernão Dias km 936"): a HERE lê o "936"
+    // como cruzamento e devolve um ponto ~2km errado (field 01/07). A Google
+    // acerta esse formato — coloca o resultado dela no topo das sugestões.
+    if (_isRodoviaKm(query)) {
+      final g = await _googleGeocode(query);
+      if (g != null && seenKeys.add(g.title.toLowerCase().trim())) {
+        merged.insert(0, g);
+      }
+    }
+
     // Fallback: Nominatim (OpenStreetMap) quando HERE não encontra nada.
     // Chamado só neste caso para respeitar o limite de 1 req/s do serviço gratuito.
     if (merged.isEmpty) {
@@ -53,6 +63,37 @@ class HereGeocodingService {
     }
 
     return merged.take(5).toList();
+  }
+
+  // Rodovia por km: "km 936", "km936", "KM 936+700". A HERE erra esse formato.
+  static final _rodoviaKmRe = RegExp(r'\bkm\s*\d', caseSensitive: false);
+  static bool _isRodoviaKm(String q) => _rodoviaKmRe.hasMatch(q);
+
+  // Google Geocoding — melhor em endereço de rodovia por km. Chamada direta (a
+  // key é restrita ao app, então só autoriza do APK). Reusa o mesmo padrão do
+  // passo 3 do _cepSearch. Rejeita APPROXIMATE (só achou cidade, não o ponto).
+  static Future<GeocodingSuggestion?> _googleGeocode(String query) async {
+    try {
+      final resp = await http.get(Uri.https(
+        'maps.googleapis.com', '/maps/api/geocode/json',
+        {'address': query, 'components': 'country:BR', 'language': 'pt-BR', 'key': googleMapsApiKey},
+      ));
+      if (resp.statusCode != 200) return null;
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (body['status'] != 'OK') return null;
+      final results = (body['results'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+      if (results.isEmpty) return null;
+      final geom    = results.first['geometry'] as Map<String, dynamic>?;
+      final locType = geom?['location_type'] as String? ?? '';
+      final loc     = geom?['location'] as Map<String, dynamic>?;
+      if (locType == 'APPROXIMATE' || loc == null) return null;
+      return GeocodingSuggestion.place(
+        title: results.first['formatted_address'] as String? ?? query,
+        pos:   LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   // Autocomplete HERE: endereços com ID único (sem ambiguidade de coords).
