@@ -222,12 +222,6 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Olhar-ao-redor: volta a seguir sozinho após Xs sem o usuário tocar o mapa.
   // ponytail: knob de campo — subir se ele reclamar que volta cedo demais.
   static const _freeLookAutoReturnMs   = 10000;
-  // Teto da janela que ignora os frames do animateCamera programático (recenter/
-  // zoom). Não é chute de duração: onCameraIdle fecha no instante que a animação
-  // acaba; este teto só evita travar o gesto se o idle não vier. Jump grande de
-  // zoom (aproximado→recuado) passava dos 900ms antigos → frame tardio ligava o
-  // free-look → seta virava marker azul (report Gilberto).
-  static const _programmaticMoveMaxMs  = 3000;
   // Chegada: contador de 15s antes de finalizar; se o caminhão se afastar mais
   // que 40m da âncora durante a contagem, cancela e reroteia (deu a volta).
   static const _arrivalCountdownMs = 15000;
@@ -1567,10 +1561,10 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (zoomDiverged || panDiverged) {
       _lastUserGestureAt = DateTime.now();
       if (!_freeLook) {
-        // Fonte da verdade do bug do marker azul: se free-look dispara com
-        // cause=zoom e msSinceProg pequeno (< teto), a animação do recenter/zoom
-        // furou a janela → subir _programmaticMoveMaxMs. msSinceProg alto/-1 =
-        // gesto real do motorista (comportamento correto).
+        // Fonte da verdade do bug do marker azul: com moveCamera não deveria mais
+        // haver free-look com cause=zoom logo após um recenter. Se aparecer
+        // (msSinceProg pequeno, cause=zoom), o snap ainda diverge no device dele →
+        // investigar. msSinceProg alto/-1 = gesto real (comportamento correto).
         final msSinceProg = _lastProgrammaticMoveAt != null
             ? DateTime.now().difference(_lastProgrammaticMoveAt!).inMilliseconds
             : -1;
@@ -1589,16 +1583,19 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   void _recenter() {
-    // Qualquer retomada de câmera sai do olhar-ao-redor; os frames do
-    // animateCamera abaixo não devem re-disparar o free-look (_ignoreGestureUntil).
+    // Qualquer retomada de câmera sai do olhar-ao-redor. O snap único de moveCamera
+    // não deve re-disparar o free-look (_ignoreGestureUntil cobre o frame de transição).
     if (_freeLook) setState(() => _freeLook = false);
     final progNow = DateTime.now();
     _lastProgrammaticMoveAt = progNow;
-    _ignoreGestureUntil =
-        progNow.add(const Duration(milliseconds: _programmaticMoveMaxMs));
+    _ignoreGestureUntil = progNow.add(const Duration(milliseconds: 900));
     final pos = _snappedPos ?? _currentPos;
     if (pos == null || _mapController == null) return;
-    _mapController!.animateCamera(
+    // moveCamera (instantâneo), NÃO animateCamera: o glide do animate transmitia
+    // frames de zoom divergente que ligavam o free-look → marker azul travado e
+    // recenter que não "pegava" (P0 Gilberto, v2.4.5). É o mesmo motivo de resume
+    // e follow usarem moveCamera. Snap no zoom é aceitável e mata o loop de vez.
+    _mapController!.moveCamera(
       CameraUpdate.newCameraPosition(CameraPosition(
         target:  pos,
         zoom:    _zoom,
@@ -2097,9 +2094,6 @@ class _NavigationScreenState extends State<NavigationScreen>
                           },
                           style: _themeController.isNight ? kNightMapStyle : null,
                           onCameraMove: _onCameraMove,
-                          // Animação programática (recenter/zoom) acabou → fecha a
-                          // janela na hora, sem esperar o teto, pra não engolir gesto.
-                          onCameraIdle: () => _ignoreGestureUntil = null,
                           polylines: polylines,
                           markers: markers,
                           circles: radarCircles,
