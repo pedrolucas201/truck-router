@@ -129,6 +129,8 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _freeLook = false;
   DateTime? _lastUserGestureAt;   // marca o último gesto, p/ auto-retorno
   DateTime? _ignoreGestureUntil;  // ignora os frames do _recenter (não re-entra)
+  DateTime? _lastProgrammaticMoveAt; // instrumentação: quanto depois de um
+                                     // recenter/zoom o free-look disparou (bug do marker azul)
   // Estado "chegando": contador ancorado antes de finalizar (não mata o GPS —
   // o motorista ainda manobra / dá a volta no quarteirão).
   bool _arriving = false;
@@ -323,7 +325,9 @@ class _NavigationScreenState extends State<NavigationScreen>
     // exigia toque manual em "centralizar". _ignoreGestureUntil tranca o gesto
     // pro moveCamera abaixo não re-disparar o free-look que acabamos de limpar.
     _freeLook = false;
-    _ignoreGestureUntil = DateTime.now().add(const Duration(milliseconds: 900));
+    final resumeNow = DateTime.now();
+    _lastProgrammaticMoveAt = resumeNow;
+    _ignoreGestureUntil = resumeNow.add(const Duration(milliseconds: 900));
     // moveCamera (instantâneo) evita giros: animateCamera competia com
     // os primeiros updates de GPS no resume e causava rotações bruscas.
     if (!_markingMode && _mapController != null) {
@@ -1554,13 +1558,33 @@ class _NavigationScreenState extends State<NavigationScreen>
         DateTime.now().isBefore(_ignoreGestureUntil!)) {
       return;
     }
-    final zoomDiverged = (pos.zoom - _zoom).abs() > 0.2;
-    final panDiverged = RadarService.haversine(
-            pos.target.latitude, pos.target.longitude,
-            _animPos.latitude, _animPos.longitude) > 40;
+    final zoomDelta = pos.zoom - _zoom;
+    final panM = RadarService.haversine(
+        pos.target.latitude, pos.target.longitude,
+        _animPos.latitude, _animPos.longitude);
+    final zoomDiverged = zoomDelta.abs() > 0.2;
+    final panDiverged = panM > 40;
     if (zoomDiverged || panDiverged) {
       _lastUserGestureAt = DateTime.now();
-      if (!_freeLook) setState(() => _freeLook = true);
+      if (!_freeLook) {
+        // Fonte da verdade do bug do marker azul: se free-look dispara com
+        // cause=zoom e msSinceProg pequeno (< teto), a animação do recenter/zoom
+        // furou a janela → subir _programmaticMoveMaxMs. msSinceProg alto/-1 =
+        // gesto real do motorista (comportamento correto).
+        final msSinceProg = _lastProgrammaticMoveAt != null
+            ? DateTime.now().difference(_lastProgrammaticMoveAt!).inMilliseconds
+            : -1;
+        debugPrint('[FREELOOK] enter cause=${zoomDiverged ? "zoom" : "pan"} '
+            'zoomDelta=${zoomDelta.toStringAsFixed(2)} panM=${panM.round()} '
+            'msSinceProg=$msSinceProg');
+        FieldLog.event('freelook_enter', {
+          'cause': zoomDiverged ? 'zoom' : 'pan',
+          'zoomDelta': double.parse(zoomDelta.toStringAsFixed(2)),
+          'panM': panM.round(),
+          'msSinceProg': msSinceProg,
+        });
+        setState(() => _freeLook = true);
+      }
     }
   }
 
@@ -1568,8 +1592,10 @@ class _NavigationScreenState extends State<NavigationScreen>
     // Qualquer retomada de câmera sai do olhar-ao-redor; os frames do
     // animateCamera abaixo não devem re-disparar o free-look (_ignoreGestureUntil).
     if (_freeLook) setState(() => _freeLook = false);
+    final progNow = DateTime.now();
+    _lastProgrammaticMoveAt = progNow;
     _ignoreGestureUntil =
-        DateTime.now().add(const Duration(milliseconds: _programmaticMoveMaxMs));
+        progNow.add(const Duration(milliseconds: _programmaticMoveMaxMs));
     final pos = _snappedPos ?? _currentPos;
     if (pos == null || _mapController == null) return;
     _mapController!.animateCamera(
