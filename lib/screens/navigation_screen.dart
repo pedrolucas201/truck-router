@@ -220,6 +220,12 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Olhar-ao-redor: volta a seguir sozinho após Xs sem o usuário tocar o mapa.
   // ponytail: knob de campo — subir se ele reclamar que volta cedo demais.
   static const _freeLookAutoReturnMs   = 10000;
+  // Teto da janela que ignora os frames do animateCamera programático (recenter/
+  // zoom). Não é chute de duração: onCameraIdle fecha no instante que a animação
+  // acaba; este teto só evita travar o gesto se o idle não vier. Jump grande de
+  // zoom (aproximado→recuado) passava dos 900ms antigos → frame tardio ligava o
+  // free-look → seta virava marker azul (report Gilberto).
+  static const _programmaticMoveMaxMs  = 3000;
   // Chegada: contador de 15s antes de finalizar; se o caminhão se afastar mais
   // que 40m da âncora durante a contagem, cancela e reroteia (deu a volta).
   static const _arrivalCountdownMs = 15000;
@@ -1300,8 +1306,12 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
       _loadRoutePois();
       _refreshPoliceTimeline();
-      // Só anuncia se nível completo e rota mudou significativamente (>500m)
-      if (_audioLevel == AudioLevel.completo &&
+      // Só anuncia num desvio REAL (urgent = saiu do corredor). O refresh
+      // periódico de 10min é background: atualiza trânsito/rota em silêncio —
+      // falar "Rota recalculada" sem o motorista ter saído da rota era o ruído
+      // que o Gilberto reclamou. Ainda exige nível completo e mudança >500m.
+      if (urgent &&
+          _audioLevel == AudioLevel.completo &&
           (newResult.distanceMeters - prevDistM).abs() > 500) {
         _speak('Rota recalculada');
       }
@@ -1558,7 +1568,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     // Qualquer retomada de câmera sai do olhar-ao-redor; os frames do
     // animateCamera abaixo não devem re-disparar o free-look (_ignoreGestureUntil).
     if (_freeLook) setState(() => _freeLook = false);
-    _ignoreGestureUntil = DateTime.now().add(const Duration(milliseconds: 900));
+    _ignoreGestureUntil =
+        DateTime.now().add(const Duration(milliseconds: _programmaticMoveMaxMs));
     final pos = _snappedPos ?? _currentPos;
     if (pos == null || _mapController == null) return;
     _mapController!.animateCamera(
@@ -2060,6 +2071,9 @@ class _NavigationScreenState extends State<NavigationScreen>
                           },
                           style: _themeController.isNight ? kNightMapStyle : null,
                           onCameraMove: _onCameraMove,
+                          // Animação programática (recenter/zoom) acabou → fecha a
+                          // janela na hora, sem esperar o teto, pra não engolir gesto.
+                          onCameraIdle: () => _ignoreGestureUntil = null,
                           polylines: polylines,
                           markers: markers,
                           circles: radarCircles,
@@ -2619,29 +2633,9 @@ class _BottomBarState extends State<_BottomBar>
               );
             },
           ),
-          // Placa de limite da via (só quando a HERE trouxe dado do trecho).
-          if (widget.limitKmh != null) ...[
-            const SizedBox(width: 12),
-            Container(
-              width: 54,
-              height: 54,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
-                border: Border.all(color: Colors.red.shade700, width: 4),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                '${widget.limitKmh}',
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  height: 1.0,
-                ),
-              ),
-            ),
-          ],
+          // Placa de limite da via removida (report Gilberto): o velocímetro que
+          // muda de cor (amarelo→vermelho) já comunica o limite; a plaquinha era
+          // ruído. limitKmh segue chegando pra alimentar o _limit das cores.
           const SizedBox(width: 16),
           Expanded(
             child: widget.radarAlert != null
