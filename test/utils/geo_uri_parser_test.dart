@@ -9,6 +9,27 @@ void main() {
       expect(result, isNotNull);
       expect(result!.coords.latitude, closeTo(-23.5505, 0.0001));
     });
+
+    // Report de campo (2026-07-02): WhatsApp manda coords no path e endereço
+    // textual no q — antes caía em "Link não reconhecido".
+    test('geo:lat,lng?q=Endereço(Nome) usa coords do path e nome como label', () {
+      final uri = Uri.parse(
+        'geo:-23.12380504,-45.72210813?q=Rua+Edelzuita+Ribeiro+Gobbi%2C+218%2C+Ca%C3%A7apava%2C+12285-445%2C+SP%2C+BR(Moovemaq)',
+      );
+      final result = parseGeoUri(uri);
+      expect(result, isNotNull);
+      expect(result!.coords.latitude, closeTo(-23.12380504, 0.0001));
+      expect(result.coords.longitude, closeTo(-45.72210813, 0.0001));
+      expect(result.label, 'Moovemaq');
+    });
+
+    test('geo:lat,lng?q=lat,lng ainda prioriza coords do q', () {
+      final uri = Uri.parse('geo:0,0?q=-23.5,-46.6(Posto)');
+      final result = parseGeoUri(uri);
+      expect(result, isNotNull);
+      expect(result!.coords.latitude, closeTo(-23.5, 0.0001));
+      expect(result.label, 'Posto');
+    });
   });
 
   group('hosts alargados (WhatsApp compartilha em vários)', () {

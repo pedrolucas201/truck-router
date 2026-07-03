@@ -25,6 +25,7 @@ import '../services/favorites_service.dart';
 import '../providers/route_provider.dart';
 import '../providers/truck_profile_provider.dart';
 import '../services/here_geocoding_service.dart';
+import '../services/field_log.dart';
 import '../services/radar_service.dart';
 import '../services/firestore_radar_service.dart';
 import '../widgets/address_search_field.dart';
@@ -180,8 +181,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       }
     }
 
-    // Nenhum parser reconheceu o link. Mostra o URI cru pra capturar formatos
-    // inesperados em campo (ex: shortlink maps.app.goo.gl).
+    // Nenhum parser reconheceu o link. Loga o URI cru no field_logs — sem isso
+    // dependíamos do motorista printar a tela pra saber o formato que falhou.
+    FieldLog.event('deeplink_unrecognized', {'uri': uriStr});
+    // Mostra o URI cru pra capturar formatos inesperados em campo (ex: shortlink
+    // maps.app.goo.gl).
     // TODO(N4): após confirmar o formato real do WhatsApp em device, trocar por
     // mensagem genérica ("Não consegui ler esta localização compartilhada").
     if (mounted) {

@@ -37,12 +37,23 @@ DeepLinkType classifyMapsUri(Uri uri) {
 GeoLocation? parseGeoUri(Uri uri) {
   if (uri.scheme != 'geo') return null;
 
-  final q = uri.queryParameters['q'];
-  if (q != null) return _parseQ(q);
+  final pathCoords = _parseLatLng(uri.path);
 
-  final latLng = _parseLatLng(uri.path);
-  if (latLng == null) return null;
-  return (coords: latLng, label: null);
+  final q = uri.queryParameters['q'];
+  if (q != null) {
+    final fromQ = _parseQ(q);
+    if (fromQ != null) return fromQ;
+    // q é endereço em texto (ex: WhatsApp `geo:LAT,LNG?q=Rua...(Nome)`):
+    // usa as coords do path e o texto/paren do q como label.
+    if (pathCoords != null) {
+      final (text, parenLabel) = _splitLabel(q);
+      return (coords: pathCoords, label: parenLabel ?? (text.isNotEmpty ? text : null));
+    }
+    return null;
+  }
+
+  if (pathCoords == null) return null;
+  return (coords: pathCoords, label: null);
 }
 
 /// Parses a `https://maps.google.com/maps?q=LAT,LNG(Label)` URI — o formato de
@@ -60,16 +71,19 @@ GeoLocation? parseMapsDestination(Uri uri) {
 /// Extrai coords + label opcional de um parâmetro `q` (`LAT,LNG` ou
 /// `LAT,LNG(Label)`), compartilhado entre `geo:` e `maps.google.com?q=`.
 GeoLocation? _parseQ(String q) {
-  String? label;
-  String coords = q;
-  final parenIdx = q.indexOf('(');
-  if (parenIdx != -1) {
-    label = q.substring(parenIdx + 1, q.endsWith(')') ? q.length - 1 : q.length);
-    coords = q.substring(0, parenIdx).trim();
-  }
+  final (coords, label) = _splitLabel(q);
   final latLng = _parseLatLng(coords);
   if (latLng == null) return null;
-  return (coords: latLng, label: label?.isNotEmpty == true ? label : null);
+  return (coords: latLng, label: label);
+}
+
+/// Separa um `q` em `(texto antes do parêntese, label do parêntese)`.
+/// `LAT,LNG(Nome)` → `('LAT,LNG', 'Nome')`; sem parêntese → `(q, null)`.
+(String, String?) _splitLabel(String q) {
+  final parenIdx = q.indexOf('(');
+  if (parenIdx == -1) return (q.trim(), null);
+  final label = q.substring(parenIdx + 1, q.endsWith(')') ? q.length - 1 : q.length);
+  return (q.substring(0, parenIdx).trim(), label.isNotEmpty ? label : null);
 }
 
 /// Parses a `https://maps.google.com/maps?saddr=...&daddr=...` URI.
