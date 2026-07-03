@@ -58,6 +58,15 @@ enum AudioLevel { completo, essencial, silencioso }
 
 enum ZoomLevel { recuado, medio, aproximado }
 
+// Puro/testável: o alvo da câmera bate (<40m) com algum move que NÓS comandamos?
+// Sim → eco do follow (ignora). Não → dedo do usuário (free-look). É o
+// discriminador que separa nosso próprio moveCamera (mesmo atrasado por stall)
+// de um gesto real, matando o free-look "do nada" reportado em campo.
+bool targetIsEcho(List<LatLng> cmds, LatLng target) => cmds.any((t) =>
+    RadarService.haversine(
+        t.latitude, t.longitude, target.latitude, target.longitude) <
+    40);
+
 class NavigationScreen extends StatefulWidget {
   final RouteResult result;
   final LatLng destination;
@@ -131,6 +140,14 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _ignoreGestureUntil;  // ignora os frames do _recenter (não re-entra)
   DateTime? _lastProgrammaticMoveAt; // instrumentação: quanto depois de um
                                      // recenter/zoom o free-look disparou (bug do marker azul)
+  // Ring-buffer dos alvos que NÓS comandamos (follow/recenter/resume). O
+  // _onCameraMove escuta TODO move de câmera — inclusive os nossos. Um alvo que
+  // bate com algo comandado nos últimos ~4s é eco do follow, não o dedo do
+  // usuário. Discriminador ESPACIAL (não temporal): follow e dedo se intercalam
+  // no tempo, então janela de tempo não separa; mas o dedo leva a câmera a um
+  // alvo que nunca comandamos. Mata os 3 gatilhos espúrios (startup / catch-up
+  // pós-stall / refire do recenter) que faziam free-look "do nada".
+  final List<LatLng> _cmdTargets = [];
   // Estado "chegando": contador ancorado antes de finalizar (não mata o GPS —
   // o motorista ainda manobra / dá a volta no quarteirão).
   bool _arriving = false;
@@ -327,6 +344,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (!_markingMode && _mapController != null) {
       final pos = _snappedPos ?? _currentPos;
       if (pos != null) {
+        _recordCmd(pos);
         _mapController!.moveCamera(
           CameraUpdate.newCameraPosition(CameraPosition(
             target:  pos,
@@ -1040,6 +1058,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
     if (!_markingMode && !_paused) {
+      _recordCmd(predPos);
       _mapController?.moveCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
           target:  predPos,
@@ -1555,26 +1574,30 @@ class _NavigationScreenState extends State<NavigationScreen>
   void _onCameraMove(CameraPosition pos) {
     _cameraTarget = pos.target;
     if (_markingMode || _paused || _arrived) return;
+    // Antes do primeiro fix o _animPos ainda está no default (Brasília): o fit
+    // inicial no GPS real dá panM de centenas de km e disparava free-look em
+    // TODA abertura. Sem posição real não há follow nem gesto que faça sentido.
+    if (_lastPosUpdateAt == null) return;
     if (_ignoreGestureUntil != null &&
         DateTime.now().isBefore(_ignoreGestureUntil!)) {
       return;
     }
     final zoomDelta = pos.zoom - _zoom;
-    final panM = RadarService.haversine(
-        pos.target.latitude, pos.target.longitude,
-        _animPos.latitude, _animPos.longitude);
     final zoomDiverged = zoomDelta.abs() > 0.2;
-    final panDiverged = panM > 40;
-    if (zoomDiverged || panDiverged) {
+    // Eco do nosso próprio follow? Se o alvo bate (<40m) com QUALQUER alvo que
+    // comandamos nos últimos frames, foi moveCamera nosso — mesmo atrasado por
+    // um stall da main thread (o callback chega defasado, mas a posição defasada
+    // ainda é uma que nós mandamos). Só um alvo que NUNCA comandamos é o dedo.
+    final isEcho = targetIsEcho(_cmdTargets, pos.target);
+    if (zoomDiverged || !isEcho) {
       _lastUserGestureAt = DateTime.now();
       if (!_freeLook) {
-        // Fonte da verdade do bug do marker azul: com moveCamera não deveria mais
-        // haver free-look com cause=zoom logo após um recenter. Se aparecer
-        // (msSinceProg pequeno, cause=zoom), o snap ainda diverge no device dele →
-        // investigar. msSinceProg alto/-1 = gesto real (comportamento correto).
         final msSinceProg = _lastProgrammaticMoveAt != null
             ? DateTime.now().difference(_lastProgrammaticMoveAt!).inMilliseconds
             : -1;
+        final panM = RadarService.haversine(
+            pos.target.latitude, pos.target.longitude,
+            _animPos.latitude, _animPos.longitude);
         debugPrint('[FREELOOK] enter cause=${zoomDiverged ? "zoom" : "pan"} '
             'zoomDelta=${zoomDelta.toStringAsFixed(2)} panM=${panM.round()} '
             'msSinceProg=$msSinceProg');
@@ -1602,6 +1625,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     // frames de zoom divergente que ligavam o free-look → marker azul travado e
     // recenter que não "pegava" (P0 Gilberto, v2.4.5). É o mesmo motivo de resume
     // e follow usarem moveCamera. Snap no zoom é aceitável e mata o loop de vez.
+    _recordCmd(pos);
     _mapController!.moveCamera(
       CameraUpdate.newCameraPosition(CameraPosition(
         target:  pos,
@@ -1611,6 +1635,14 @@ class _NavigationScreenState extends State<NavigationScreen>
       )),
     );
   }
+
+  // Registra um alvo que comandamos, p/ o _onCameraMove distinguir eco de gesto.
+  // Cap ~120 (a 30fps do follow ≈ 4s) cobre o atraso de callback de um stall.
+  void _recordCmd(LatLng t) {
+    _cmdTargets.add(t);
+    if (_cmdTargets.length > 120) _cmdTargets.removeAt(0);
+  }
+
 
   // ── Ícone de restrição (badge colorido) ──────────────────────────────────────
 
