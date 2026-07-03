@@ -5,6 +5,7 @@ import '../models/bridge_restriction.dart';
 import '../models/route_result.dart';
 import '../models/truck_profile.dart';
 import '../repositories/restriction_repository.dart';
+import '../services/field_log.dart';
 import '../services/here_routing_service.dart';
 import '../services/overpass_service.dart';
 import '../services/tomtom_routing_service.dart';
@@ -49,7 +50,8 @@ class RouteProvider extends ChangeNotifier {
             departureTime: deptTime,
             waypoints:     waypoints,
           );
-        } catch (_) {
+        } catch (e, st) {
+          FieldLog.error('route_tomtom', e, st);
           return null;
         }
       }();
@@ -66,7 +68,8 @@ class RouteProvider extends ChangeNotifier {
             avoidAreas:    manualAvoidAreas,
             avoidDirtRoad: false,
           );
-        } catch (_) {
+        } catch (e, st) {
+          FieldLog.error('route_dirt', e, st);
           return null;
         }
       }();
@@ -120,8 +123,10 @@ class RouteProvider extends ChangeNotifier {
             restrictionsAvoided: reallyAvoided,
             restrictionsBlocked: stillBlocked,
           );
-        } catch (_) {
+        } catch (e, st) {
           // HERE não encontrou rota alternativa — usa a original e avisa.
+          // Loga: "desvio falhou" é diferente de "não havia conflito".
+          FieldLog.error('route_reroute_avoid', e, st);
           result = result.copyWith(restrictionsBlocked: conflicts);
         }
       }
@@ -151,7 +156,14 @@ class RouteProvider extends ChangeNotifier {
 
       _result = result;
       _status = RouteStatus.success;
-    } catch (e) {
+    } catch (e, st) {
+      // Captura-mãe do cálculo. É a queixa mais provável ("não calculou a rota");
+      // sem isto o motorista vê o erro na tela e nós não temos nada. Coords no
+      // 'where' pra repro.
+      FieldLog.error(
+          'route_calc from=${origin.latitude},${origin.longitude}'
+          ' to=${destination.latitude},${destination.longitude}',
+          e, st);
       _errorMessage = e.toString();
       _status = RouteStatus.error;
     }

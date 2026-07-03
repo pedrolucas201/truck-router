@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../utils/geo_bounds.dart';
 import '../models/radar_point.dart';
+import 'field_log.dart';
 import 'radar_service.dart';
 
 /// Camada crowd-source sobre o CSV estático de radar.
@@ -51,7 +52,8 @@ class FirestoreRadarService {
             );
           })
           .toList();
-    } catch (_) {
+    } catch (e, st) {
+      FieldLog.error('radar_fetch', e, st);
       return [];
     }
   }
@@ -79,7 +81,8 @@ class FirestoreRadarService {
             return LatLng((m['lat'] as num).toDouble(), (m['lng'] as num).toDouble());
           })
           .toList();
-    } catch (_) {
+    } catch (e, st) {
+      FieldLog.error('radar_dismissals_fetch', e, st);
       return [];
     }
   }
@@ -115,7 +118,8 @@ class FirestoreRadarService {
         'source': 'user',
       });
       return doc.id;
-    } catch (_) {
+    } catch (e, st) {
+      FieldLog.error('radar_add', e, st);
       return null;
     }
   }
@@ -125,7 +129,9 @@ class FirestoreRadarService {
     try {
       await _db.collection(_radarsCol).doc(docId).update(
           {'confirmedBy': FieldValue.increment(1)});
-    } catch (_) {}
+    } catch (e, st) {
+      FieldLog.error('radar_confirm', e, st);
+    }
   }
 
   /// "Não existe" num radar crowd → voto de remoção.
@@ -133,7 +139,9 @@ class FirestoreRadarService {
     try {
       await _db.collection(_radarsCol).doc(docId).update(
           {'reportedBy': FieldValue.increment(1)});
-    } catch (_) {}
+    } catch (e, st) {
+      FieldLog.error('radar_report', e, st);
+    }
   }
 
   /// "Não existe" num radar do CSV → agrega voto por localização (doc determinístico).
@@ -145,7 +153,9 @@ class FirestoreRadarService {
         'lng': lng,
         'count': FieldValue.increment(1),
       }, SetOptions(merge: true));
-    } catch (_) {}
+    } catch (e, st) {
+      FieldLog.error('radar_dismiss', e, st);
+    }
   }
 
 }

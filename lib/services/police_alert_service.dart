@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/police_alert.dart';
+import 'field_log.dart';
 
 class PoliceAlertService {
   static final _col = FirebaseFirestore.instance.collection('police_alerts');
@@ -16,7 +17,10 @@ class PoliceAlertService {
         .map((snap) => snap.docs
             .map(PoliceAlert.fromFirestore)
             .where((a) => a.lng >= minLng && a.lng <= maxLng)
-            .toList());
+            .toList())
+        // Sem isto, erro do Firestore ou doc malformado (fromFirestore) mata o
+        // stream sem sinal. handleError loga e deixa o stream seguir.
+        .handleError((Object e, StackTrace st) => FieldLog.error('police_stream', e, st));
   }
 
   static Future<void> report({

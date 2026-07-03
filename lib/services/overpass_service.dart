@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../utils/geo_bounds.dart';
 import '../models/bridge_restriction.dart';
+import 'field_log.dart';
 import 'radar_service.dart';
 
 class OverpassService {
@@ -28,7 +29,12 @@ class OverpassService {
           )
           .timeout(const Duration(seconds: 15));
 
-      if (response.statusCode != 200) return [];
+      if (response.statusCode != 200) {
+        // Implicação de segurança: "nenhuma ponte baixa" pode ser o servidor
+        // gratuito fora do ar, não a rota livre. Distingue vazio real de falha.
+        FieldLog.event('overpass_fail', {'status': response.statusCode});
+        return [];
+      }
 
       final elements =
           (jsonDecode(response.body)['elements'] as List<dynamic>? ?? [])
@@ -44,7 +50,8 @@ class OverpassService {
       return restrictions
           .where((r) => _distToRoute(r.lat, r.lng, polyline) <= _corridorM)
           .toList();
-    } catch (_) {
+    } catch (e, st) {
+      FieldLog.error('overpass', e, st);
       return [];
     }
   }

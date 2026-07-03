@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/auth_service.dart';
+import '../services/field_log.dart';
 import '../models/bridge_restriction.dart';
 import '../models/user_restriction.dart';
 import 'restriction_repository.dart';
@@ -49,7 +50,8 @@ class ApiRestrictionRepository implements RestrictionRepository {
     }
     try {
       return await _fetchByBbox(minLat, maxLat, minLng, maxLng);
-    } catch (_) {
+    } catch (e, st) {
+      FieldLog.error('api_restriction_fetch', e, st);
       return [];
     }
   }
@@ -60,7 +62,8 @@ class ApiRestrictionRepository implements RestrictionRepository {
   ) async {
     try {
       return await _fetchByBbox(minLat, maxLat, minLng, maxLng);
-    } catch (_) {
+    } catch (e, st) {
+      FieldLog.error('api_restriction_fetch_bounds', e, st);
       return [];
     }
   }

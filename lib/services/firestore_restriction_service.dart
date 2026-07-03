@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../utils/geo_bounds.dart';
 import '../models/bridge_restriction.dart';
 import '../models/user_restriction.dart';
+import 'field_log.dart';
 import 'radar_service.dart';
 
 class FirestoreRestrictionService {
@@ -32,7 +33,9 @@ class FirestoreRestrictionService {
               r.lng <= maxLng + pad &&
               RadarService.isNearRoute(r.lat, r.lng, points))
           .toList();
-    } catch (_) {
+    } catch (e, st) {
+      // Pega falha de rede E doc malformado (_fromDoc lança CastError aqui).
+      FieldLog.error('restriction_fetch', e, st);
       return [];
     }
   }
@@ -50,7 +53,8 @@ class FirestoreRestrictionService {
           .map(_fromDoc)
           .where((r) => r.lng >= minLng && r.lng <= maxLng)
           .toList();
-    } catch (_) {
+    } catch (e, st) {
+      FieldLog.error('restriction_fetch_bounds', e, st);
       return [];
     }
   }

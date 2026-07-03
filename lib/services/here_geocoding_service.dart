@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config.dart';
 import 'auth_service.dart';
+import 'field_log.dart';
 
 class GeocodingSuggestion {
   final String title;
@@ -29,10 +30,12 @@ class HereGeocodingService {
     if (query.trim().isEmpty) return [];
     if (_isCep(query)) return _cepSearch(query);
 
+    // _safe isola cada fonte: sem isto, um jsonDecode que lança (backend devolveu
+    // HTML/erro em vez de JSON) mata a busca INTEIRA via Future.wait, sem sinal.
     final hereResults = await Future.wait([
-      _autocomplete(query, bias: bias),
-      _geocodePlaces(query, bias: bias),
-      _discoverPlaces(query, bias: bias),
+      _safe('autocomplete', () => _autocomplete(query, bias: bias)),
+      _safe('geocode',      () => _geocodePlaces(query, bias: bias)),
+      _safe('discover',     () => _discoverPlaces(query, bias: bias)),
     ]);
 
     final merged   = <GeocodingSuggestion>[];
@@ -56,13 +59,25 @@ class HereGeocodingService {
     // Fallback: Nominatim (OpenStreetMap) quando HERE não encontra nada.
     // Chamado só neste caso para respeitar o limite de 1 req/s do serviço gratuito.
     if (merged.isEmpty) {
-      final nominatim = await _nominatimSearch(query, bias: bias);
+      final nominatim = await _safe('nominatim', () => _nominatimSearch(query, bias: bias));
       for (final s in nominatim) {
         if (seenKeys.add(s.title.toLowerCase().trim())) merged.add(s);
       }
     }
 
     return merged.take(5).toList();
+  }
+
+  /// Roda uma fonte de geocoding e devolve [] em falha, logando qual quebrou.
+  /// Sem isto uma fonte que lança derruba o Future.wait inteiro.
+  static Future<List<GeocodingSuggestion>> _safe(
+      String src, Future<List<GeocodingSuggestion>> Function() fn) async {
+    try {
+      return await fn();
+    } catch (e, st) {
+      FieldLog.error('geocode_$src', e, st);
+      return [];
+    }
   }
 
   // Rodovia por km: "km 936", "km936", "KM 936+700". A HERE erra esse formato.
@@ -440,6 +455,9 @@ class HereGeocodingService {
       }
     } catch (_) {}
 
+    // Todas as etapas falharam pra um CEP que existe (ou nem o ViaCEP respondeu):
+    // "CEP esgotado" é indistinguível de "CEP inexistente" na UI — o log separa.
+    FieldLog.event('cep_exhausted', {'cep': cep});
     return [];
   }
 

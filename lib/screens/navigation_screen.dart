@@ -672,7 +672,11 @@ class _NavigationScreenState extends State<NavigationScreen>
             distanceFilter: 0,
           );
     _posSub = Geolocator.getPositionStream(locationSettings: settings)
-        .listen(_onPositionUpdate);
+        // Sem onError, um erro do stream (perda de sinal, permissão revogada em
+        // runtime, erro do plugin) CONGELA a navegação em silêncio absoluto —
+        // nem visual, nem log. É o ponto cego mais grave do app.
+        .listen(_onPositionUpdate,
+            onError: (Object e, StackTrace st) => FieldLog.error('gps_stream', e, st));
   }
 
   void _checkPoliceAlerts(LatLng position) {
@@ -694,6 +698,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (nearest?.id != _nearestPoliceAlert?.id) {
         setState(() => _nearestPoliceAlert = nearest);
       }
+    }).catchError((Object e, StackTrace st) {
+      // Firestore falhou: sem isto era uma exceção async não tratada.
+      FieldLog.error('police_check', e, st);
     });
   }
 

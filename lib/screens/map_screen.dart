@@ -143,9 +143,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       _openedViaDeepLink = true;
       if (mounted) _handleIncomingUri(initial);
     }
-    _deepLinkSub = appLinks.uriLinkStream.listen((uri) {
-      if (mounted) _handleIncomingUri(uri);
-    });
+    _deepLinkSub = appLinks.uriLinkStream.listen(
+      (uri) { if (mounted) _handleIncomingUri(uri); },
+      // Sem onError, um link malformado no stream mata o recebimento de links
+      // pro resto da sessão — silenciosamente.
+      onError: (Object e, StackTrace st) => FieldLog.error('deeplink_stream', e, st),
+    );
   }
 
   void _handleIncomingUri(Uri uri) {
@@ -837,11 +840,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
     // Se só um app disponível, abre direto
     if (hasGoogleMaps && !hasWaze) {
-      await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+      await _launchNav(googleMapsUrl);
       return;
     }
     if (hasWaze && !hasGoogleMaps) {
-      await launchUrl(wazeUrl, mode: LaunchMode.externalApplication);
+      await _launchNav(wazeUrl);
       return;
     }
 
@@ -868,8 +871,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   borderRadius: BorderRadius.circular(12)),
               onTap: () {
                 Navigator.pop(context);
-                launchUrl(googleMapsUrl,
-                    mode: LaunchMode.externalApplication);
+                _launchNav(googleMapsUrl);
               },
             ),
             ListTile(
@@ -879,13 +881,33 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   borderRadius: BorderRadius.circular(12)),
               onTap: () {
                 Navigator.pop(context);
-                launchUrl(wazeUrl, mode: LaunchMode.externalApplication);
+                _launchNav(wazeUrl);
               },
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// Abre o app de navegação externo. Guard único dos 4 call-sites: launchUrl
+  /// pode retornar false ou lançar (nenhum handler p/ o esquema) — antes o toque
+  /// não fazia nada, sem sinal pro motorista nem pra nós.
+  Future<void> _launchNav(Uri url) async {
+    bool ok = false;
+    try {
+      ok = await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (e, st) {
+      FieldLog.error('nav_launch', e, st);
+    }
+    if (!ok) {
+      FieldLog.event('nav_launch_fail', {'scheme': url.scheme});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não consegui abrir o app de navegação')),
+        );
+      }
+    }
   }
 
   void _startNavigation() {
