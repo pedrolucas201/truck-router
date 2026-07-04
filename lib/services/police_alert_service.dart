@@ -9,14 +9,19 @@ class PoliceAlertService {
     double minLat, double maxLat, double minLng, double maxLng,
   ) {
     final now = Timestamp.now();
+    // UM range só no servidor (expireAt). Dois ranges em campos diferentes (lat E
+    // expireAt) exigiam índice composto que NUNCA foi criado → o stream falhava em
+    // loop (failed-precondition), o alerta de polícia não funcionava e inundava o
+    // field_logs (974 erros numa sessão). A coleção é minúscula (TTL 30min,
+    // crowd-source), então filtrar lat/lng no cliente é barato e dispensa índice.
     return _col
-        .where('lat', isGreaterThanOrEqualTo: minLat)
-        .where('lat', isLessThanOrEqualTo: maxLat)
         .where('expireAt', isGreaterThan: now)
         .snapshots()
         .map((snap) => snap.docs
             .map(PoliceAlert.fromFirestore)
-            .where((a) => a.lng >= minLng && a.lng <= maxLng)
+            .where((a) =>
+                a.lat >= minLat && a.lat <= maxLat &&
+                a.lng >= minLng && a.lng <= maxLng)
             .toList())
         // Sem isto, erro do Firestore ou doc malformado (fromFirestore) mata o
         // stream sem sinal. handleError loga e deixa o stream seguir.
