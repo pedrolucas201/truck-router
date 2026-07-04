@@ -110,7 +110,7 @@ class NavigationScreen extends StatefulWidget {
 }
 
 class _NavigationScreenState extends State<NavigationScreen>
-    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   GoogleMapController? _mapController;
   late ThemeController _themeController;
   StreamSubscription<Position>? _posSub;
@@ -190,6 +190,11 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Guardas: não prevê parado (anti-freada) e congela após _maxPredictMs sem
   // fix novo (anti-viaduto/perda de sinal), evitando a seta deslizar sozinha.
   late AnimationController _predTicker; // driver de 60fps (.repeat)
+  // Flash vermelho de tela cheia: pulsa quando está ACIMA do limite de caminhão
+  // DENTRO de área de radar (== _speedAlertActive). Alerta visual pedido pelo
+  // Gilberto; gatilho restrito p/ não virar "storm" (só quando tem significado).
+  late final AnimationController _flashController;
+  late final Animation<double> _flashAnim;
   LatLng _animPos = const LatLng(-15.788, -47.879);
   double _animBearing = 0;
   LatLng? _anchorPos;          // posição snapped do último fix
@@ -300,6 +305,10 @@ class _NavigationScreenState extends State<NavigationScreen>
     _predTicker = AnimationController(vsync: this, duration: const Duration(seconds: 1))
       ..addListener(_predictTick)
       ..repeat();
+    _flashController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 650));
+    _flashAnim = Tween<double>(begin: 0.12, end: 0.40).animate(
+        CurvedAnimation(parent: _flashController, curve: Curves.easeInOut));
     _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
     WakelockPlus.enable();
     _loadRoutePois();
@@ -340,6 +349,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     FlutterForegroundTask.stopService();
     WakelockPlus.disable();
     _predTicker.dispose();
+    _flashController.dispose();
     super.dispose();
   }
 
@@ -704,6 +714,17 @@ class _NavigationScreenState extends State<NavigationScreen>
     }
   }
 
+  // Liga/desliga o flash vermelho de tela conforme _speedAlertActive (acima do
+  // limite de caminhão em área de radar). Idempotente — só age na virada.
+  void _syncRadarFlash() {
+    if (_speedAlertActive && !_flashController.isAnimating) {
+      _flashController.repeat(reverse: true);
+    } else if (!_speedAlertActive && _flashController.isAnimating) {
+      _flashController.stop();
+      _flashController.reset();
+    }
+  }
+
   // ── GPS ──────────────────────────────────────────────────────────────────────
 
   void _startGps() {
@@ -997,6 +1018,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
     _checkSpeedAlert(_speedKmh);
+    _syncRadarFlash();
     _checkPoliceAlerts(latLng);
     _buildUpcomingEvents();
 
@@ -2406,6 +2428,18 @@ class _NavigationScreenState extends State<NavigationScreen>
                             ),
                     ),
                   ],
+                  // Flash vermelho: acima do limite de caminhão em área de radar.
+                  if (_speedAlertActive && !_markingMode && !_paused && !_arrived)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: AnimatedBuilder(
+                          animation: _flashAnim,
+                          builder: (context, _) => ColoredBox(
+                            color: Colors.red.withValues(alpha: _flashAnim.value),
+                          ),
+                        ),
+                      ),
+                    ),
                   if (_markingMode) ...[
                     Positioned.fill(
                       child: IgnorePointer(
