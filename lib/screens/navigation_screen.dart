@@ -67,6 +67,26 @@ bool targetIsEcho(List<LatLng> cmds, LatLng target) => cmds.any((t) =>
         t.latitude, t.longitude, target.latitude, target.longitude) <
     40);
 
+// Teto de velocidade de caminhão em rodovia (CTB): o app é SÓ pra caminhão, então
+// nunca mostra/avisa acima disso, mesmo quando a placa/HERE traz o limite de CARRO
+// (ex: 110 na Dom Pedro). ponytail: knob de calibração — se alguma classe de via
+// pedir teto menor, dá pra parametrizar por tipo de via depois.
+const int kTruckCapKmh = 90;
+
+// Limite VÁLIDO PRO CAMINHÃO num ponto: o mais restritivo entre os limites postados
+// conhecidos (radar e/ou trecho da HERE — ambos são de carro/placa) SEMPRE capado no
+// teto de caminhão. null quando não há NENHUM dado postado (aí o chamador decide:
+// banner mostra "Radar", voz usa o piso). Nunca devolve o limite de carro puro
+// (report Gilberto 2026-07-03: Dom Pedro postava 110, caminhão é 90).
+int? truckRadarLimit(int radarSpeedKmh, int? segmentLimitKmh) {
+  final posted = <int>[
+    if (radarSpeedKmh > 0) radarSpeedKmh,
+    ?segmentLimitKmh,
+  ];
+  if (posted.isEmpty) return null;
+  return min(posted.reduce(min), kTruckCapKmh);
+}
+
 class NavigationScreen extends StatefulWidget {
   final RouteResult result;
   final LatLng destination;
@@ -299,10 +319,15 @@ class _NavigationScreenState extends State<NavigationScreen>
         'remM': _remainingDistanceM().round(),
       });
     });
+    // Ciclo de vida da nav: nav_start aqui, nav_end no dispose (com arrived),
+    // app_lifecycle nas transições. Se um nav_end arrived=false vier logo depois
+    // de um app_lifecycle resumed, é a "rota some no background" reproduzida.
+    FieldLog.event('nav_start', {'wpts': widget.waypoints.length});
   }
 
   @override
   void dispose() {
+    FieldLog.event('nav_end', {'arrived': _arrived, 'idx': _closestPolylineIdx});
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _policeTimelineTimer?.cancel();
@@ -320,6 +345,11 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    FieldLog.event('app_lifecycle', {
+      'state':   state.name,
+      'arrived': _arrived,
+      'hasPos':  _currentPos != null,
+    });
     if (state != AppLifecycleState.resumed) return;
     _resumedAt = DateTime.now();
     // Re-anchora o marcador na posição atual — evita que a predição continue
@@ -655,8 +685,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       _speedAlertActive = false;
       return;
     }
-    // Limite que vale ali: o do radar (o que multa), senão o da via; piso 90 sem dado.
-    final limit = (radar.speedKmh > 0 ? radar.speedKmh : _currentLimitKmh) ?? 90;
+    // Mais restritivo entre o postado no radar e o limite de caminhão do trecho;
+    // piso 90 sem nenhum dado. Nunca avisa no limite de carro (report Gilberto).
+    final limit = truckRadarLimit(radar.speedKmh, _currentLimitKmh) ?? 90;
     if (kmh >= limit + 2) { // +2: folga de arredondamento, evita nag no limite exato
       final now = DateTime.now();
       if (!_speedAlertActive) {
@@ -2605,8 +2636,10 @@ class _BottomBarState extends State<_BottomBar>
     );
   }
 
-  // Limite do trecho atual; sem dado, cai no piso antigo de 90 (não regride).
-  int get _limit => widget.limitKmh ?? 90;
+  // Limite de CAMINHÃO do trecho: o postado da via (HERE) capado no teto de caminhão
+  // — a rodovia posta 110 do carro, mas o velocímetro tem que ficar vermelho nos 90.
+  // Sem dado, cai no próprio teto (piso 90).
+  int get _limit => min(widget.limitKmh ?? kTruckCapKmh, kTruckCapKmh);
 
   @override
   void didUpdateWidget(_BottomBar old) {
@@ -2713,11 +2746,15 @@ class _BottomBarState extends State<_BottomBar>
                         const Icon(Icons.speed, color: Colors.white, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          widget.radarAlert!.speedKmh > 0
-                              ? '${widget.radarAlert!.speedKmh} km/h'
-                              : isLombada
-                                  ? 'Lombada'
-                                  : 'Radar',
+                          // Mostra o limite de CAMINHÃO (min entre radar e trecho),
+                          // não o de carro. Ex: radar 110 + trecho 90 → "90 km/h".
+                          () {
+                            final eff = truckRadarLimit(
+                                widget.radarAlert!.speedKmh, widget.limitKmh);
+                            return eff != null
+                                ? '$eff km/h'
+                                : (isLombada ? 'Lombada' : 'Radar');
+                          }(),
                           style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
