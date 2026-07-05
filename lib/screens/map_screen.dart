@@ -921,6 +921,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         destinationLabel: _destinationLabel ?? '',
         waypoints:        _waypointPositions.whereType<LatLng>().toList(),
         initialRadares:   _nearbyRadares,
+        // Radar removido dentro da nav sai também do cache do mapa — senão
+        // reaparecia ao reabrir a navegação (a dispensa já foi pro Firestore).
+        onRadarRemoved:   (r) {
+          if (!mounted) return;
+          setState(() => _nearbyRadares = _nearbyRadares
+              .where((x) => !(x.lat == r.lat && x.lng == r.lng && x.type == r.type))
+              .toList());
+        },
       ),
     ));
   }

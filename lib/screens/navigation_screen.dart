@@ -94,6 +94,9 @@ class NavigationScreen extends StatefulWidget {
   final String destinationLabel;
   final List<LatLng> waypoints;
   final List<RadarPoint> initialRadares;
+  // Avisa o mapa quando um radar é removido aqui (voto "não existe"), pra ele
+  // podar a lista em cache e o radar não reaparecer ao reabrir a navegação.
+  final void Function(RadarPoint)? onRadarRemoved;
 
   const NavigationScreen({
     super.key,
@@ -103,6 +106,7 @@ class NavigationScreen extends StatefulWidget {
     required this.destinationLabel,
     this.waypoints = const [],
     this.initialRadares = const [],
+    this.onRadarRemoved,
   });
 
   @override
@@ -2077,6 +2081,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     } else {
       await FirestoreRadarService.dismissCsv(r.lat, r.lng);
     }
+    widget.onRadarRemoved?.call(r); // poda o cache do mapa: não reaparece ao reabrir
     if (!mounted) return;
     bool sameAs(RadarPoint x) => x.lat == r.lat && x.lng == r.lng && x.type == r.type;
     setState(() {
