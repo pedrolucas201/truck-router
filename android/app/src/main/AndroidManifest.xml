@@ -6,6 +6,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <!-- Isenção de otimização de bateria: sem isso, requestIgnoreBatteryOptimization()
+         não abre o diálogo direto (ROMs agressivos matam o foreground service e a
+         nav some em background). POST_NOTIFICATIONS já vem do manifest do plugin. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <application
         android:label="truck_router"
         android:name="${applicationName}"

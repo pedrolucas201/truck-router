@@ -133,6 +133,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   Timer? _heartbeatTimer;
   DateTime? _lastRerouteAt;
   int _offRouteCount = 0;
+  int _offRouteStartIdx = 0; // bestIdx quando saiu do corredor (mede avanço p/ telemetria)
   DateTime? _offRouteSince; // instrumentação: quando o caminhão saiu do corredor
   DateTime? _rerouteGraceUntil; // janela de carência pós-reroute (anti-encadeamento)
   RadarPoint? _upcomingRadar;
@@ -218,9 +219,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   // rota toda a cada frame e o google_maps_flutter re-enviava a geometria
   // pelo platform channel. Recomputamos só quando o índice/raio muda.
   Set<Polyline> _polylines = {};
-  Set<Circle> _radarCircles = {};
   int? _overlaysSplitIdx;
-  RadarPoint? _overlaysRadar;
   // Rastro cinza colado na seta: a divisa segue o predIdx interpolado (onde a
   // seta está), não o _closestPolylineIdx do GPS (1Hz, que saltava atrás). O
   // rebuild é throttled (~250ms) pra não voltar ao setState de 60fps no Adreno.
@@ -238,6 +237,8 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _resumedAt;
   bool _hasTimeRestrictionAlert  = false;
   bool _timeRestrictionAlertSpoken = false;
+  bool _timeBannerVisible = false; // banner genérico de horário: some após alguns segundos
+  Timer? _timeBannerTimer;
 
   // Corredor de desvio: 70m. Histórico: 120m (errava um quarteirão inteiro numa
   // rua paralela) → 40m (rápido demais) → 70m. O 40m era apertado pra pista
@@ -248,6 +249,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   // ponytail: knob de campo — se voltar a storm no log, subir; se atrasar
   // correção legítima de rua errada, baixar.
   static const _offRouteThresholdM  = 70.0;
+  // Acima disso NÃO é pista paralela — é rua/rodovia diferente. Reroteia mesmo
+  // avançando (o gate de "movingByRoute" abaixo só vale entre 70 e 150m).
+  static const _offRouteHardM       = 150.0;
   static const _offRouteCountLimit  = 3;
   // Throttle do reroute: 10s pro refresh periódico/background; piso curto de 4s
   // pra desvio real (urgent), que já é naturalmente limitado pelo re-arm do
@@ -339,6 +343,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     FieldLog.event('nav_end', {'arrived': _arrived, 'idx': _closestPolylineIdx});
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
+    _timeBannerTimer?.cancel();
     _policeTimelineTimer?.cancel();
     _heartbeatTimer?.cancel();
     _arrivalTimer?.cancel();
@@ -427,7 +432,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   void _initTts() {
     _tts = FlutterTts();
     _tts.setLanguage('pt-BR');
-    _tts.setSpeechRate(0.9);
+    // flutter_tts multiplica por 2 no Android (rate*2 → engine), onde 1.0 = normal.
+    // 0.9 dava 1.8× (quase o dobro) e o Gilberto reclamou que fala rápido demais.
+    // 0.5 = velocidade normal de fala; bom pra instrução no volante. Knob de campo.
+    _tts.setSpeechRate(0.5);
     _tts.setVolume(1.0);
     // Debounce de 300ms: evita que completionHandler prematuro (chunk interno do engine)
     // abra a janela para um novo _speak interromper a utterance em andamento.
@@ -439,6 +447,21 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   Future<void> _startForegroundService() async {
+    // Sem estas duas permissões a nav some em background: sem POST_NOTIFICATIONS
+    // (Android 13+) a notificação do foreground service não aparece; sem isenção
+    // de bateria, OEMs agressivos (Xiaomi/Redmi, Samsung) matam o service. Só
+    // dispara o diálogo se ainda não concedido — aceito uma vez, nunca repergunta.
+    if (await FlutterForegroundTask.checkNotificationPermission() !=
+        NotificationPermission.granted) {
+      await FlutterForegroundTask.requestNotificationPermission();
+    }
+    final ignoringBattery =
+        await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+    if (!ignoringBattery) {
+      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+    }
+    // Estado da isenção é o diagnóstico direto do "nav some no background".
+    FieldLog.event('bg_battery_opt', {'ignoring': ignoringBattery});
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'nav_service',
@@ -716,6 +739,18 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   // Liga/desliga o flash vermelho de tela conforme _speedAlertActive (acima do
   // limite de caminhão em área de radar). Idempotente — só age na virada.
+  // Banner de horário não tem coordenada (é bool da HERE) — deixá-lo a viagem
+  // toda só comia tela, às vezes por cima da seta. Aparece ~8s e some; a voz
+  // ("Atenção! Restrição...") já dá o aviso. O banner de restrição FÍSICA
+  // (com local + botões) é outro e continua por proximidade.
+  void _flashTimeBanner() {
+    _timeBannerTimer?.cancel();
+    setState(() => _timeBannerVisible = true);
+    _timeBannerTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted) setState(() => _timeBannerVisible = false);
+    });
+  }
+
   void _syncRadarFlash() {
     if (_speedAlertActive && !_flashController.isAnimating) {
       _flashController.repeat(reverse: true);
@@ -781,6 +816,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (firstFix && _hasTimeRestrictionAlert && !_timeRestrictionAlertSpoken) {
       _timeRestrictionAlertSpoken = true;
       _speak('Atenção! Restrição para caminhões nesta via');
+      _flashTimeBanner();
     }
     if (firstFix) _refreshPoliceTimeline();
     final latLng = LatLng(pos.latitude, pos.longitude);
@@ -924,10 +960,25 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (bestDist > _offRouteThresholdM && !inRerouteGrace) {
       if (_offRouteCount == 0) {
         _offRouteSince = DateTime.now();
-        FieldLog.event('off_route', {'distM': bestDist.round()});
+        _offRouteStartIdx = bestIdx;
+        FieldLog.event('off_route', {'distM': bestDist.round(), 'moving': movingByRoute});
       }
       _offRouteCount++;
-      if (_offRouteCount >= _offRouteCountLimit) _reroute(fromPos: latLng, urgent: true);
+      if (_offRouteCount >= _offRouteCountLimit) {
+        // Pista dupla: fora do corredor MAS avançando ao longo da rota
+        // (movingByRoute) = a linha da HERE está na outra mão. Reroteiar não
+        // ajuda — ele não cruza o canteiro — e gera o storm do field_log
+        // (72-77m cravado, rota nova só crescendo, "manda voltar pra trás").
+        // Só reroteia se travou (não avança) ou se está longe demais p/ ser
+        // pista paralela (_offRouteHardM = rua diferente de verdade).
+        if (!movingByRoute || bestDist > _offRouteHardM) {
+          _reroute(fromPos: latLng, urgent: true);
+        } else {
+          FieldLog.event('reroute_suppressed',
+              {'distM': bestDist.round(), 'idxDelta': bestIdx - _offRouteStartIdx});
+          _offRouteCount = _offRouteCountLimit - 1; // re-arma sem martelar
+        }
+      }
     } else {
       _offRouteCount = 0;
       _offRouteSince = null;
@@ -1378,6 +1429,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (newResult.hasTimeRestriction && !_timeRestrictionAlertSpoken) {
         _timeRestrictionAlertSpoken = true;
         _speak('Atenção! Restrição para caminhões nesta via');
+        _flashTimeBanner();
       } else if (!newResult.hasTimeRestriction) {
         _timeRestrictionAlertSpoken = false;
       }
@@ -1588,22 +1640,6 @@ class _NavigationScreenState extends State<NavigationScreen>
         zIndex: 2, // acima do nav_remaining (azul)
       );
     }
-  }
-
-  Set<Circle> _buildRadarCircles() {
-    final r = _upcomingRadar;
-    if (r == null) return {};
-    final isLombada = r.type.toLowerCase().contains('lombada');
-    return {
-      Circle(
-        circleId: const CircleId('radar_alert'),
-        center: LatLng(r.lat, r.lng),
-        radius: 80.0,
-        fillColor: (isLombada ? Colors.orange : Colors.red).withAlpha(35),
-        strokeColor: isLombada ? Colors.orange.shade400 : Colors.red.shade400,
-        strokeWidth: 2,
-      ),
-    };
   }
 
   // Usa fórmula de haversine bearing — estável independente do heading do GPS.
@@ -2069,14 +2105,11 @@ class _NavigationScreenState extends State<NavigationScreen>
     // (≈1Hz do GPS), não a cada frame da animação do marcador (60fps).
     // Mantendo a mesma instância de Set entre frames, o google_maps_flutter
     // não re-difunde a geometria pelo channel.
-    if (_overlaysSplitIdx != splitIdx || !identical(_overlaysRadar, _upcomingRadar)) {
+    if (_overlaysSplitIdx != splitIdx) {
       _overlaysSplitIdx = splitIdx;
-      _overlaysRadar    = _upcomingRadar;
       _polylines        = _buildPolylines(pts, splitIdx);
-      _radarCircles     = _buildRadarCircles();
     }
     final polylines    = _polylines;
-    final radarCircles = _radarCircles;
 
     final markers = <Marker>{
       Marker(
@@ -2188,7 +2221,6 @@ class _NavigationScreenState extends State<NavigationScreen>
                           onCameraMove: _onCameraMove,
                           polylines: polylines,
                           markers: markers,
-                          circles: radarCircles,
                           trafficEnabled: false,
                           myLocationButtonEnabled: false,
                           zoomControlsEnabled: false,
@@ -2206,7 +2238,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                       child: const IgnorePointer(child: NavPuck()),
                     ),
                   // ── Alerta restrição bloqueada / horário ────────────────
-                  if ((_nearbyBlockedRestriction != null || _hasTimeRestrictionAlert) && !_markingMode)
+                  if ((_nearbyBlockedRestriction != null || _timeBannerVisible) && !_markingMode)
                     Positioned(
                       bottom: 8,
                       left: 12,
