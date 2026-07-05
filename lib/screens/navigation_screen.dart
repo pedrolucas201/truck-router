@@ -239,6 +239,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _timeRestrictionAlertSpoken = false;
   bool _timeBannerVisible = false; // banner genérico de horário: some após alguns segundos
   Timer? _timeBannerTimer;
+  String? _restrictionLabel; // tipo/limite da restrição (do details da HERE), p/ o banner
 
   // Corredor de desvio: 70m. Histórico: 120m (errava um quarteirão inteiro numa
   // rua paralela) → 40m (rápido demais) → 70m. O 40m era apertado pra pista
@@ -297,6 +298,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _visibleRadares = List.of(widget.initialRadares);
     _radarIconsFuture = Future.wait(_radares.map(_radarIcon));
     _hasTimeRestrictionAlert = widget.result.hasTimeRestriction;
+    _restrictionLabel        = widget.result.restrictionLabel;
     WidgetsBinding.instance.addObserver(this);
     _loadAudioLevel();
     _loadZoomLevel();
@@ -1388,6 +1390,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         _maneuverIndex           = 0;
         _distToNextManeuver      = double.infinity;
         _hasTimeRestrictionAlert = newResult.hasTimeRestriction;
+        _restrictionLabel        = newResult.restrictionLabel;
         _announced.clear();
         _lastRadarAlertKey       = null;
         _lastRestrictionAlertKey = null;
@@ -2122,9 +2125,10 @@ class _NavigationScreenState extends State<NavigationScreen>
       // method channel a cada frame era o gargalo do lag (flutter#33430). Agora
       // é um widget Flutter fixo (NavPuck) sobreposto no Stack — câmera segue a
       // posição (com padding pra deixar a seta embaixo). Só o destino é Marker.
-      // Exceção: no olhar-ao-redor a câmera descola da posição, então o puck fixo
-      // mentiria — mostramos um pino ancorado no mapa (fica certo ao pan/zoom).
-      if (_freeLook && _currentPos != null)
+      // Exceção: no olhar-ao-redor OU pausado a câmera descola da posição, então o
+      // puck fixo mentiria (fica grudado na tela enquanto o mapa desliza no zoom) —
+      // mostramos um pino ancorado no mapa, que fica certo ao pan/zoom.
+      if ((_freeLook || _paused) && _currentPos != null)
         Marker(
           markerId: const MarkerId('you_freelook'),
           position: _snappedPos ?? _currentPos!,
@@ -2232,7 +2236,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                   // ── Puck do usuário: widget Flutter fixo (fora do channel) ──
                   // Câmera heading-up → a seta aponta sempre pra cima; o mapa gira
                   // por baixo. Posição na tela casa com o padding do mapa.
-                  if (_currentPos != null && _lastPosUpdateAt != null && !_markingMode && !_freeLook)
+                  if (_currentPos != null && _lastPosUpdateAt != null && !_markingMode && !_freeLook && !_paused)
                     Align(
                       alignment: const Alignment(0, 2 * _puckYFrac - 1),
                       child: const IgnorePointer(child: NavPuck()),
@@ -2269,7 +2273,8 @@ class _NavigationScreenState extends State<NavigationScreen>
                                   child: Text(
                                     _nearbyBlockedRestriction != null
                                         ? _nearbyBlockedRestriction!.label
-                                        : 'Restrição para caminhões nesta via',
+                                        : (_restrictionLabel ??
+                                            'Restrição para caminhões nesta via'),
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 15,

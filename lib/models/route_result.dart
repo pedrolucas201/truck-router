@@ -43,6 +43,10 @@ class RouteResult {
   final List<BridgeRestriction> restrictionsBlocked;
   final bool usedTomTomData;
   final bool hasTimeRestriction;
+  // Texto do TIPO/limite da restrição (ex "Comprimento máx 7,2 m", "Por horário"),
+  // montado do `details` do notice da HERE — o `title` vem inútil ("Violated
+  // vehicle restriction." em inglês genérico). Null = cai no texto genérico.
+  final String? restrictionLabel;
   final RouteResult? dirtRoadAlternative;
   final List<SpeedLimitSpan> speedLimits;
   final List<TrafficSpan> trafficSpans;
@@ -56,6 +60,7 @@ class RouteResult {
     this.restrictionsBlocked  = const [],
     this.usedTomTomData       = false,
     this.hasTimeRestriction   = false,
+    this.restrictionLabel     ,
     this.dirtRoadAlternative  ,
     this.speedLimits          = const [],
     this.trafficSpans         = const [],
@@ -70,6 +75,7 @@ class RouteResult {
     List<BridgeRestriction>? restrictionsBlocked,
     bool? usedTomTomData,
     bool? hasTimeRestriction,
+    String? restrictionLabel,
     RouteResult? dirtRoadAlternative,
     List<SpeedLimitSpan>? speedLimits,
     List<TrafficSpan>? trafficSpans,
@@ -82,6 +88,7 @@ class RouteResult {
     restrictionsBlocked: restrictionsBlocked ?? this.restrictionsBlocked,
     usedTomTomData:      usedTomTomData      ?? this.usedTomTomData,
     hasTimeRestriction:  hasTimeRestriction  ?? this.hasTimeRestriction,
+    restrictionLabel:    restrictionLabel    ?? this.restrictionLabel,
     dirtRoadAlternative: dirtRoadAlternative ?? this.dirtRoadAlternative,
     speedLimits:         speedLimits         ?? this.speedLimits,
     trafficSpans:        trafficSpans        ?? this.trafficSpans,

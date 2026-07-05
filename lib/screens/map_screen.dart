@@ -1034,6 +1034,50 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     );
   }
 
+  // Toque num radar no mapa: confirmar que existe ou votar "não existe" (remove).
+  // Mesma lógica do _onRadarTap da navegação — reusa FirestoreRadarService;
+  // radar da galera → report(id), radar do CSV → dismiss por local.
+  Future<void> _onRadarTap(RadarPoint r) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.camera_alt),
+            title: Text(r.speedKmh > 0
+                ? 'Radar ${r.speedKmh} km/h'
+                : (r.type.isEmpty ? 'Radar' : r.type)),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.check_circle, color: Colors.green),
+            title: const Text('Confirmar que existe'),
+            onTap: () => Navigator.pop(context, 'confirm'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.cancel, color: Colors.red),
+            title: const Text('Não existe aqui'),
+            onTap: () => Navigator.pop(context, 'remove'),
+          ),
+        ]),
+      ),
+    );
+    if (action == null || !mounted) return;
+    if (action == 'confirm') {
+      if (r.id != null) await FirestoreRadarService.confirm(r.id!);
+      return;
+    }
+    if (r.id != null) {
+      await FirestoreRadarService.report(r.id!);
+    } else {
+      await FirestoreRadarService.dismissCsv(r.lat, r.lng);
+    }
+    if (!mounted) return;
+    setState(() => _nearbyRadares = _nearbyRadares
+        .where((x) => !(x.lat == r.lat && x.lng == r.lng && x.type == r.type))
+        .toList());
+  }
+
   Future<void> _calculate() async {
     _loadingTruckAsset = null;
     if (_origin == null || _destination == null) {
@@ -1374,6 +1418,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             title: r.speedKmh > 0 ? '${r.speedKmh} km/h' : r.type,
             snippet: r.type,
           ),
+          onTap: () => _onRadarTap(r),
         ));
       }
     }

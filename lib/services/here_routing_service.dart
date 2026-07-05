@@ -71,9 +71,12 @@ class HereRoutingService {
         .cast<Map<String, dynamic>>()
         .expand((s) => s['notices'] as List<dynamic>? ?? [])
         .toList();
-    final hasTimeRestriction = [...routeNotices, ...sectionNotices]
+    final violatedNotices = [...routeNotices, ...sectionNotices]
         .cast<Map<String, dynamic>>()
-        .any((n) => n['code'] == 'violatedVehicleRestriction');
+        .where((n) => n['code'] == 'violatedVehicleRestriction')
+        .toList();
+    final hasTimeRestriction = violatedNotices.isNotEmpty;
+    final restrictionLabel = _restrictionLabel(violatedNotices);
 
     final allPoints   = <LatLng>[];
     final allManeuvers = <RouteManeuver>[];
@@ -144,8 +147,34 @@ class HereRoutingService {
       durationSeconds:   totalDuration,
       maneuvers:         allManeuvers,
       hasTimeRestriction: hasTimeRestriction,
+      restrictionLabel:   restrictionLabel,
       speedLimits:        speedLimits,
       trafficSpans:       trafficSpans,
     );
+  }
+
+  // Monta o texto do banner a partir do `details` do notice (o `title` da HERE
+  // vem "Violated vehicle restriction." em inglês genérico — inútil). Dimensão
+  // primeiro (concreto), horário como fallback. cm→m, kg→t. Null = texto genérico.
+  static String? _restrictionLabel(List<Map<String, dynamic>> notices) {
+    for (final n in notices) {
+      final details = (n['details'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      for (final d in details) {
+        String m(num cm) => (cm / 100).toStringAsFixed(1).replaceAll('.', ',');
+        final w = d['maxWeight'] as num?;
+        if (w != null) {
+          final t = w / 1000;
+          final txt = t == t.roundToDouble()
+              ? t.round().toString()
+              : t.toStringAsFixed(1).replaceAll('.', ',');
+          return 'Restrição: peso máx $txt t';
+        }
+        if (d['maxHeight'] != null) return 'Restrição: altura máx ${m(d['maxHeight'] as num)} m';
+        if (d['maxLength'] != null) return 'Restrição: comprimento máx ${m(d['maxLength'] as num)} m';
+        if (d['maxWidth']  != null) return 'Restrição: largura máx ${m(d['maxWidth'] as num)} m';
+        if (d['timeDependent'] == true) return 'Restrição por horário nesta via';
+      }
+    }
+    return null;
   }
 }
