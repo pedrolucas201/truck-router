@@ -168,8 +168,14 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _lastUserGestureAt;   // marca o último gesto, p/ auto-retorno
   DateTime? _lastZoomAt;          // último gesto de zoom, p/ não confundir o pan
                                   // que acompanha a pinça com olhar-ao-redor
-  bool _fingerDown = false;       // dedo tocando o mapa → suspende o follow, p/ o
-                                  // arrasto colinear (pra frente) não ser cancelado
+  // Último toque no mapa (down/move). O follow se suspende enquanto o dedo está
+  // ativo (últimos _pointerActiveMs), p/ o arrasto colinear (pra frente) não ser
+  // cancelado. Timestamp em vez de bool: AUTO-EXPIRA — se um pointer-up se perder
+  // na platform view, o follow se recupera sozinho (nunca trava suspenso).
+  DateTime? _lastPointerAt;
+  bool get _fingerActive =>
+      _lastPointerAt != null &&
+      DateTime.now().difference(_lastPointerAt!).inMilliseconds < _pointerActiveMs;
   DateTime? _ignoreGestureUntil;  // ignora os frames do _recenter (não re-entra)
   DateTime? _lastProgrammaticMoveAt; // instrumentação: quanto depois de um
                                      // recenter/zoom o free-look disparou (bug do marker azul)
@@ -285,6 +291,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   // da pinça (não vira olhar-ao-redor). Sem isto, o pequeno pan que acompanha o
   // zoom jogava a câmera pra free-look ("dei zoom e virou pino" — Gilberto).
   static const _zoomCooldownMs         = 450;
+  // Janela em que um toque conta como "dedo ativo" (suspende o follow). Curta o
+  // bastante pra o follow retomar logo ao soltar; longa o bastante pra cobrir a
+  // pausa entre eventos de arrasto.
+  static const _pointerActiveMs        = 150;
   // Chegada: contador de 15s antes de finalizar; se o caminhão se afastar mais
   // que 40m da âncora durante a contagem, cancela e reroteia (deu a volta).
   static const _arrivalCountdownMs = 15000;
@@ -1216,7 +1226,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     // Free-look: a seta anda (o setState do trail acima reposiciona o marker), mas
     // a câmera NÃO segue. !_fingerDown: com o dedo na tela o follow também para —
     // senão cancela o arrasto colinear (pra frente) antes de virar olhar-ao-redor.
-    if (!_markingMode && !_paused && !_freeLook && !_fingerDown) {
+    if (!_markingMode && !_paused && !_freeLook && !_fingerActive) {
       _recordCmd(predPos);
       _mapController?.moveCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
@@ -1750,7 +1760,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     // _fingerDown cobre o arrasto COLINEAR (pra frente), que fica perto da rota e
     // seria confundido com eco do follow — sem ele, arrastar reto pra frente não
     // ativava (item 1 do Gilberto). A seta segue andando; só a câmera descola.
-    if (!isEcho || _fingerDown) {
+    if (!isEcho || _fingerActive) {
       // Rescaldo de pinça: o pan que acompanha o zoom não vira olhar-ao-redor —
       // adota o zoom (já feito acima) e segue no follow.
       if (_lastZoomAt != null &&
@@ -2300,9 +2310,8 @@ class _NavigationScreenState extends State<NavigationScreen>
                       return LayoutBuilder(
                         builder: (context, c) => Listener(
                           behavior: HitTestBehavior.translucent,
-                          onPointerDown:   (_) => _fingerDown = true,
-                          onPointerUp:     (_) => _fingerDown = false,
-                          onPointerCancel: (_) => _fingerDown = false,
+                          onPointerDown: (_) => _lastPointerAt = DateTime.now(),
+                          onPointerMove: (_) => _lastPointerAt = DateTime.now(),
                           child: GoogleMap(
                             initialCameraPosition: CameraPosition(
                               target: _currentPos ?? widget.destination,
