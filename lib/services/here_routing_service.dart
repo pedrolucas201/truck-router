@@ -14,13 +14,19 @@ class HereRoutingService {
     required LatLng destination,
     required TruckProfile truck,
     String? departureTime,
+    double? course,
     List<LatLng> waypoints   = const [],
     List<String> avoidAreas  = const [],
     bool avoidDirtRoad        = true,
   }) async {
+    // course = rumo de marcha (0-359, N=0). Informado, a HERE inicia a rota NESSE
+    // sentido em vez de escolher a mais curta — evita o "dê meia-volta" no reroute.
+    final originParam = course == null
+        ? '${origin.latitude},${origin.longitude}'
+        : '${origin.latitude},${origin.longitude};course=${course.round() % 360}';
     final params = <String, dynamic>{
       'transportMode':   'truck',
-      'origin':          '${origin.latitude},${origin.longitude}',
+      'origin':          originParam,
       'destination':     '${destination.latitude},${destination.longitude}',
       'return':          'polyline,summary,actions',
       // spans é parâmetro PRÓPRIO — NÃO vai dentro de 'return' (isso dá E605001).

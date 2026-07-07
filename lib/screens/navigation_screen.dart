@@ -277,6 +277,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   // _offRouteCount (precisa de 3 fixes novos) + guarda _isRerouting.
   static const _rerouteThrottleSec     = 10;
   static const _rerouteUrgentFloorSec  = 4;
+  // Abaixo disso o heading do GPS é ruído — não passa course pra HERE (cairia
+  // num rumo aleatório). Acima, informa o rumo pra HERE recalcular PRA FRENTE.
+  static const _rerouteCourseMinKmh    = 8.0;
   // Carência pós-reroute: depois que a rota nova cai, origem/GPS ainda estão
   // defasados e o caminhão pode aparecer fora do corredor por 1-2s — o que
   // re-disparava 2-3 reroutes encadeados (field 2026-06-29, ~20s "atualizando").
@@ -1420,10 +1423,16 @@ class _NavigationScreenState extends State<NavigationScreen>
         ..._result.restrictionsAvoided.map((r) => r.toAvoidArea()),
       ];
 
+      // Rumo de marcha só entra se o caminhão está andando (heading confiável).
+      // Força a HERE a sair PRA FRENTE em vez de mandar dar meia-volta.
+      final course = (_speedKmh >= _rerouteCourseMinKmh && _bearing >= 0) ? _bearing : null;
+      FieldLog.event('reroute_course', {'course': course?.round(), 'speedKmh': _speedKmh.round()});
+
       var newResult = await HereRoutingService.calculateRoute(
         origin:      origin,
         destination: widget.destination,
         truck:       widget.truck,
+        course:      course,
         waypoints:   widget.waypoints,
         avoidAreas:  manualAvoidAreas,
       );
