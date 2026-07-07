@@ -151,6 +151,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   final _iconCache = <String, BitmapDescriptor>{};
   Future<List<BitmapDescriptor>>? _radarIconsFuture;
 
+  // Seta do puck rasterizada em ícone de mapa (mesmo desenho do NavPuck), usada
+  // como marker que anda/gira no olhar-ao-redor. null até _loadPuckIcon terminar.
+  BitmapDescriptor? _puckIcon;
+
   final List<UserRestriction> _userRestrictions = [];
   final _restrictionIconCache = <String, BitmapDescriptor>{};
 
@@ -306,6 +310,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     WidgetsBinding.instance.addObserver(this);
     _loadAudioLevel();
     _loadZoomLevel();
+    _loadPuckIcon();
     _loadUserRestrictions();
     _startForegroundService();
     _initTts();
@@ -517,7 +522,25 @@ class _NavigationScreenState extends State<NavigationScreen>
   Future<void> _loadZoomLevel() async {
     final prefs = await SharedPreferences.getInstance();
     final idx = prefs.getInt(_prefZoomLevel) ?? 1;
-    if (mounted) setState(() => _zoomLevel = ZoomLevel.values[idx.clamp(0, 2)]);
+    if (mounted) {
+      setState(() {
+        _zoomLevel = ZoomLevel.values[idx.clamp(0, 2)];
+        _zoom = _zoomForLevel(_zoomLevel);
+      });
+    }
+  }
+
+  // Rasteriza a seta do NavPuck num ícone de mapa, pra usar como marker que anda
+  // e gira (rotation=bearing) no olhar-ao-redor. Uma vez, cacheado em _puckIcon.
+  Future<void> _loadPuckIcon() async {
+    const size = 44.0;
+    final recorder = ui.PictureRecorder();
+    const _PuckPainter().paint(Canvas(recorder), const Size(size, size));
+    final img = await recorder.endRecording().toImage(size.toInt(), size.toInt());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    if (bytes != null && mounted) {
+      setState(() => _puckIcon = BitmapDescriptor.bytes(bytes.buffer.asUint8List()));
+    }
   }
 
   Future<void> _saveZoomLevel(ZoomLevel level) async {
@@ -527,12 +550,17 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   void _cycleZoomLevel() {
     final next = ZoomLevel.values[(_zoomLevel.index + 1) % ZoomLevel.values.length];
-    setState(() => _zoomLevel = next);
+    setState(() { _zoomLevel = next; _zoom = _zoomForLevel(next); });
     _saveZoomLevel(next);
     _recenter();
   }
 
-  double get _zoom => switch (_zoomLevel) {
+  // Zoom livre: o pinch grava QUALQUER valor aqui (não só os 3 presets), então a
+  // seta segue em qualquer distância. O botão continua saltando entre os presets
+  // via _zoomForLevel. Fonte única do follow (lida em todos os moveCamera).
+  double _zoom = 17.0;
+
+  static double _zoomForLevel(ZoomLevel l) => switch (l) {
     ZoomLevel.recuado    => 15.0,
     ZoomLevel.medio      => 17.0,
     ZoomLevel.aproximado => 19.0,
@@ -1118,14 +1146,14 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (nowMs - _lastTickMs < 30) return;
     _lastTickMs = nowMs;
 
-    // Olhar-ao-redor: não seguimos a câmera (o usuário está explorando o mapa).
-    // Volta sozinho após _freeLookAutoReturnMs sem ele tocar.
-    if (_freeLook) {
-      if (_lastUserGestureAt != null &&
-          DateTime.now().difference(_lastUserGestureAt!).inMilliseconds >=
-              _freeLookAutoReturnMs) {
-        _recenter();
-      }
+    // Olhar-ao-redor: a seta CONTINUA andando no mapa (segue o cálculo abaixo), só
+    // a câmera é que não segue (guarda no moveCamera). Volta sozinho pro follow
+    // após _freeLookAutoReturnMs sem toque.
+    if (_freeLook &&
+        _lastUserGestureAt != null &&
+        DateTime.now().difference(_lastUserGestureAt!).inMilliseconds >=
+            _freeLookAutoReturnMs) {
+      _recenter();
       return;
     }
 
@@ -1167,7 +1195,9 @@ class _NavigationScreenState extends State<NavigationScreen>
         setState(() {}); // build() reparte a rota no _predIdx; memoização cuida do resto
       }
     }
-    if (!_markingMode && !_paused) {
+    // Free-look: a seta anda (o setState do trail acima reposiciona o marker), mas
+    // a câmera NÃO segue — fica onde o usuário arrastou pra olhar à frente.
+    if (!_markingMode && !_paused && !_freeLook) {
       _recordCmd(predPos);
       _mapController?.moveCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
@@ -1685,7 +1715,20 @@ class _NavigationScreenState extends State<NavigationScreen>
     // um stall da main thread (o callback chega defasado, mas a posição defasada
     // ainda é uma que nós mandamos). Só um alvo que NUNCA comandamos é o dedo.
     final isEcho = targetIsEcho(_cmdTargets, pos.target);
-    if (zoomDiverged || !isEcho) {
+
+    // Pinça (zoom): adota o zoom do gesto (fonte única) e MANTÉM o estado — no
+    // follow a câmera segue já no novo zoom; em free-look só ajusta o nível. Nunca
+    // dispara free-look (o pan que acompanha a pinça é ignorado de propósito). Sem
+    // isto o follow reverteria o zoom do usuário no tick seguinte (zoom preso).
+    if (zoomDiverged) {
+      _zoom = pos.zoom;
+      _lastUserGestureAt = DateTime.now();
+      return;
+    }
+
+    // Arrasto lateral (target divergente, zoom estável) = olhar-ao-redor. A seta
+    // segue andando no mapa (ver _predictTick); só a câmera é que descola.
+    if (!isEcho) {
       _lastUserGestureAt = DateTime.now();
       if (!_freeLook) {
         final msSinceProg = _lastProgrammaticMoveAt != null
@@ -1694,12 +1737,10 @@ class _NavigationScreenState extends State<NavigationScreen>
         final panM = RadarService.haversine(
             pos.target.latitude, pos.target.longitude,
             _animPos.latitude, _animPos.longitude);
-        debugPrint('[FREELOOK] enter cause=${zoomDiverged ? "zoom" : "pan"} '
-            'zoomDelta=${zoomDelta.toStringAsFixed(2)} panM=${panM.round()} '
-            'msSinceProg=$msSinceProg');
+        debugPrint('[FREELOOK] enter cause=pan '
+            'panM=${panM.round()} msSinceProg=$msSinceProg');
         FieldLog.event('freelook_enter', {
-          'cause': zoomDiverged ? 'zoom' : 'pan',
-          'zoomDelta': double.parse(zoomDelta.toStringAsFixed(2)),
+          'cause': 'pan',
           'panM': panM.round(),
           'msSinceProg': msSinceProg,
         });
@@ -2130,14 +2171,24 @@ class _NavigationScreenState extends State<NavigationScreen>
       // method channel a cada frame era o gargalo do lag (flutter#33430). Agora
       // é um widget Flutter fixo (NavPuck) sobreposto no Stack — câmera segue a
       // posição (com padding pra deixar a seta embaixo). Só o destino é Marker.
-      // Exceção: no olhar-ao-redor OU pausado a câmera descola da posição, então o
-      // puck fixo mentiria (fica grudado na tela enquanto o mapa desliza no zoom) —
-      // mostramos um pino ancorado no mapa, que fica certo ao pan/zoom.
-      if ((_freeLook || _paused) && _currentPos != null)
+      // Pausado: a câmera e o caminhão estão parados → pino ancorado no mapa.
+      if (_paused && _currentPos != null)
         Marker(
           markerId: const MarkerId('you_freelook'),
           position: _snappedPos ?? _currentPos!,
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          anchor: const Offset(0.5, 0.5),
+        ),
+      // Olhar-ao-redor: a seta CONTINUA andando no mapa (posição predita + rumo),
+      // enquanto a câmera fica livre onde o usuário arrastou (ex: olhar uns km à
+      // frente pra ver blitz sem perder de vista onde está). Pino é só no pause.
+      if (_freeLook && !_paused && _puckIcon != null && _currentPos != null)
+        Marker(
+          markerId: const MarkerId('you_freelook'),
+          position: _animPos,
+          icon: _puckIcon!,
+          rotation: _animBearing,
+          flat: true,
           anchor: const Offset(0.5, 0.5),
         ),
     };
