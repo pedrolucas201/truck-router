@@ -168,6 +168,8 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _lastUserGestureAt;   // marca o último gesto, p/ auto-retorno
   DateTime? _lastZoomAt;          // último gesto de zoom, p/ não confundir o pan
                                   // que acompanha a pinça com olhar-ao-redor
+  bool _fingerDown = false;       // dedo tocando o mapa → suspende o follow, p/ o
+                                  // arrasto colinear (pra frente) não ser cancelado
   DateTime? _ignoreGestureUntil;  // ignora os frames do _recenter (não re-entra)
   DateTime? _lastProgrammaticMoveAt; // instrumentação: quanto depois de um
                                      // recenter/zoom o free-look disparou (bug do marker azul)
@@ -1212,8 +1214,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
     }
     // Free-look: a seta anda (o setState do trail acima reposiciona o marker), mas
-    // a câmera NÃO segue — fica onde o usuário arrastou pra olhar à frente.
-    if (!_markingMode && !_paused && !_freeLook) {
+    // a câmera NÃO segue. !_fingerDown: com o dedo na tela o follow também para —
+    // senão cancela o arrasto colinear (pra frente) antes de virar olhar-ao-redor.
+    if (!_markingMode && !_paused && !_freeLook && !_fingerDown) {
       _recordCmd(predPos);
       _mapController?.moveCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
@@ -1743,9 +1746,11 @@ class _NavigationScreenState extends State<NavigationScreen>
       return;
     }
 
-    // Arrasto lateral (target divergente, zoom estável) = olhar-ao-redor. A seta
-    // segue andando no mapa (ver _predictTick); só a câmera é que descola.
-    if (!isEcho) {
+    // Olhar-ao-redor: alvo divergente (arrasto lateral) OU dedo na tela. O
+    // _fingerDown cobre o arrasto COLINEAR (pra frente), que fica perto da rota e
+    // seria confundido com eco do follow — sem ele, arrastar reto pra frente não
+    // ativava (item 1 do Gilberto). A seta segue andando; só a câmera descola.
+    if (!isEcho || _fingerDown) {
       // Rescaldo de pinça: o pan que acompanha o zoom não vira olhar-ao-redor —
       // adota o zoom (já feito acima) e segue no follow.
       if (_lastZoomAt != null &&
@@ -2287,27 +2292,38 @@ class _NavigationScreenState extends State<NavigationScreen>
                       // padding.top empurra o alvo da câmera (= posição do
                       // caminhão) pra ~85% da altura → puck embaixo, pista à
                       // frente (UX Márcio). O nativo trata o tilt corretamente.
+                      // Listener suspende o follow enquanto o dedo está na tela
+                      // (_fingerDown): sem isto o follow — que segue a rota a 30fps —
+                      // cancela o arrasto COLINEAR (pra frente) antes de virar
+                      // olhar-ao-redor, e o gesto "não pegava" (item 1 do Gilberto).
+                      // Não faz setState (lido direto por _predictTick/_onCameraMove).
                       return LayoutBuilder(
-                        builder: (context, c) => GoogleMap(
-                          initialCameraPosition: CameraPosition(
-                            target: _currentPos ?? widget.destination,
-                            zoom: 17,
-                            tilt: 45,
+                        builder: (context, c) => Listener(
+                          behavior: HitTestBehavior.translucent,
+                          onPointerDown:   (_) => _fingerDown = true,
+                          onPointerUp:     (_) => _fingerDown = false,
+                          onPointerCancel: (_) => _fingerDown = false,
+                          child: GoogleMap(
+                            initialCameraPosition: CameraPosition(
+                              target: _currentPos ?? widget.destination,
+                              zoom: 17,
+                              tilt: 45,
+                            ),
+                            padding: EdgeInsets.only(
+                              top: c.maxHeight * (2 * _puckYFrac - 1),
+                            ),
+                            onMapCreated: (ctrl) {
+                              _mapController = ctrl;
+                            },
+                            style: _themeController.isNight ? kNightMapStyle : null,
+                            onCameraMove: _onCameraMove,
+                            polylines: polylines,
+                            markers: markers,
+                            trafficEnabled: false,
+                            myLocationButtonEnabled: false,
+                            zoomControlsEnabled: false,
+                            compassEnabled: false,
                           ),
-                          padding: EdgeInsets.only(
-                            top: c.maxHeight * (2 * _puckYFrac - 1),
-                          ),
-                          onMapCreated: (ctrl) {
-                            _mapController = ctrl;
-                          },
-                          style: _themeController.isNight ? kNightMapStyle : null,
-                          onCameraMove: _onCameraMove,
-                          polylines: polylines,
-                          markers: markers,
-                          trafficEnabled: false,
-                          myLocationButtonEnabled: false,
-                          zoomControlsEnabled: false,
-                          compassEnabled: false,
                         ),
                       );
                     },
