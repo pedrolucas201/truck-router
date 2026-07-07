@@ -1775,10 +1775,14 @@ class _NavigationScreenState extends State<NavigationScreen>
         final panM = RadarService.haversine(
             pos.target.latitude, pos.target.longitude,
             _animPos.latitude, _animPos.longitude);
-        debugPrint('[FREELOOK] enter cause=pan '
+        // cause='finger': ativou pelo _fingerActive (alvo eco/colinear + dedo na
+        // tela) = o arrasto reto pra frente. Se este cause aparecer no field_log,
+        // o Listener PEGOU o toque na platform view → valida o fix do item 1.
+        final cause = isEcho ? 'finger' : 'pan';
+        debugPrint('[FREELOOK] enter cause=$cause '
             'panM=${panM.round()} msSinceProg=$msSinceProg');
         FieldLog.event('freelook_enter', {
-          'cause': 'pan',
+          'cause': cause,
           'panM': panM.round(),
           'msSinceProg': msSinceProg,
         });
