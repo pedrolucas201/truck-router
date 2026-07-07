@@ -166,6 +166,8 @@ class _NavigationScreenState extends State<NavigationScreen>
   // câmera até ele tocar "centralizar" ou passar o timeout sem mexer.
   bool _freeLook = false;
   DateTime? _lastUserGestureAt;   // marca o último gesto, p/ auto-retorno
+  DateTime? _lastZoomAt;          // último gesto de zoom, p/ não confundir o pan
+                                  // que acompanha a pinça com olhar-ao-redor
   DateTime? _ignoreGestureUntil;  // ignora os frames do _recenter (não re-entra)
   DateTime? _lastProgrammaticMoveAt; // instrumentação: quanto depois de um
                                      // recenter/zoom o free-look disparou (bug do marker azul)
@@ -277,6 +279,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Olhar-ao-redor: volta a seguir sozinho após Xs sem o usuário tocar o mapa.
   // ponytail: knob de campo — subir se ele reclamar que volta cedo demais.
   static const _freeLookAutoReturnMs   = 10000;
+  // Rescaldo de pinça: por Xms após um gesto de zoom, um pan é tratado como parte
+  // da pinça (não vira olhar-ao-redor). Sem isto, o pequeno pan que acompanha o
+  // zoom jogava a câmera pra free-look ("dei zoom e virou pino" — Gilberto).
+  static const _zoomCooldownMs         = 450;
   // Chegada: contador de 15s antes de finalizar; se o caminhão se afastar mais
   // que 40m da âncora durante a contagem, cancela e reroteia (deu a volta).
   static const _arrivalCountdownMs = 15000;
@@ -883,32 +889,15 @@ class _NavigationScreenState extends State<NavigationScreen>
     final latLng = LatLng(pos.latitude, pos.longitude);
 
     if (_paused) {
-      final pts2 = _result.polylinePoints;
-      final s2 = (_closestPolylineIdx - 5).clamp(0, pts2.length - 1);
-      var bd2  = double.infinity;
-      var snap2 = pts2.isNotEmpty ? pts2[_closestPolylineIdx] : latLng;
-      final end2 = min(s2 + 200, pts2.length);
-      for (var i = s2; i < end2 - 1; i++) {
-        final s = _projectToSegment(latLng, pts2[i], pts2[i + 1]);
-        final d = RadarService.haversine(latLng.latitude, latLng.longitude, s.latitude, s.longitude);
-        if (d < bd2) { bd2 = d; snap2 = s; }
-      }
-      if (end2 == pts2.length && pts2.isNotEmpty) {
-        final d = RadarService.haversine(latLng.latitude, latLng.longitude, pts2[end2 - 1].latitude, pts2[end2 - 1].longitude);
-        if (d < bd2) { snap2 = pts2[end2 - 1]; }
-      }
-      final pausedSnap    = pts2.isNotEmpty ? snap2 : latLng;
-      final pausedBearing = pts2.length >= 2
-          ? _segmentBearing(pts2, _closestPolylineIdx.clamp(0, pts2.length - 1))
-          : pos.heading;
+      // Pausado: o pino fica CONGELADO onde parou (pedido do Gilberto) — não segue
+      // o GPS. Só registra a posição real e a velocidade; _snappedPos e o anchor
+      // ficam no valor de quando pausou (predição parada, speed 0).
       setState(() {
         _currentPos = latLng;
-        _snappedPos = pausedSnap;
-        _bearing    = pausedBearing;
         _speedKmh   = pos.speed * 3.6 < 2.5 ? 0.0 : (pos.speed * 3.6).clamp(0.0, 300.0);
       });
-      // Pausado: ancora sem velocidade — marcador fica parado no snap, sem prever.
-      _setAnchor(pausedSnap, _closestPolylineIdx, pausedBearing, 0);
+      final frozen = _snappedPos ?? latLng;
+      _setAnchor(frozen, _closestPolylineIdx, _bearing, 0);
       return;
     }
 
@@ -1750,12 +1739,19 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (zoomDiverged) {
       _zoom = pos.zoom;
       _lastUserGestureAt = DateTime.now();
+      _lastZoomAt = DateTime.now();
       return;
     }
 
     // Arrasto lateral (target divergente, zoom estável) = olhar-ao-redor. A seta
     // segue andando no mapa (ver _predictTick); só a câmera é que descola.
     if (!isEcho) {
+      // Rescaldo de pinça: o pan que acompanha o zoom não vira olhar-ao-redor —
+      // adota o zoom (já feito acima) e segue no follow.
+      if (_lastZoomAt != null &&
+          DateTime.now().difference(_lastZoomAt!).inMilliseconds < _zoomCooldownMs) {
+        return;
+      }
       _lastUserGestureAt = DateTime.now();
       if (!_freeLook) {
         final msSinceProg = _lastProgrammaticMoveAt != null
