@@ -301,6 +301,17 @@ class _NavigationScreenState extends State<NavigationScreen>
       'points': _result.polylinePoints.length,
       'distM':  _result.distanceMeters,
       'durS':   _result.durationSeconds,
+      // Precisão do destino (diag. "cheguei mas o app achava que faltava X"):
+      // qual coord virou destino e se a polyline termina nela ou desviada.
+      'destLat': widget.destination.latitude,
+      'destLng': widget.destination.longitude,
+      'polyEndLat': _result.polylinePoints.isNotEmpty ? _result.polylinePoints.last.latitude : null,
+      'polyEndLng': _result.polylinePoints.isNotEmpty ? _result.polylinePoints.last.longitude : null,
+      'destToPolyEndM': _result.polylinePoints.isNotEmpty
+          ? RadarService.haversine(
+              widget.destination.latitude, widget.destination.longitude,
+              _result.polylinePoints.last.latitude, _result.polylinePoints.last.longitude).round()
+          : null,
     });
     _radares        = List.of(widget.initialRadares);
     _visibleRadares = List.of(widget.initialRadares);
@@ -351,7 +362,23 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   @override
   void dispose() {
-    FieldLog.event('nav_end', {'arrived': _arrived, 'idx': _closestPolylineIdx});
+    // No fecho (chegada OU X manual): onde o caminhão estava, a quantos metros
+    // EM LINHA RETA do destino, e quanto o app achava que faltava PELA ROTA.
+    // straightToDestM pequeno + remainingRouteM grande = distância de rota (H-D),
+    // não geocode errado. Ambos grandes = destino de fato deslocado.
+    FieldLog.event('nav_end', {
+      'arrived': _arrived,
+      'idx': _closestPolylineIdx,
+      'curLat': _currentPos?.latitude,
+      'curLng': _currentPos?.longitude,
+      'straightToDestM': _currentPos != null
+          ? RadarService.haversine(
+              _currentPos!.latitude, _currentPos!.longitude,
+              widget.destination.latitude, widget.destination.longitude).round()
+          : null,
+      'remainingRouteM': _remainingDistanceM().round(),
+      'speedKmh': _speedKmh.round(),
+    });
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _timeBannerTimer?.cancel();
