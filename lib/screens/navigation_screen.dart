@@ -1173,17 +1173,14 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (nowMs - _lastTickMs < 30) return;
     _lastTickMs = nowMs;
 
-    // Olhar-ao-redor: o _predictTick NÃO roda (early-return). O trabalho de 30fps +
-    // o setState do rastro (que re-difunde a geometria pelo channel, caro no Adreno)
-    // travava o gesto de pan nativo em device fraco — regressão v2.4.16, o Gilberto
-    // não conseguia arrastar. A seta anda pelo _snappedPos do _onPositionUpdate
-    // (setState por fix, ~1/s); a câmera fica livre. Volta sozinho após timeout.
-    if (_freeLook) {
-      if (_lastUserGestureAt != null &&
-          DateTime.now().difference(_lastUserGestureAt!).inMilliseconds >=
-              _freeLookAutoReturnMs) {
-        _recenter();
-      }
+    // Olhar-ao-redor: a seta CONTINUA andando no mapa (segue o cálculo abaixo), só
+    // a câmera é que não segue (guarda no moveCamera). Volta sozinho pro follow
+    // após _freeLookAutoReturnMs sem toque.
+    if (_freeLook &&
+        _lastUserGestureAt != null &&
+        DateTime.now().difference(_lastUserGestureAt!).inMilliseconds >=
+            _freeLookAutoReturnMs) {
+      _recenter();
       return;
     }
 
@@ -1225,7 +1222,9 @@ class _NavigationScreenState extends State<NavigationScreen>
         setState(() {}); // build() reparte a rota no _predIdx; memoização cuida do resto
       }
     }
-    if (!_markingMode && !_paused) {
+    // Free-look: a seta anda (o setState do trail acima reposiciona o marker), mas
+    // a câmera NÃO segue — fica onde o usuário arrastou pra olhar à frente.
+    if (!_markingMode && !_paused && !_freeLook) {
       _recordCmd(predPos);
       _mapController?.moveCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
@@ -2213,9 +2212,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (_freeLook && !_paused && _puckIcon != null && _currentPos != null)
         Marker(
           markerId: const MarkerId('you_freelook'),
-          position: _snappedPos ?? _currentPos!,
+          position: _animPos,
           icon: _puckIcon!,
-          rotation: _bearing,
+          rotation: _animBearing,
           flat: true,
           anchor: const Offset(0.5, 0.5),
         ),
