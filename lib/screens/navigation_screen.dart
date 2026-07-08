@@ -683,10 +683,24 @@ class _NavigationScreenState extends State<NavigationScreen>
   void _finalizeArrival() {
     if (_arrived) return;
     _arrived = true;
-    FieldLog.event('arrival_done');
+    // Gap do destino logado AQUI (não só no nav_end): a chegada rola em background
+    // e o pop/dispose não completa com o app pausado — o nav_end não dispararia.
+    // straightToDestM pequeno + remainingRouteM grande = distância de rota (H-D).
+    FieldLog.event('arrival_done', {
+      'straightToDestM': _currentPos != null
+          ? RadarService.haversine(
+              _currentPos!.latitude, _currentPos!.longitude,
+              widget.destination.latitude, widget.destination.longitude).round()
+          : null,
+      'remainingRouteM': _remainingDistanceM().round(),
+    });
     _arrivalTimer?.cancel();
     _arrivalTimer = null;
     _arriving = false;
+    // Mata o reroute periódico aqui: a chegada em background não dá dispose
+    // (transição do pop congela pausada), então o _refreshTimer vazava e
+    // rerroteava de 10 em 10 min parado no destino.
+    _refreshTimer?.cancel();
     _posSub?.cancel();
     _tts.stop();
     _ttsActive = false;
