@@ -14,4 +14,13 @@ class RadarPoint {
     this.id,
     this.source = 'csv',
   });
+
+  RadarPoint copyWith({int? speedKmh}) => RadarPoint(
+        lat: lat,
+        lng: lng,
+        type: type,
+        speedKmh: speedKmh ?? this.speedKmh,
+        id: id,
+        source: source,
+      );
 }

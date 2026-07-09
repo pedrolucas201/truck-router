@@ -139,6 +139,14 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _offRouteSince; // instrumentação: quando o caminhão saiu do corredor
   DateTime? _rerouteGraceUntil; // janela de carência pós-reroute (anti-encadeamento)
   RadarPoint? _upcomingRadar;
+  // Curadoria: pop-up que surge sozinho ao chegar num radar SEM verdicto, pergunta
+  // "existe?" e (se sim) a velocidade. _curatedKeys = já curados (não re-pergunta);
+  // _promptedKeys = já perguntados nesta sessão (não naga na mesma passada).
+  final Set<String> _curatedKeys  = {};
+  final Set<String> _promptedKeys = {};
+  RadarPoint? _curationPrompt;      // radar sendo perguntado agora (null = sem card)
+  bool _curationSpeedStep = false;  // 2ª etapa: chips de velocidade
+  Timer? _curationTimer;            // auto-some sem mudar nada
   final Set<int> _announced = {};
   int _lastTickMs = 0; // throttle do _predictTick (cap ~30fps, alivia main thread/channel)
   // Histórico curto de posições projetadas na rota (tempoMs, snap) p/ detectar
@@ -314,6 +322,8 @@ class _NavigationScreenState extends State<NavigationScreen>
   // como "na via" (~largura de pista + erro de GPS). Antes era raio a pontos
   // soltos (60m), que vazava pra ruas paralelas. Tunável em campo.
   static const _radarCorridorM      = 22.0;
+  // Distância pra o pop-up de curadoria surgir (chegou no radar). Tunável em campo.
+  static const _radarReachedM       = 60.0;
   static const _prefAudioLevel = 'nav_audio_level';
   static const _prefZoomLevel  = 'nav_zoom_level';
 
@@ -347,6 +357,9 @@ class _NavigationScreenState extends State<NavigationScreen>
     WidgetsBinding.instance.addObserver(this);
     _loadAudioLevel();
     _loadZoomLevel();
+    // Radares já curados neste device → não perguntar de novo no pop-up.
+    FirestoreRadarService.localOverrideKeys()
+        .then((k) { if (mounted) _curatedKeys.addAll(k); });
     _loadPuckIcon();
     _loadUserRestrictions();
     _startForegroundService();
@@ -419,6 +432,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     WakelockPlus.disable();
     _predTicker.dispose();
     _flashController.dispose();
+    _curationTimer?.cancel();
     super.dispose();
   }
 
@@ -1160,6 +1174,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _updateRadarAlert(upcoming);
     _checkSpeedAlert(_speedKmh);
     _syncRadarFlash();
+    _maybePromptCuration(upcoming, latLng);
     _checkPoliceAlerts(latLng);
     _buildUpcomingEvents();
 
@@ -2161,52 +2176,188 @@ class _NavigationScreenState extends State<NavigationScreen>
     _recenter();
   }
 
-  // Toque num radar: confirmar que existe (sobe confiança) ou votar "não existe".
-  Future<void> _onRadarTap(RadarPoint r) async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (_) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            leading: const Icon(Icons.camera_alt),
-            title: Text(r.speedKmh > 0
-                ? 'Radar ${r.speedKmh} km/h'
-                : (r.type.isEmpty ? 'Radar' : r.type)),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.check_circle, color: Colors.green),
-            title: const Text('Confirmar que existe'),
-            onTap: () => Navigator.pop(context, 'confirm'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.cancel, color: Colors.red),
-            title: const Text('Não existe aqui'),
-            onTap: () => Navigator.pop(context, 'remove'),
-          ),
-        ]),
-      ),
-    );
+  // Toque num radar: curadoria do Gilberto (palavra = fato). Não existe → some;
+  // existe → mantém; existe @ X → troca a velocidade. Grava override local-first
+  // (autoritativo, offline) + espelho no Firestore. Editável passando de novo.
+  Future<void> _onRadarTap(RadarPoint r) => _curateRadar(r);
+
+  Future<void> _curateRadar(RadarPoint r) async {
+    final action = await _showCurationSheet(r);
     if (action == null || !mounted) return;
-    if (action == 'confirm') {
-      if (r.id != null) await FirestoreRadarService.confirm(r.id!);
-      return;
-    }
-    // Voto "não existe": radar crowd → report(id); radar do CSV → dismiss por local.
-    if (r.id != null) {
-      await FirestoreRadarService.report(r.id!);
-    } else {
-      await FirestoreRadarService.dismissCsv(r.lat, r.lng);
-    }
-    widget.onRadarRemoved?.call(r); // poda o cache do mapa: não reaparece ao reabrir
+    if (action == 'remove') { await _applyRadarVerdict(r, false); return; }
+    // 'confirm' (mantém velocidade) ou 'speed:X' (troca)
+    final speed = action.startsWith('speed:') ? int.parse(action.substring(6)) : 0;
+    await _applyRadarVerdict(r, true, speed: speed);
+  }
+
+  // Grava o verdicto (override local-first + Firestore) e atualiza as listas na
+  // hora. Compartilhado pela folha (toque) e pelo pop-up automático.
+  Future<void> _applyRadarVerdict(RadarPoint r, bool exists, {int speed = 0}) async {
+    _curatedKeys.add(dismissalKey(r.lat, r.lng));
+    final uid = await AuthService.getUid();
+    await FirestoreRadarService.setOverride(
+        lat: r.lat, lng: r.lng, exists: exists, speedKmh: speed, uid: uid);
+    if (exists && speed <= 0) return; // confirmado sem trocar velocidade: nada muda na lista
     if (!mounted) return;
     bool sameAs(RadarPoint x) => x.lat == r.lat && x.lng == r.lng && x.type == r.type;
     setState(() {
-      _radares.removeWhere(sameAs);
-      _visibleRadares = List.of(_visibleRadares)..removeWhere(sameAs);
+      if (!exists) {
+        _radares.removeWhere(sameAs);
+        _visibleRadares = List.of(_visibleRadares)..removeWhere(sameAs);
+      } else {
+        _radares = _radares.map((x) => sameAs(x) ? x.copyWith(speedKmh: speed) : x).toList();
+        _visibleRadares =
+            _visibleRadares.map((x) => sameAs(x) ? x.copyWith(speedKmh: speed) : x).toList();
+      }
       _radarIconsFuture = Future.wait(_visibleRadares.map(_radarIcon));
     });
+    if (!exists) widget.onRadarRemoved?.call(r); // poda o cache do mapa
   }
+
+  // ── Pop-up de curadoria (surge sozinho ao chegar no radar) ────────────────────
+
+  // Chegou num radar sem verdicto → abre o card (uma vez por radar/sessão).
+  void _maybePromptCuration(RadarPoint? radar, LatLng pos) {
+    if (radar == null || _markingMode || _arrived || _curationPrompt != null) return;
+    final key = dismissalKey(radar.lat, radar.lng);
+    if (_curatedKeys.contains(key) || _promptedKeys.contains(key)) return;
+    if (RadarService.haversine(pos.latitude, pos.longitude, radar.lat, radar.lng) >
+        _radarReachedM) {
+      return;
+    }
+    _promptedKeys.add(key);
+    setState(() { _curationPrompt = radar; _curationSpeedStep = false; });
+    _restartCurationTimer();
+  }
+
+  void _restartCurationTimer() {
+    _curationTimer?.cancel();
+    _curationTimer = Timer(const Duration(seconds: 6), _closeCuration);
+  }
+
+  void _closeCuration() {
+    _curationTimer?.cancel();
+    if (mounted) setState(() { _curationPrompt = null; _curationSpeedStep = false; });
+  }
+
+  void _curationDeny() {
+    final r = _curationPrompt;
+    if (r != null) _applyRadarVerdict(r, false);
+    _closeCuration();
+  }
+
+  // "Existe" confirma na hora (mantém velocidade) e abre os chips pra refinar.
+  void _curationConfirm() {
+    final r = _curationPrompt;
+    if (r == null) return;
+    _applyRadarVerdict(r, true);
+    setState(() => _curationSpeedStep = true);
+    _restartCurationTimer();
+  }
+
+  void _curationSetSpeed(int speed) {
+    final r = _curationPrompt;
+    if (r != null) _applyRadarVerdict(r, true, speed: speed);
+    _closeCuration();
+  }
+
+  Widget _buildCurationCard() {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [
+            BoxShadow(color: Colors.black54, blurRadius: 12, offset: Offset(0, 4)),
+          ],
+        ),
+        child: _curationSpeedStep
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  for (final s in [60, 70, 80, 90])
+                    ElevatedButton(
+                      onPressed: () => _curationSetSpeed(s),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black),
+                      child: Text('$s'),
+                    ),
+                ],
+              )
+            : Row(
+                children: [
+                  const Icon(Icons.camera_alt, color: Colors.white, size: 22),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text('Tem radar aqui?',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                  TextButton(
+                    onPressed: _curationDeny,
+                    style:
+                        TextButton.styleFrom(foregroundColor: Colors.red.shade300),
+                    child: const Text('NÃO'),
+                  ),
+                  const SizedBox(width: 4),
+                  ElevatedButton(
+                    onPressed: _curationConfirm,
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade600,
+                        foregroundColor: Colors.white),
+                    child: const Text('SIM'),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  // Folha de curadoria: 1 toque resolve. Chips 60/70/80/90 = velocidade real
+  // (confirma + troca). "Existe" mantém a atual. "Não existe" mata.
+  Future<String?> _showCurationSheet(RadarPoint r) => showModalBottomSheet<String>(
+        context: context,
+        builder: (_) => SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: Text(r.speedKmh > 0
+                  ? 'Radar ${r.speedKmh} km/h'
+                  : (r.type.isEmpty ? 'Radar' : r.type)),
+              subtitle: const Text('Existe aqui? Qual a velocidade real?'),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  for (final s in [60, 70, 80, 90])
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context, 'speed:$s'),
+                      child: Text('$s'),
+                    ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.check_circle, color: Colors.green),
+              title: const Text('Existe (manter velocidade)'),
+              onTap: () => Navigator.pop(context, 'confirm'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cancel, color: Colors.red),
+              title: const Text('Não existe aqui'),
+              onTap: () => Navigator.pop(context, 'remove'),
+            ),
+          ]),
+        ),
+      );
 
   // ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -2618,6 +2769,14 @@ class _NavigationScreenState extends State<NavigationScreen>
                           ),
                         ),
                       ),
+                    ),
+                  // ── Pop-up de curadoria: surge sozinho ao chegar no radar ──────
+                  if (_curationPrompt != null && !_markingMode && !_arrived)
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      bottom: 84,
+                      child: _buildCurationCard(),
                     ),
                   if (_markingMode) ...[
                     Positioned.fill(

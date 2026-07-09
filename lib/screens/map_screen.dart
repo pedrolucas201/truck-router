@@ -1042,9 +1042,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     );
   }
 
-  // Toque num radar no mapa: confirmar que existe ou votar "não existe" (remove).
-  // Mesma lógica do _onRadarTap da navegação — reusa FirestoreRadarService;
-  // radar da galera → report(id), radar do CSV → dismiss por local.
+  // Toque num radar no mapa: curadoria do Gilberto (palavra = fato). Não existe →
+  // some; existe → mantém; existe @ X → troca a velocidade. Override local-first +
+  // Firestore. Editável passando de novo. Mesma folha da navegação.
   Future<void> _onRadarTap(RadarPoint r) async {
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -1055,11 +1055,25 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             title: Text(r.speedKmh > 0
                 ? 'Radar ${r.speedKmh} km/h'
                 : (r.type.isEmpty ? 'Radar' : r.type)),
+            subtitle: const Text('Existe aqui? Qual a velocidade real?'),
           ),
           const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                for (final s in [60, 70, 80, 90])
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, 'speed:$s'),
+                    child: Text('$s'),
+                  ),
+              ],
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.check_circle, color: Colors.green),
-            title: const Text('Confirmar que existe'),
+            title: const Text('Existe (manter velocidade)'),
             onTap: () => Navigator.pop(context, 'confirm'),
           ),
           ListTile(
@@ -1071,18 +1085,23 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       ),
     );
     if (action == null || !mounted) return;
-    if (action == 'confirm') {
-      if (r.id != null) await FirestoreRadarService.confirm(r.id!);
+    final uid = await AuthService.getUid();
+    bool sameAs(RadarPoint x) => x.lat == r.lat && x.lng == r.lng && x.type == r.type;
+
+    if (action == 'remove') {
+      await FirestoreRadarService.setOverride(
+          lat: r.lat, lng: r.lng, exists: false, uid: uid);
+      if (!mounted) return;
+      setState(() => _nearbyRadares =
+          _nearbyRadares.where((x) => !sameAs(x)).toList());
       return;
     }
-    if (r.id != null) {
-      await FirestoreRadarService.report(r.id!);
-    } else {
-      await FirestoreRadarService.dismissCsv(r.lat, r.lng);
-    }
-    if (!mounted) return;
+    final speed = action.startsWith('speed:') ? int.parse(action.substring(6)) : 0;
+    await FirestoreRadarService.setOverride(
+        lat: r.lat, lng: r.lng, exists: true, speedKmh: speed, uid: uid);
+    if (!mounted || speed <= 0) return;
     setState(() => _nearbyRadares = _nearbyRadares
-        .where((x) => !(x.lat == r.lat && x.lng == r.lng && x.type == r.type))
+        .map((x) => sameAs(x) ? x.copyWith(speedKmh: speed) : x)
         .toList());
   }
 
