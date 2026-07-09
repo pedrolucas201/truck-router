@@ -177,6 +177,13 @@ class _NavigationScreenState extends State<NavigationScreen>
       _lastPointerAt != null &&
       DateTime.now().difference(_lastPointerAt!).inMilliseconds < _pointerActiveMs;
   DateTime? _ignoreGestureUntil;  // ignora os frames do _recenter (não re-entra)
+  // Trocar de nível de zoom é um move NOSSO (programático). O settle do zoom
+  // reporta um alvo divergente (offset do padding, maior quanto mais recuado)
+  // que escapa a janela dos 900ms e ligava o free-look "do nada" (botão azul no
+  // cycle de zoom — relato Gilberto). Enquanto esta flag estiver armada e sem
+  // dedo, o ramo !isEcho não engata free-look. QUALQUER toque a desarma → o
+  // olhar-ao-redor volta ao normal (arrasto/pinça do usuário).
+  bool _zoomJustChanged = false;
   DateTime? _lastProgrammaticMoveAt; // instrumentação: quanto depois de um
                                      // recenter/zoom o free-look disparou (bug do marker azul)
   // Ring-buffer dos alvos que NÓS comandamos (follow/recenter/resume). O
@@ -600,6 +607,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     final next = ZoomLevel.values[(_zoomLevel.index + 1) % ZoomLevel.values.length];
     setState(() { _zoomLevel = next; _zoom = _zoomForLevel(next); });
     _saveZoomLevel(next);
+    _zoomJustChanged = true; // suprime free-look no settle do zoom até o próximo toque
     _recenter();
   }
 
@@ -1788,7 +1796,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     // _fingerDown cobre o arrasto COLINEAR (pra frente), que fica perto da rota e
     // seria confundido com eco do follow — sem ele, arrastar reto pra frente não
     // ativava (item 1 do Gilberto). A seta segue andando; só a câmera descola.
-    if (!isEcho || _fingerActive) {
+    if ((!isEcho && !_zoomJustChanged) || _fingerActive) {
       // Rescaldo de pinça: o pan que acompanha o zoom não vira olhar-ao-redor —
       // adota o zoom (já feito acima) e segue no follow.
       if (_lastZoomAt != null &&
@@ -2342,8 +2350,8 @@ class _NavigationScreenState extends State<NavigationScreen>
                       return LayoutBuilder(
                         builder: (context, c) => Listener(
                           behavior: HitTestBehavior.translucent,
-                          onPointerDown: (_) => _lastPointerAt = DateTime.now(),
-                          onPointerMove: (_) => _lastPointerAt = DateTime.now(),
+                          onPointerDown: (_) { _lastPointerAt = DateTime.now(); _zoomJustChanged = false; },
+                          onPointerMove: (_) { _lastPointerAt = DateTime.now(); _zoomJustChanged = false; },
                           child: GoogleMap(
                             initialCameraPosition: CameraPosition(
                               target: _currentPos ?? widget.destination,
