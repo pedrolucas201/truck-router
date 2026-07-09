@@ -1,10 +1,6 @@
 # release.ps1 — build APK release e sobe pro GCS
-# Uso: .\release.ps1 [-Notes "texto que aparece no diálogo de atualização"]
+# Uso: .\release.ps1
 # Requer: flutter, gcloud autenticado com acesso ao projeto maps-route-495614
-
-param(
-    [string]$Notes = ""
-)
 
 $ErrorActionPreference = "Stop"
 
@@ -29,22 +25,6 @@ $url    = "https://storage.googleapis.com/truck-router-apks/truck-router-v$versi
 Write-Host "Subindo para GCS..." -ForegroundColor Cyan
 gcloud storage cp $apk $dest --project=maps-route-495614
 gcloud storage cp $apk $latest --project=maps-route-495614
-
-# version.json = fonte da verdade do update in-app. O app compara o build daqui
-# com o seu proprio. no-cache pra checagem sempre ver a versao recem-publicada.
-$verName  = ($version -split '\+')[0]
-$buildNum = if ($version -match '\+(\d+)') { [int]$Matches[1] } else { 0 }
-$versionObj = [ordered]@{
-    build    = $buildNum
-    version  = $verName
-    url      = "https://storage.googleapis.com/truck-router-apks/truck-router-latest.apk"
-    minBuild = 0
-    notes    = $Notes
-}
-$versionFile = Join-Path $env:TEMP "version.json"
-$versionObj | ConvertTo-Json | Out-File -FilePath $versionFile -Encoding utf8
-gcloud storage cp $versionFile "gs://truck-router-apks/version.json" `
-    --project=maps-route-495614 --cache-control="no-cache" --content-type="application/json"
 
 Write-Host ""
 Write-Host "Publicado!" -ForegroundColor Green

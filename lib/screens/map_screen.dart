@@ -26,8 +26,6 @@ import '../providers/route_provider.dart';
 import '../providers/truck_profile_provider.dart';
 import '../services/here_geocoding_service.dart';
 import '../services/field_log.dart';
-import '../services/update_service.dart';
-import '../widgets/update_dialog.dart';
 import '../services/radar_service.dart';
 import '../services/firestore_radar_service.dart';
 import '../widgets/address_search_field.dart';
@@ -106,21 +104,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _initDeepLinks();
     _themeController = context.read<ThemeController>();
     _themeController.addListener(_onThemeChanged);
-    _maybeCheckUpdate();
-  }
-
-  // Uma vez por processo, na home (nunca em navegação). Falha silenciosa quando
-  // não há update / offline — o motorista só vê o diálogo se houver versão nova.
-  static bool _updateChecked = false;
-  Future<void> _maybeCheckUpdate() async {
-    if (_updateChecked) return;
-    _updateChecked = true;
-    final info = await UpdateService.check();
-    if (info == null || !mounted) return;
-    // Só na home visível: se o motorista já entrou na navegação enquanto a
-    // checagem rodava, não abre o diálogo por cima da tela de rota.
-    if (ModalRoute.of(context)?.isCurrent != true) return;
-    await showUpdateDialog(context, info);
   }
 
   // Semeia a memória de lugares a partir do histórico de rotas (uma vez), pra
