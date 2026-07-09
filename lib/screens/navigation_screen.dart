@@ -702,6 +702,11 @@ class _NavigationScreenState extends State<NavigationScreen>
     // rerroteava de 10 em 10 min parado no destino.
     _refreshTimer?.cancel();
     _posSub?.cancel();
+    // Mesmo motivo do _refreshTimer: stopService vivia só no dispose, que não
+    // roda na chegada em background — a notificação "Navegando" ficava órfã
+    // (ongoing, não-dismissível) por dias. Para aqui; idempotente (dispose
+    // ainda chama pro caminho do X manual em foreground).
+    FlutterForegroundTask.stopService();
     _tts.stop();
     _ttsActive = false;
     // Sem speak aqui: "Você chegou ao destino" já foi dito em _beginArrival.
