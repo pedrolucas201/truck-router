@@ -73,18 +73,16 @@ bool targetIsEcho(List<LatLng> cmds, LatLng target) => cmds.any((t) =>
 // pedir teto menor, dá pra parametrizar por tipo de via depois.
 const int kTruckCapKmh = 90;
 
-// Limite VÁLIDO PRO CAMINHÃO num ponto: o mais restritivo entre os limites postados
-// conhecidos (radar e/ou trecho da HERE — ambos são de carro/placa) SEMPRE capado no
-// teto de caminhão. null quando não há NENHUM dado postado (aí o chamador decide:
-// banner mostra "Radar", voz usa o piso). Nunca devolve o limite de carro puro
-// (report Gilberto 2026-07-03: Dom Pedro postava 110, caminhão é 90).
-int? truckRadarLimit(int radarSpeedKmh, int? segmentLimitKmh) {
-  final posted = <int>[
-    if (radarSpeedKmh > 0) radarSpeedKmh,
-    ?segmentLimitKmh,
-  ];
-  if (posted.isEmpty) return null;
-  return min(posted.reduce(min), kTruckCapKmh);
+// Limite de caminhão NA ÁREA DE UM RADAR = a velocidade POSTADA no radar (a
+// "velocidade permitida" que o Gilberto cura), capada no teto de caminhão. NÃO
+// usa mais o limite do trecho da HERE: ele crava valores errados (40 numa via de
+// 90) e fazia o flash piscar em velocidade legal do lado de um radar de 90
+// (report Gilberto 2026-07-09, com print). Ainda protege contra placa de carro
+// (110 → cap 90, report 2026-07-03). null quando o radar não tem velocidade
+// postada (aí o chamador mostra "Radar" e usa o teto).
+int? truckRadarLimit(int radarSpeedKmh) {
+  if (radarSpeedKmh <= 0) return null;
+  return min(radarSpeedKmh, kTruckCapKmh);
 }
 
 class NavigationScreen extends StatefulWidget {
@@ -829,7 +827,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     }
     // Mais restritivo entre o postado no radar e o limite de caminhão do trecho;
     // piso 90 sem nenhum dado. Nunca avisa no limite de carro (report Gilberto).
-    final limit = truckRadarLimit(radar.speedKmh, _currentLimitKmh) ?? 90;
+    final limit = truckRadarLimit(radar.speedKmh) ?? kTruckCapKmh;
     if (kmh >= limit + 2) { // +2: folga de arredondamento, evita nag no limite exato
       final now = DateTime.now();
       if (!_speedAlertActive) {
@@ -2851,10 +2849,16 @@ class _BottomBarState extends State<_BottomBar>
     );
   }
 
-  // Limite de CAMINHÃO do trecho: o postado da via (HERE) capado no teto de caminhão
-  // — a rodovia posta 110 do carro, mas o velocímetro tem que ficar vermelho nos 90.
-  // Sem dado, cai no próprio teto (piso 90).
-  int get _limit => min(widget.limitKmh ?? kTruckCapKmh, kTruckCapKmh);
+  // Limite que colore o velocímetro. NA ÁREA DE RADAR manda a velocidade do radar
+  // (curada) — não o trecho da HERE, que crava valores errados e deixava o círculo
+  // vermelho em velocidade legal do lado de um radar de 90 (report Gilberto
+  // 2026-07-09). Fora de radar, cai no postado da via (HERE) capado no teto — a
+  // rodovia posta 110 do carro, mas o velocímetro fica vermelho nos 90.
+  int get _limit {
+    final radar = widget.radarAlert;
+    if (radar != null && radar.speedKmh > 0) return min(radar.speedKmh, kTruckCapKmh);
+    return min(widget.limitKmh ?? kTruckCapKmh, kTruckCapKmh);
+  }
 
   @override
   void didUpdateWidget(_BottomBar old) {
@@ -2961,11 +2965,11 @@ class _BottomBarState extends State<_BottomBar>
                         const Icon(Icons.speed, color: Colors.white, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          // Mostra o limite de CAMINHÃO (min entre radar e trecho),
-                          // não o de carro. Ex: radar 110 + trecho 90 → "90 km/h".
+                          // Mostra a velocidade do RADAR capada no teto de caminhão
+                          // (ex: radar de carro 110 → "90 km/h"). Sem HERE.
                           () {
                             final eff = truckRadarLimit(
-                                widget.radarAlert!.speedKmh, widget.limitKmh);
+                                widget.radarAlert!.speedKmh);
                             return eff != null
                                 ? '$eff km/h'
                                 : (isLombada ? 'Lombada' : 'Radar');

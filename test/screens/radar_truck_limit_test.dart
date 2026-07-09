@@ -1,31 +1,28 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:truck_router/screens/navigation_screen.dart';
 
-// Radar tem que avisar no limite de CAMINHÃO, nunca no de carro (report Gilberto
-// 2026-07-03: Dom Pedro postava 110 do carro, caminhão é 90). Regra = o mais
-// restritivo entre o postado no radar e o limite de caminhão do trecho.
+// Na área de radar, a "velocidade permitida" é a POSTADA no radar (curada pelo
+// Gilberto), capada no teto de caminhão. NÃO usa mais o limite do trecho da HERE
+// (report Gilberto 2026-07-09: HERE cravava 40 numa via de 90 → flash piscava a
+// 64 do lado de um radar de 90). Ainda protege contra placa de carro (110 → 90).
 void main() {
-  test('radar de carro (110) + trecho caminhão (90) → 90', () {
-    expect(truckRadarLimit(110, 90), 90);
+  test('radar de carro (110) → capado no teto de caminhão (90)', () {
+    expect(truckRadarLimit(110), 90);
   });
 
-  test('radar mais baixo que o trecho (60 numa via de 90) → 60', () {
-    expect(truckRadarLimit(60, 90), 60);
+  test('radar de 60 → 60 (não é mais rebaixado por HERE nem elevado)', () {
+    expect(truckRadarLimit(60), 60);
   });
 
-  test('radar sem velocidade postada (0) → cai no limite do trecho', () {
-    expect(truckRadarLimit(0, 90), 90);
+  test('radar de 90 → 90 (não pisca a 64 mesmo com HERE cravando 40)', () {
+    expect(truckRadarLimit(90), 90);
   });
 
-  test('radar de carro (110) sem dado do trecho → capado no teto de caminhão (90)', () {
-    expect(truckRadarLimit(110, null), 90);
+  test('nunca acima do teto de caminhão (120 → 90)', () {
+    expect(truckRadarLimit(120), kTruckCapKmh);
   });
 
-  test('nunca acima do teto de caminhão, mesmo com os dois altos (120/100 → 90)', () {
-    expect(truckRadarLimit(120, 100), kTruckCapKmh);
-  });
-
-  test('nenhum dado → null (chamador aplica piso)', () {
-    expect(truckRadarLimit(0, null), isNull);
+  test('radar sem velocidade postada (0) → null (chamador mostra "Radar"/teto)', () {
+    expect(truckRadarLimit(0), isNull);
   });
 }
