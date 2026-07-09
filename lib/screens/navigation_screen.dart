@@ -41,6 +41,7 @@ import '../widgets/add_restriction_sheet.dart';
 import '../widgets/add_radar_sheet.dart';
 import '../widgets/crosshair.dart';
 import '../widgets/next_event_strip.dart';
+import '../widgets/speed_plate.dart';
 import '../widgets/upcoming_dots.dart';
 
 @pragma('vm:entry-point')
@@ -1631,14 +1632,34 @@ class _NavigationScreenState extends State<NavigationScreen>
 
     if (isRadarWithSpeed) {
       // Retângulo arredondado: câmera acima + velocidade abaixo — distinto de placa de limite
-      const w = 44.0;
       const h = 50.0;
+      // número + " km/h" na mesma linha embaixo. O km/h ao lado do número deixa
+      // claro que é velocidade (pedido Gilberto/Pedro 2026-07-09). Largura do
+      // retângulo cresce pra caber o grupo.
+      final numTp = TextPainter(textDirection: TextDirection.ltr)
+        ..text = TextSpan(
+          text: r.speedKmh.toString(),
+          style: TextStyle(
+            fontSize: r.speedKmh >= 100 ? 11.0 : 13.0,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        )
+        ..layout();
+      final unitTp = TextPainter(textDirection: TextDirection.ltr)
+        ..text = const TextSpan(
+          text: ' km/h',
+          style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w600, color: Colors.white),
+        )
+        ..layout();
+      final rowW = numTp.width + unitTp.width;
+      final w = max(44.0, rowW + 12.0);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(const Rect.fromLTWH(0, 0, w, h), const Radius.circular(8)),
+        RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, w, h), const Radius.circular(8)),
         Paint()..color = bgColor,
       );
       canvas.drawRRect(
-        RRect.fromRectAndRadius(const Rect.fromLTWH(0, 0, w, h), const Radius.circular(8)),
+        RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, w, h), const Radius.circular(8)),
         Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 3.0,
       );
       const camIcon = Icons.camera_alt;
@@ -1649,17 +1670,12 @@ class _NavigationScreenState extends State<NavigationScreen>
         )
         ..layout();
       camTp.paint(canvas, Offset((w - camTp.width) / 2, 4));
-      final speedTp = TextPainter(textDirection: TextDirection.ltr)
-        ..text = TextSpan(
-          text: r.speedKmh.toString(),
-          style: TextStyle(
-            fontSize: r.speedKmh >= 100 ? 11.0 : 13.0,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        )
-        ..layout();
-      speedTp.paint(canvas, Offset((w - speedTp.width) / 2, h - speedTp.height - 4));
+      // centrados como grupo, alinhados pela base.
+      final rowX  = (w - rowW) / 2;
+      final baseY = h - numTp.height - 4;
+      numTp.paint(canvas, Offset(rowX, baseY));
+      unitTp.paint(
+          canvas, Offset(rowX + numTp.width, baseY + (numTp.height - unitTp.height)));
       final img   = await recorder.endRecording().toImage(w.toInt(), h.toInt());
       final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
       final icon  = BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
@@ -2278,13 +2294,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   for (final s in [60, 70, 80, 90])
-                    ElevatedButton(
-                      onPressed: () => _curationSetSpeed(s),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black),
-                      child: Text('$s'),
-                    ),
+                    SpeedPlate(kmh: s, onTap: () => _curationSetSpeed(s)),
                 ],
               )
             : Row(
@@ -2338,10 +2348,8 @@ class _NavigationScreenState extends State<NavigationScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   for (final s in [60, 70, 80, 90])
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context, 'speed:$s'),
-                      child: Text('$s'),
-                    ),
+                    SpeedPlate(
+                        kmh: s, onTap: () => Navigator.pop(context, 'speed:$s')),
                 ],
               ),
             ),
@@ -3121,7 +3129,7 @@ class _BottomBarState extends State<_BottomBar>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.speed, color: Colors.white, size: 20),
+                        const Icon(Icons.camera_alt, color: Colors.white, size: 20),
                         const SizedBox(width: 8),
                         Text(
                           // Mostra a velocidade do RADAR capada no teto de caminhão

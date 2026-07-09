@@ -31,6 +31,7 @@ import '../services/firestore_radar_service.dart';
 import '../widgets/address_search_field.dart';
 import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
+import '../widgets/speed_plate.dart';
 import 'truck_profile_screen.dart';
 import 'navigation_screen.dart';
 import '../models/police_alert.dart';
@@ -1064,10 +1065,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 for (final s in [60, 70, 80, 90])
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context, 'speed:$s'),
-                    child: Text('$s'),
-                  ),
+                  SpeedPlate(
+                      kmh: s, onTap: () => Navigator.pop(context, 'speed:$s')),
               ],
             ),
           ),
