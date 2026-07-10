@@ -153,6 +153,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Histórico curto de posições projetadas na rota (tempoMs, snap) p/ detectar
   // "parado" pelo avanço líquido ao longo da rota — imune ao jitter de velocidade.
   final List<(int, LatLng)> _snapHistory = [];
+  final List<(int, double)> _offDistHistory = []; // (ms, bestDist) p/ trend de afastamento
 
   // Cache de ícones para radares
   final _iconCache = <String, BitmapDescriptor>{};
@@ -282,6 +283,15 @@ class _NavigationScreenState extends State<NavigationScreen>
   // ponytail: knob de campo — se voltar a storm no log, subir; se atrasar
   // correção legítima de rua errada, baixar.
   static const _offRouteThresholdM  = 70.0;
+  // Portão CURTO usado só quando o rumo está divergindo (ele virou pra fora): não
+  // espera os 70m (~8s a 30km/h) pra reagir, basta afastar ~25m (~3s). Seguindo a
+  // rota ele fica a <15m da linha, então nunca cruza 25m → não dispara falso na
+  // curva legítima. Acima do ruído de GPS urbano (~10m).
+  static const _offRouteNearM       = 25.0;
+  // Quanto a separação da rota precisa CRESCER na janela (~2,5s) pra contar como
+  // "saindo". Pista paralela (mesmo na curva) fica ~plana; saída real sobe. É o
+  // que separa desvio de verdade do fantasma da curva, onde o ângulo engana.
+  static const _offGrowM            = 12.0;
   // Acima disso NÃO é pista paralela — é rua/rodovia diferente. Reroteia mesmo
   // avançando (o gate de "movingByRoute" abaixo só vale entre 70 e 150m).
   static const _offRouteHardM       = 150.0;
@@ -296,12 +306,14 @@ class _NavigationScreenState extends State<NavigationScreen>
   static const _rerouteCourseMinKmh    = 8.0;
   // "Map matching do pobre": rumo do caminhão vs rumo da rota no ponto mais
   // próximo. Fora do corredor MAS rumo alinhado = pista paralela (mesma mão) →
-  // segura (mata storm). Rumo divergindo forte = via errada de verdade → fura a
-  // supressão e rerota já (é o caso do desvio deliberado do Gilberto). Só o rumo
-  // é o 3º peso do map matching que a gente já tem de graça (sem grafo no device).
-  // ponytail: 120° = "quase oposto/transversal". Se pegar curva legítima fora do
-  // corredor, subir; se deixar passar via errada, baixar.
-  static const _wrongWayDeg            = 120.0;
+  // segura (mata storm). Rumo divergindo = ele virou pra fora da rota → encolhe o
+  // portão (reage em ~25m/~3s, não 70m/~8s) E fura a supressão, rerotando já. Só o
+  // rumo é o 3º peso do map matching que a gente já tem de graça (sem grafo no
+  // device). 45° = "virou de forma perceptível" (transversal/saída), bem acima do
+  // fantasma de pista paralela (~0°) e do ruído de heading do GPS.
+  // ponytail: se pegar curva legítima (só dispara já >25m fora, então improvável),
+  // subir; se deixar passar saída rasa, baixar.
+  static const _divergeDeg             = 45.0;
   // Carência pós-reroute: depois que a rota nova cai, origem/GPS ainda estão
   // defasados e o caminhão pode aparecer fora do corredor por 1-2s — o que
   // re-disparava 2-3 reroutes encadeados (field 2026-06-29, ~20s "atualizando").
@@ -1062,33 +1074,54 @@ class _NavigationScreenState extends State<NavigationScreen>
     final movingByRoute = windowReady && netAdvanceM >= _stopNetM;
     final effSpeedMps = movingByRoute ? pos.speed : 0.0;
 
+    // Separação da rota está CRESCENDO na janela? Saída real afasta; pista paralela
+    // (mesmo numa curva, onde o ângulo engana) fica ~plana. first = amostra mais
+    // antiga na janela; exige janela cheia p/ não confiar em 1 tranco de GPS.
+    _offDistHistory.add((nowMs, bestDist));
+    _offDistHistory.removeWhere((e) => nowMs - e.$1 > _stopWindowMs);
+    final distGrowthM = bestDist - _offDistHistory.first.$2;
+    final distGrowing = windowReady && distGrowthM > _offGrowM;
+
     // 3. Desvio de rota
     // Carência pós-reroute: a rota nova recém-aplicada + origem/GPS defasados
     // faziam o caminhão reaparecer fora do corredor e re-disparar 2-3 reroutes
     // encadeados (field 2026-06-29). Durante a janela não conta nem dispara;
     // ao expirar, se ainda estiver fora, a detecção reinicia do zero (detectMs
     // honesto). Snapar de volta ao corredor encerra a janela cedo (else).
+    // Rumo do caminhão vs rumo da rota no ponto mais próximo. Heading do GPS só
+    // é confiável com movimento FÍSICO (pos.speed cru, NÃO effSpeedMps — este
+    // zera quando !movingByRoute, que é exatamente o caso do desvio contrário).
+    // ponytail: 1 segmento da rota basta — se ficar ruidoso perto de curva,
+    // alargar pra média de 2-3 segmentos.
+    final vehBearing = pos.heading;
+    final headingReliable =
+        pos.speed * 3.6 >= _rerouteCourseMinKmh && vehBearing >= 0;
+    final routeBearing = _segmentBearing(pts, bestIdx);
+    final headingDelta = headingReliable
+        ? (((vehBearing - routeBearing + 540) % 360) - 180).abs()
+        : -1.0;
+    // "Saiu de verdade" = apontou pra fora (rumo divergindo) E está se afastando
+    // (distância crescendo). Os DOIS: o ângulo sozinho engana na curva de via
+    // dividida (rumo torto mas paralelo, distância plana); exigir afastamento mata
+    // esse fantasma. Seguindo a rota o rumo acompanha o segmento (delta baixo) e a
+    // distância não sobe — nada dispara.
+    final diverging = headingReliable && headingDelta > _divergeDeg;
+    final leavingRoute = diverging && distGrowing;
+    // Só quem saiu de verdade ganha o portão curto (~25m/~3-5s em vez de 70m/~8s).
+    final offRouteGate = leavingRoute ? _offRouteNearM : _offRouteThresholdM;
+
     final inRerouteGrace = _rerouteGraceUntil != null &&
         DateTime.now().isBefore(_rerouteGraceUntil!);
-    if (bestDist > _offRouteThresholdM && !inRerouteGrace) {
-      // Rumo do caminhão vs rumo da rota no ponto mais próximo. Heading do GPS só
-      // é confiável com movimento FÍSICO (pos.speed cru, NÃO effSpeedMps — este
-      // zera quando !movingByRoute, que é exatamente o caso do desvio contrário).
-      // ponytail: 1 segmento da rota basta — se ficar ruidoso perto de curva,
-      // alargar pra média de 2-3 segmentos.
-      final vehBearing = pos.heading;
-      final headingReliable =
-          pos.speed * 3.6 >= _rerouteCourseMinKmh && vehBearing >= 0;
-      final routeBearing = _segmentBearing(pts, bestIdx);
-      final headingDelta = headingReliable
-          ? (((vehBearing - routeBearing + 540) % 360) - 180).abs()
-          : -1.0;
-      final wrongWay = headingReliable && headingDelta > _wrongWayDeg;
+    if (bestDist > offRouteGate && !inRerouteGrace) {
       if (_offRouteCount == 0) {
         _offRouteSince = DateTime.now();
         _offRouteStartIdx = bestIdx;
-        FieldLog.event('off_route',
-            {'distM': bestDist.round(), 'moving': movingByRoute, 'hdgDelta': headingDelta.round()});
+        FieldLog.event('off_route', {
+          'distM': bestDist.round(),
+          'moving': movingByRoute,
+          'hdgDelta': headingDelta.round(),
+          'growM': distGrowthM.round(),
+        });
       }
       _offRouteCount++;
       if (_offRouteCount >= _offRouteCountLimit) {
@@ -1097,14 +1130,15 @@ class _NavigationScreenState extends State<NavigationScreen>
         // MESMA via. Reroteiar não ajuda (não cruza o canteiro) e gera o storm
         // do field_log (72-77m cravado, rota nova só crescendo). Só reroteia se:
         // travou (não avança), longe demais p/ ser pista paralela (_offRouteHardM),
-        // OU está indo em rumo divergente (via errada de verdade — furou a paralela).
-        if (!movingByRoute || bestDist > _offRouteHardM || wrongWay) {
+        // OU saiu de verdade (leavingRoute — apontou pra fora E se afastando).
+        if (!movingByRoute || bestDist > _offRouteHardM || leavingRoute) {
           _reroute(fromPos: latLng, urgent: true);
         } else {
           FieldLog.event('reroute_suppressed', {
             'distM': bestDist.round(),
             'idxDelta': bestIdx - _offRouteStartIdx,
             'hdgDelta': headingDelta.round(),
+            'growM': distGrowthM.round(),
           });
           _offRouteCount = _offRouteCountLimit - 1; // re-arma sem martelar
         }
@@ -1112,7 +1146,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     } else {
       _offRouteCount = 0;
       _offRouteSince = null;
-      if (bestDist <= _offRouteThresholdM) _rerouteGraceUntil = null;
+      if (bestDist <= offRouteGate) _rerouteGraceUntil = null;
     }
 
     // 4. Manobra atual — busca monotônica: mIdx só avança, nunca retrocede.
@@ -1194,8 +1228,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     // Bearing único para seta e câmera: o segmento da rota (estável), não o
     // heading bruto do GPS. Evita a "pescadinha" — a seta balançando em cima
     // de um mapa que já gira suave. Fallback para heading só sem rota.
-    final routeBearing = pts.length >= 2 ? _segmentBearing(pts, bestIdx) : pos.heading;
-    _setAnchor(pts.isNotEmpty ? bestSnap : latLng, bestIdx, routeBearing, effSpeedMps);
+    final anchorBearing = pts.length >= 2 ? routeBearing : pos.heading;
+    _setAnchor(pts.isNotEmpty ? bestSnap : latLng, bestIdx, anchorBearing, effSpeedMps);
     _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
     _checkSpeedAlert(_speedKmh);
