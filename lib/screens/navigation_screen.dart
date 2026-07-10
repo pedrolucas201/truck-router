@@ -294,6 +294,14 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Abaixo disso o heading do GPS é ruído — não passa course pra HERE (cairia
   // num rumo aleatório). Acima, informa o rumo pra HERE recalcular PRA FRENTE.
   static const _rerouteCourseMinKmh    = 8.0;
+  // "Map matching do pobre": rumo do caminhão vs rumo da rota no ponto mais
+  // próximo. Fora do corredor MAS rumo alinhado = pista paralela (mesma mão) →
+  // segura (mata storm). Rumo divergindo forte = via errada de verdade → fura a
+  // supressão e rerota já (é o caso do desvio deliberado do Gilberto). Só o rumo
+  // é o 3º peso do map matching que a gente já tem de graça (sem grafo no device).
+  // ponytail: 120° = "quase oposto/transversal". Se pegar curva legítima fora do
+  // corredor, subir; se deixar passar via errada, baixar.
+  static const _wrongWayDeg            = 120.0;
   // Carência pós-reroute: depois que a rota nova cai, origem/GPS ainda estão
   // defasados e o caminhão pode aparecer fora do corredor por 1-2s — o que
   // re-disparava 2-3 reroutes encadeados (field 2026-06-29, ~20s "atualizando").
@@ -1063,24 +1071,41 @@ class _NavigationScreenState extends State<NavigationScreen>
     final inRerouteGrace = _rerouteGraceUntil != null &&
         DateTime.now().isBefore(_rerouteGraceUntil!);
     if (bestDist > _offRouteThresholdM && !inRerouteGrace) {
+      // Rumo do caminhão vs rumo da rota no ponto mais próximo. Heading do GPS só
+      // é confiável com movimento FÍSICO (pos.speed cru, NÃO effSpeedMps — este
+      // zera quando !movingByRoute, que é exatamente o caso do desvio contrário).
+      // ponytail: 1 segmento da rota basta — se ficar ruidoso perto de curva,
+      // alargar pra média de 2-3 segmentos.
+      final vehBearing = pos.heading;
+      final headingReliable =
+          pos.speed * 3.6 >= _rerouteCourseMinKmh && vehBearing >= 0;
+      final routeBearing = _segmentBearing(pts, bestIdx);
+      final headingDelta = headingReliable
+          ? (((vehBearing - routeBearing + 540) % 360) - 180).abs()
+          : -1.0;
+      final wrongWay = headingReliable && headingDelta > _wrongWayDeg;
       if (_offRouteCount == 0) {
         _offRouteSince = DateTime.now();
         _offRouteStartIdx = bestIdx;
-        FieldLog.event('off_route', {'distM': bestDist.round(), 'moving': movingByRoute});
+        FieldLog.event('off_route',
+            {'distM': bestDist.round(), 'moving': movingByRoute, 'hdgDelta': headingDelta.round()});
       }
       _offRouteCount++;
       if (_offRouteCount >= _offRouteCountLimit) {
         // Pista dupla: fora do corredor MAS avançando ao longo da rota
-        // (movingByRoute) = a linha da HERE está na outra mão. Reroteiar não
-        // ajuda — ele não cruza o canteiro — e gera o storm do field_log
-        // (72-77m cravado, rota nova só crescendo, "manda voltar pra trás").
-        // Só reroteia se travou (não avança) ou se está longe demais p/ ser
-        // pista paralela (_offRouteHardM = rua diferente de verdade).
-        if (!movingByRoute || bestDist > _offRouteHardM) {
+        // (movingByRoute) E no mesmo rumo = a linha da HERE está na outra mão da
+        // MESMA via. Reroteiar não ajuda (não cruza o canteiro) e gera o storm
+        // do field_log (72-77m cravado, rota nova só crescendo). Só reroteia se:
+        // travou (não avança), longe demais p/ ser pista paralela (_offRouteHardM),
+        // OU está indo em rumo divergente (via errada de verdade — furou a paralela).
+        if (!movingByRoute || bestDist > _offRouteHardM || wrongWay) {
           _reroute(fromPos: latLng, urgent: true);
         } else {
-          FieldLog.event('reroute_suppressed',
-              {'distM': bestDist.round(), 'idxDelta': bestIdx - _offRouteStartIdx});
+          FieldLog.event('reroute_suppressed', {
+            'distM': bestDist.round(),
+            'idxDelta': bestIdx - _offRouteStartIdx,
+            'hdgDelta': headingDelta.round(),
+          });
           _offRouteCount = _offRouteCountLimit - 1; // re-arma sem martelar
         }
       }
