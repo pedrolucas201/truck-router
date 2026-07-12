@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:truck_router/screens/navigation_screen.dart';
+import 'package:truck_router/widgets/nav/nav_ui_defs.dart';
 
 // Na área de radar, a "velocidade permitida" é a POSTADA no radar (curada pelo
 // Gilberto), capada no teto de caminhão. NÃO usa mais o limite do trecho da HERE

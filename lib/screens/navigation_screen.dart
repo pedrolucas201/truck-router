@@ -43,6 +43,10 @@ import '../widgets/crosshair.dart';
 import '../widgets/next_event_strip.dart';
 import '../widgets/speed_plate.dart';
 import '../widgets/upcoming_dots.dart';
+import '../widgets/nav/bottom_bar.dart';
+import '../widgets/nav/instruction_bar.dart';
+import '../widgets/nav/nav_puck.dart';
+import '../widgets/nav/nav_ui_defs.dart';
 
 @pragma('vm:entry-point')
 void _navForegroundCallback() {
@@ -55,10 +59,6 @@ class _NavTaskHandler extends TaskHandler {
   @override Future<void> onDestroy(DateTime timestamp) async {}
 }
 
-enum AudioLevel { completo, essencial, silencioso }
-
-enum ZoomLevel { recuado, medio, aproximado }
-
 // Puro/testável: o alvo da câmera bate (<40m) com algum move que NÓS comandamos?
 // Sim → eco do follow (ignora). Não → dedo do usuário (free-look). É o
 // discriminador que separa nosso próprio moveCamera (mesmo atrasado por stall)
@@ -67,24 +67,6 @@ bool targetIsEcho(List<LatLng> cmds, LatLng target) => cmds.any((t) =>
     RadarService.haversine(
         t.latitude, t.longitude, target.latitude, target.longitude) <
     40);
-
-// Teto de velocidade de caminhão em rodovia (CTB): o app é SÓ pra caminhão, então
-// nunca mostra/avisa acima disso, mesmo quando a placa/HERE traz o limite de CARRO
-// (ex: 110 na Dom Pedro). ponytail: knob de calibração — se alguma classe de via
-// pedir teto menor, dá pra parametrizar por tipo de via depois.
-const int kTruckCapKmh = 90;
-
-// Limite de caminhão NA ÁREA DE UM RADAR = a velocidade POSTADA no radar (a
-// "velocidade permitida" que o Gilberto cura), capada no teto de caminhão. NÃO
-// usa mais o limite do trecho da HERE: ele crava valores errados (40 numa via de
-// 90) e fazia o flash piscar em velocidade legal do lado de um radar de 90
-// (report Gilberto 2026-07-09, com print). Ainda protege contra placa de carro
-// (110 → cap 90, report 2026-07-03). null quando o radar não tem velocidade
-// postada (aí o chamador mostra "Radar" e usa o teto).
-int? truckRadarLimit(int radarSpeedKmh) {
-  if (radarSpeedKmh <= 0) return null;
-  return min(radarSpeedKmh, kTruckCapKmh);
-}
 
 class NavigationScreen extends StatefulWidget {
   final RouteResult result;
@@ -625,7 +607,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   Future<void> _loadPuckIcon() async {
     const size = 44.0;
     final recorder = ui.PictureRecorder();
-    const _PuckPainter().paint(Canvas(recorder), const Size(size, size));
+    const PuckPainter().paint(Canvas(recorder), const Size(size, size));
     final img = await recorder.endRecording().toImage(size.toInt(), size.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
     if (bytes != null && mounted) {
@@ -2534,7 +2516,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         child: Column(
           children: [
             // ── Barra de instrução ──────────────────────────────────────────
-            _InstructionBar(
+            InstructionBar(
               maneuver:     nextM,
               distance:     _distToNextManeuver,
               dirIcon:      nextM != null ? _dirIcon(nextM) : Icons.straight,
@@ -2964,7 +2946,7 @@ class _NavigationScreenState extends State<NavigationScreen>
             ),
 
             // ── Barra inferior ──────────────────────────────────────────────
-            _BottomBar(
+            BottomBar(
               speedKmh:      _speedKmh,
               limitKmh:      _currentLimitKmh,
               remainingDist: _fmtDist(remaining),
@@ -2978,363 +2960,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 }
 
-// ── _InstructionBar ────────────────────────────────────────────────────────────
-
-class _InstructionBar extends StatelessWidget {
-  final RouteManeuver? maneuver;
-  final double distance;
-  final IconData dirIcon;
-  final AudioLevel audioLevel;
-  final bool rerouting;
-  final bool isNight;
-  final VoidCallback onAudioCycle;
-  final VoidCallback onClose;
-  final String Function(double) fmtDist;
-
-  const _InstructionBar({
-    required this.maneuver,
-    required this.distance,
-    required this.dirIcon,
-    required this.audioLevel,
-    required this.rerouting,
-    required this.isNight,
-    required this.onAudioCycle,
-    required this.onClose,
-    required this.fmtDist,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const bg           = Colors.black;
-    final instrColor   = isNight ? const Color(0xFF4FC3F7) : Colors.white;
-    final distColor    = Colors.white;
-
-    return Container(
-      color: bg,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          // Fechar
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: onClose,
-            tooltip: 'Encerrar navegação',
-          ),
-          const SizedBox(width: 4),
-          // Seta de direção
-          Icon(dirIcon, color: Colors.white, size: 40),
-          const SizedBox(width: 12),
-          // Instrução + distância
-          Expanded(
-            child: rerouting
-                ? const Row(
-                    children: [
-                      SizedBox(
-                        width: 18, height: 18,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      ),
-                      SizedBox(width: 10),
-                      Text('Recalculando rota…',
-                          style: TextStyle(color: Colors.white, fontSize: 15)),
-                    ],
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        maneuver == null
-                            ? '—'
-                            : resolveManeuverText(maneuver!.instruction, maneuver!.action, maneuver!.direction),
-                        style: TextStyle(
-                            color: instrColor, fontSize: 16, fontWeight: FontWeight.w600),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (distance.isFinite && distance < 50000)
-                        Text(
-                          'Em ${fmtDist(distance)}',
-                          style: TextStyle(
-                              color: distColor,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold),
-                        ),
-                    ],
-                  ),
-          ),
-          // Nível de áudio
-          IconButton(
-            icon: Icon(
-              switch (audioLevel) {
-                AudioLevel.completo   => Icons.volume_up,
-                AudioLevel.essencial  => Icons.volume_down,
-                AudioLevel.silencioso => Icons.volume_off,
-              },
-              color: Colors.white,
-            ),
-            onPressed: onAudioCycle,
-            tooltip: switch (audioLevel) {
-              AudioLevel.completo   => 'Áudio: Completo',
-              AudioLevel.essencial  => 'Áudio: Essencial',
-              AudioLevel.silencioso => 'Áudio: Silencioso',
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── _BottomBar ─────────────────────────────────────────────────────────────────
-
-class _BottomBar extends StatefulWidget {
-  final double speedKmh;
-  final int? limitKmh; // limite de caminhão do trecho atual (null = sem dado)
-  final String remainingDist;
-  final String eta;
-  final RadarPoint? radarAlert;
-
-  const _BottomBar({
-    required this.speedKmh,
-    required this.limitKmh,
-    required this.remainingDist,
-    required this.eta,
-    required this.radarAlert,
-  });
-
-  @override
-  State<_BottomBar> createState() => _BottomBarState();
-}
-
-class _BottomBarState extends State<_BottomBar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulseCtrl;
-  late final Animation<double> _pulseAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-    _pulseAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
-    );
-  }
-
-  // Limite que colore o velocímetro. NA ÁREA DE RADAR manda a velocidade do radar
-  // (curada) — não o trecho da HERE, que crava valores errados e deixava o círculo
-  // vermelho em velocidade legal do lado de um radar de 90 (report Gilberto
-  // 2026-07-09). Fora de radar, cai no postado da via (HERE) capado no teto — a
-  // rodovia posta 110 do carro, mas o velocímetro fica vermelho nos 90.
-  int get _limit {
-    final radar = widget.radarAlert;
-    if (radar != null && radar.speedKmh > 0) return min(radar.speedKmh, kTruckCapKmh);
-    return min(widget.limitKmh ?? kTruckCapKmh, kTruckCapKmh);
-  }
-
-  @override
-  void didUpdateWidget(_BottomBar old) {
-    super.didUpdateWidget(old);
-    if (widget.speedKmh >= _limit && !_pulseCtrl.isAnimating) {
-      _pulseCtrl.repeat(reverse: true);
-    } else if (widget.speedKmh < _limit - 2 && _pulseCtrl.isAnimating) {
-      _pulseCtrl.stop();
-      _pulseCtrl.reset();
-    }
-  }
-
-  @override
-  void dispose() {
-    _pulseCtrl.dispose();
-    super.dispose();
-  }
-
-  Color get _borderColor {
-    if (widget.speedKmh >= _limit) return Colors.red.shade600;
-    if (widget.speedKmh >= _limit - 10) return Colors.amber.shade600;
-    return Colors.white24;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isOver = widget.speedKmh >= _limit;
-    final isWarn = widget.speedKmh >= _limit - 10;
-    final isLombada = widget.radarAlert != null &&
-        widget.radarAlert!.type.toLowerCase().contains('lombada');
-
-    return Container(
-      color: const Color(0xFF212121),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          AnimatedBuilder(
-            animation: _pulseAnim,
-            builder: (context, _) {
-              final t = isOver ? _pulseAnim.value : 0.0;
-              final borderColor = isOver
-                  ? Color.lerp(Colors.red.shade600, Colors.red.shade300, t)!
-                  : _borderColor;
-              final borderW = isOver ? 2.0 + t * 2.5 : (isWarn ? 2.5 : 2.0);
-              final bgColor = isOver
-                  ? Color.lerp(
-                      const Color(0xFF2C2C2C), Colors.red.shade900, t * 0.35)!
-                  : const Color(0xFF2C2C2C);
-
-              return Container(
-                width: 84,
-                height: 84,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: bgColor,
-                  border: Border.all(color: borderColor, width: borderW),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      '${widget.speedKmh.round()}',
-                      style: TextStyle(
-                        color: isOver
-                            ? Color.lerp(
-                                Colors.white, Colors.red.shade200, t)
-                            : Colors.white,
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        height: 1.0,
-                      ),
-                    ),
-                    Text(
-                      'km/h',
-                      style: TextStyle(
-                          color: Colors.grey.shade400,
-                          fontSize: 10,
-                          height: 1.2),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-          // Placa de limite da via removida (report Gilberto): o velocímetro que
-          // muda de cor (amarelo→vermelho) já comunica o limite; a plaquinha era
-          // ruído. limitKmh segue chegando pra alimentar o _limit das cores.
-          const SizedBox(width: 16),
-          Expanded(
-            child: widget.radarAlert != null
-                ? Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isLombada
-                          ? Colors.orange.shade700
-                          : Colors.red.shade700,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          // Mostra a velocidade do RADAR capada no teto de caminhão
-                          // (ex: radar de carro 110 → "90 km/h"). Sem HERE.
-                          () {
-                            final eff = truckRadarLimit(
-                                widget.radarAlert!.speedKmh);
-                            return eff != null
-                                ? '$eff km/h'
-                                : (isLombada ? 'Lombada' : 'Radar');
-                          }(),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _BarItem(
-                          top: widget.remainingDist, bottom: 'restante'),
-                      _BarItem(top: widget.eta, bottom: 'chegada'),
-                    ],
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BarItem extends StatelessWidget {
-  final String top;
-  final String bottom;
-
-  const _BarItem({required this.top, required this.bottom});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(top,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-        Text(bottom,
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
-      ],
-    );
-  }
-}
-
 /// Fração vertical (0=topo, 1=base) onde o puck fica na tela. ~0.85 = seta
 /// embaixo, ~90% de pista à frente (pedido UX do Márcio). O padding.top do
 /// GoogleMap e o Alignment do puck derivam disto: ambos usam (2*_puckYFrac-1).
 const _puckYFrac = 0.85;
-
-/// Puck (seta) do usuário como widget Flutter fixo, FORA do method channel do
-/// mapa. Atualizar posição de um Marker a cada frame era o gargalo do lag
-/// (flutter#33430); aqui a seta é estática e o mapa desliza por baixo. Câmera é
-/// heading-up, então a seta sempre aponta pra cima. Réplica de _buildUserArrow.
-class NavPuck extends StatelessWidget {
-  const NavPuck({super.key});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox(
-        width: 40,
-        height: 40,
-        child: CustomPaint(painter: _PuckPainter()),
-      );
-}
-
-class _PuckPainter extends CustomPainter {
-  const _PuckPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final s = size.width;
-    final path = Path()
-      ..moveTo(s / 2, 2)            // ponta superior (frente)
-      ..lineTo(s - 4, s - 6)       // canto direito
-      ..lineTo(s / 2, s * 0.60)    // entalhe central
-      ..lineTo(4, s - 6)           // canto esquerdo
-      ..close();
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5
-        ..strokeJoin = StrokeJoin.round,
-    );
-    canvas.drawPath(path, Paint()..color = const Color(0xFF1565C0));
-  }
-
-  @override
-  bool shouldRepaint(covariant _PuckPainter oldDelegate) => false;
-}
