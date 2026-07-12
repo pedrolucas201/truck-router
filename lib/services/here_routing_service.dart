@@ -32,7 +32,9 @@ class HereRoutingService {
       // spans é parâmetro PRÓPRIO — NÃO vai dentro de 'return' (isso dá E605001).
       // Com transportMode=truck a HERE já devolve o limite do CAMINHÃO por trecho.
       // dynamicSpeedInfo (sem departureTime) traz baseSpeed vs trafficSpeed = trânsito.
-      'spans':           'speedLimit,dynamicSpeedInfo',
+      // notices: cada span referencia o notice por índice + traz o offset → dá pra
+      // fixar a restrição de caminhão num ponto do mapa (report Gilberto 12/07).
+      'spans':           'speedLimit,dynamicSpeedInfo,notices',
       'lang':            'pt-BR',
       if (avoidDirtRoad) 'avoid[features]': 'dirtRoad',
       ...truck.toHereParams(),
@@ -90,6 +92,8 @@ class HereRoutingService {
     var totalDuration = 0;
     final speedLimits = <SpeedLimitSpan>[];
     final trafficSpans = <TrafficSpan>[];
+    final restrictionPoints = <RestrictionPoint>[];
+    final seenRestriction = <String>{}; // dedup por posição+rótulo
 
     for (final s in sections) {
       final section      = s as Map<String, dynamic>;
@@ -125,6 +129,10 @@ class HereRoutingService {
       // Limite de caminhão por trecho — HERE já dá ciente do modo (m/s).
       // offset do span é relativo à section: soma sectionOffset p/ virar índice
       // global na polyline (mesmo esquema das manobras acima).
+      // Notices da seção: os índices em span['notices'] apontam pra CÁ.
+      final secNotices =
+          (section['notices'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final seenIdxInSection = <int>{}; // 1º offset de cada notice = início do trecho
       final spans = section['spans'] as List<dynamic>? ?? [];
       for (final sp in spans) {
         final span = sp as Map<String, dynamic>;
@@ -133,6 +141,23 @@ class HereRoutingService {
         final speedMs = (span['speedLimit'] as num?)?.toDouble();
         if (speedMs != null && speedMs > 0) {
           speedLimits.add(SpeedLimitSpan(offset, (speedMs * 3.6).round()));
+        }
+
+        // Restrição de caminhão neste trecho → ponto no mapa. O span traz os
+        // índices dos notices da seção; o 1º span que cita um notice = onde o
+        // trecho restrito começa.
+        for (final ni in (span['notices'] as List?)?.cast<num>() ?? const []) {
+          final i = ni.toInt();
+          if (i < 0 || i >= secNotices.length) continue;
+          if (!seenIdxInSection.add(i)) continue;
+          final n = secNotices[i];
+          if (n['code'] != 'violatedVehicleRestriction') continue;
+          final pos = offset < allPoints.length ? allPoints[offset] : allPoints.last;
+          final label = _labelForNotice(n) ?? 'Restrição para caminhões nesta via';
+          final key = '${pos.latitude},${pos.longitude}|$label';
+          if (seenRestriction.add(key)) {
+            restrictionPoints.add(RestrictionPoint(pos, label));
+          }
         }
 
         // Trânsito: razão trafficSpeed/baseSpeed. Guarda TODOS os spans (inclusive
@@ -154,6 +179,7 @@ class HereRoutingService {
       maneuvers:         allManeuvers,
       hasTimeRestriction: hasTimeRestriction,
       restrictionLabel:   restrictionLabel,
+      restrictionPoints:  restrictionPoints,
       speedLimits:        speedLimits,
       trafficSpans:       trafficSpans,
     );
@@ -164,22 +190,31 @@ class HereRoutingService {
   // primeiro (concreto), horário como fallback. cm→m, kg→t. Null = texto genérico.
   static String? _restrictionLabel(List<Map<String, dynamic>> notices) {
     for (final n in notices) {
-      final details = (n['details'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      for (final d in details) {
-        String m(num cm) => (cm / 100).toStringAsFixed(1).replaceAll('.', ',');
-        final w = d['maxWeight'] as num?;
-        if (w != null) {
-          final t = w / 1000;
-          final txt = t == t.roundToDouble()
-              ? t.round().toString()
-              : t.toStringAsFixed(1).replaceAll('.', ',');
-          return 'Restrição: peso máx $txt t';
-        }
-        if (d['maxHeight'] != null) return 'Restrição: altura máx ${m(d['maxHeight'] as num)} m';
-        if (d['maxLength'] != null) return 'Restrição: comprimento máx ${m(d['maxLength'] as num)} m';
-        if (d['maxWidth']  != null) return 'Restrição: largura máx ${m(d['maxWidth'] as num)} m';
-        if (d['timeDependent'] == true) return 'Restrição por horário nesta via';
+      final l = _labelForNotice(n);
+      if (l != null) return l;
+    }
+    return null;
+  }
+
+  // Rótulo de UM notice (dimensão primeiro, horário/acesso como fallback).
+  // Null quando não reconhece nada (chamador usa texto genérico).
+  static String? _labelForNotice(Map<String, dynamic> n) {
+    final details = (n['details'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    for (final d in details) {
+      String m(num cm) => (cm / 100).toStringAsFixed(1).replaceAll('.', ',');
+      final w = d['maxWeight'] as num?;
+      if (w != null) {
+        final t = w / 1000;
+        final txt = t == t.roundToDouble()
+            ? t.round().toString()
+            : t.toStringAsFixed(1).replaceAll('.', ',');
+        return 'Restrição: peso máx $txt t';
       }
+      if (d['maxHeight'] != null) return 'Restrição: altura máx ${m(d['maxHeight'] as num)} m';
+      if (d['maxLength'] != null) return 'Restrição: comprimento máx ${m(d['maxLength'] as num)} m';
+      if (d['maxWidth']  != null) return 'Restrição: largura máx ${m(d['maxWidth'] as num)} m';
+      if (d['type'] == 'violatedTransportMode') return 'Via proibida para caminhões';
+      if (d['timeDependent'] == true) return 'Restrição por horário nesta via';
     }
     return null;
   }

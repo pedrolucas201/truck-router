@@ -273,6 +273,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   bool _timeBannerVisible = false; // banner genérico de horário: some após alguns segundos
   Timer? _timeBannerTimer;
   String? _restrictionLabel; // tipo/limite da restrição (do details da HERE), p/ o banner
+  List<RestrictionPoint> _restrictionPoints = const []; // pontos p/ pin + toque-no-banner
 
   // Corredor de desvio: 70m. Histórico: 120m (errava um quarteirão inteiro numa
   // rua paralela) → 40m (rápido demais) → 70m. O 40m era apertado pra pista
@@ -375,6 +376,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _radarIconsFuture = Future.wait(_radares.map(_radarIcon));
     _hasTimeRestrictionAlert = widget.result.hasTimeRestriction;
     _restrictionLabel        = widget.result.restrictionLabel;
+    _restrictionPoints       = widget.result.restrictionPoints;
     WidgetsBinding.instance.addObserver(this);
     _loadAudioLevel();
     _loadZoomLevel();
@@ -891,6 +893,32 @@ class _NavigationScreenState extends State<NavigationScreen>
     _timeBannerTimer = Timer(const Duration(seconds: 8), () {
       if (mounted) setState(() => _timeBannerVisible = false);
     });
+  }
+
+  // Toque no banner de restrição → leva a câmera ao ponto restrito mais próximo
+  // (o notice antes só falava/piscava SEM dizer onde — report Gilberto 12/07).
+  // Usa as guardas do free-look (mesma higiene do _recenter) pra o move
+  // programático não ser lido como gesto/echo pelo listener (P0 free-look).
+  void _showRestrictionOnMap() {
+    final pts = _restrictionPoints;
+    if (pts.isEmpty || _mapController == null) return;
+    final from = _snappedPos ?? _currentPos;
+    final target = from == null
+        ? pts.first.position
+        : pts.map((p) => p.position).reduce((a, b) =>
+            RadarService.haversine(from.latitude, from.longitude, a.latitude, a.longitude) <=
+                    RadarService.haversine(from.latitude, from.longitude, b.latitude, b.longitude)
+                ? a
+                : b);
+    final progNow = DateTime.now();
+    _lastProgrammaticMoveAt = progNow;
+    _ignoreGestureUntil = progNow.add(const Duration(milliseconds: 900));
+    // Carimba o gesto AGORA: senão o auto-return (tick, _freeLookAutoReturnMs) lê
+    // um _lastUserGestureAt velho e volta pro puck no próximo tick, matando a ida.
+    // Com o carimbo, o motorista tem a janela cheia p/ olhar a restrição e volta só.
+    _lastUserGestureAt = progNow;
+    setState(() => _freeLook = true);
+    _mapController!.animateCamera(CameraUpdate.newLatLngZoom(target, 15));
   }
 
   void _syncRadarFlash() {
@@ -1563,6 +1591,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         _distToNextManeuver      = double.infinity;
         _hasTimeRestrictionAlert = newResult.hasTimeRestriction;
         _restrictionLabel        = newResult.restrictionLabel;
+        _restrictionPoints       = newResult.restrictionPoints;
         _announced.clear();
         _lastRadarAlertKey       = null;
         _lastRestrictionAlertKey = null;
@@ -2487,6 +2516,18 @@ class _NavigationScreenState extends State<NavigationScreen>
         ),
     };
 
+    // Pins das restrições de caminhão da HERE (altura/peso/horário/acesso).
+    // Laranja = distinto de destino (verde), radar (ícone) e você (azul).
+    // Toque abre o rótulo (InfoWindow nativo).
+    for (final rp in _restrictionPoints) {
+      markers.add(Marker(
+        markerId: MarkerId('hrestr_${rp.position.latitude}_${rp.position.longitude}'),
+        position: rp.position,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+        infoWindow: InfoWindow(title: rp.label),
+      ));
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -2607,7 +2648,13 @@ class _NavigationScreenState extends State<NavigationScreen>
                       bottom: 8,
                       left: 12,
                       right: 12,
-                      child: Container(
+                      // Banner de restrição da HERE (não o de restrição crowd, que
+                      // tem botões próprios) → toque leva a câmera ao ponto restrito.
+                      child: GestureDetector(
+                        onTap: _nearbyBlockedRestriction == null
+                            ? _showRestrictionOnMap
+                            : null,
+                        child: Container(
                         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                         decoration: BoxDecoration(
                           color: Colors.black,
@@ -2690,6 +2737,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                             ],
                           ],
                         ),
+                      ),
                       ),
                     ),
                   if (_nearestPoliceAlert != null && !_markingMode)

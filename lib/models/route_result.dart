@@ -34,6 +34,18 @@ class TrafficSpan {
   const TrafficSpan(this.offset, this.level);
 }
 
+/// Ponto no mapa onde a HERE reportou uma restrição de caminhão VIOLADA
+/// (altura/peso/comprimento/horário/acesso proibido). O notice em si não traz
+/// coordenada — vem do cruzamento `spans=notices` (o span referencia o notice
+/// por índice e traz o offset na polyline). `position` = início do trecho
+/// restrito; `label` = texto pronto pro usuário. Antes o app só falava/piscava
+/// um banner sem dizer ONDE (report Gilberto 12/07).
+class RestrictionPoint {
+  final LatLng position;
+  final String label;
+  const RestrictionPoint(this.position, this.label);
+}
+
 class RouteResult {
   final List<LatLng> polylinePoints;
   final int distanceMeters;
@@ -47,6 +59,8 @@ class RouteResult {
   // montado do `details` do notice da HERE — o `title` vem inútil ("Violated
   // vehicle restriction." em inglês genérico). Null = cai no texto genérico.
   final String? restrictionLabel;
+  // Pontos no mapa das restrições violadas (cada uma com seu LatLng + rótulo).
+  final List<RestrictionPoint> restrictionPoints;
   final RouteResult? dirtRoadAlternative;
   final List<SpeedLimitSpan> speedLimits;
   final List<TrafficSpan> trafficSpans;
@@ -61,6 +75,7 @@ class RouteResult {
     this.usedTomTomData       = false,
     this.hasTimeRestriction   = false,
     this.restrictionLabel     ,
+    this.restrictionPoints    = const [],
     this.dirtRoadAlternative  ,
     this.speedLimits          = const [],
     this.trafficSpans         = const [],
@@ -76,6 +91,7 @@ class RouteResult {
     bool? usedTomTomData,
     bool? hasTimeRestriction,
     String? restrictionLabel,
+    List<RestrictionPoint>? restrictionPoints,
     RouteResult? dirtRoadAlternative,
     List<SpeedLimitSpan>? speedLimits,
     List<TrafficSpan>? trafficSpans,
@@ -89,6 +105,7 @@ class RouteResult {
     usedTomTomData:      usedTomTomData      ?? this.usedTomTomData,
     hasTimeRestriction:  hasTimeRestriction  ?? this.hasTimeRestriction,
     restrictionLabel:    restrictionLabel    ?? this.restrictionLabel,
+    restrictionPoints:   restrictionPoints   ?? this.restrictionPoints,
     dirtRoadAlternative: dirtRoadAlternative ?? this.dirtRoadAlternative,
     speedLimits:         speedLimits         ?? this.speedLimits,
     trafficSpans:        trafficSpans        ?? this.trafficSpans,
