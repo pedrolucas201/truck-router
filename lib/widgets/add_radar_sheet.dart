@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../models/radar_point.dart';
 import 'add_restriction_sheet.dart'; // reusa RestrictionTypeChip
+import 'speed_plate.dart'; // mesmas plaquinhas R-19 da curadoria (pedido Gilberto 12/07)
 
 /// Sheet pra adicionar um radar (crowd-source). Espelha o AddRestrictionSheet,
 /// mas com tipo de radar + velocidade. Retorna um RadarPoint (source 'user').
@@ -16,27 +17,20 @@ class AddRadarSheet extends StatefulWidget {
 
 class _AddRadarSheetState extends State<AddRadarSheet> {
   String _type = 'Radar Fixo';
-  final _ctrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
+  int? _speed; // km/h escolhido nas plaquinhas (null = ainda não escolheu)
 
   bool get _needsSpeed => _type != 'Lombada';
 
   void _save() {
     int speed = 0;
     if (_needsSpeed) {
-      final raw = int.tryParse(_ctrl.text.trim());
-      if (raw == null || raw <= 0) {
+      if (_speed == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Informe a velocidade (km/h)')),
+          const SnackBar(content: Text('Escolha a velocidade (km/h)')),
         );
         return;
       }
-      speed = raw;
+      speed = _speed!;
     }
     Navigator.pop(
       context,
@@ -93,18 +87,17 @@ class _AddRadarSheetState extends State<AddRadarSheet> {
                     color: Colors.grey.shade500,
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            TextField(
-              controller: _ctrl,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                hintText: 'ex: 60',
-                suffixText: 'km/h',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              ),
-              onSubmitted: (_) => _save(),
+            // Plaquinhas R-19, mesmas da curadoria. Não selecionada = esmaecida.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                for (final s in [60, 70, 80, 90])
+                  Opacity(
+                    opacity: _speed == null || _speed == s ? 1.0 : 0.4,
+                    child: SpeedPlate(
+                        kmh: s, onTap: () => setState(() => _speed = s)),
+                  ),
+              ],
             ),
           ],
           const SizedBox(height: 16),
