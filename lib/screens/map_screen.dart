@@ -31,6 +31,7 @@ import '../services/firestore_radar_service.dart';
 import '../widgets/address_search_field.dart';
 import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
+import '../widgets/map/police_sheets.dart';
 import '../widgets/speed_plate.dart';
 import 'truck_profile_screen.dart';
 import 'navigation_screen.dart';
@@ -1300,7 +1301,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => _PoliceAlertSheet(alert: alert),
+      builder: (_) => PoliceAlertSheet(alert: alert),
     );
   }
 
@@ -1312,7 +1313,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => const _ReportPoliceSheet(),
+      builder: (_) => const ReportPoliceSheet(),
     );
     if (type == null) return;
     await PoliceAlertService.report(
@@ -1839,7 +1840,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             padding: const EdgeInsets.only(right: 14),
                             child: CustomPaint(
                               size: const Size(12, 8),
-                              painter: _UpArrowPainter(
+                              painter: UpArrowPainter(
                                   color: Theme.of(context).colorScheme.primary),
                             ),
                           ),
@@ -3144,120 +3145,6 @@ class _BlockedSheet extends StatelessWidget {
                   style: TextStyle(color: Colors.grey.shade600)),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _UpArrowPainter extends CustomPainter {
-  final Color color;
-  const _UpArrowPainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color;
-    final path = Path()
-      ..moveTo(size.width / 2, 0)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(_UpArrowPainter old) => old.color != color;
-}
-
-// ── _PoliceAlertSheet ─────────────────────────────────────────────────────────
-
-class _PoliceAlertSheet extends StatelessWidget {
-  final PoliceAlert alert;
-  const _PoliceAlertSheet({required this.alert});
-
-  String get _typeLabel => switch (alert.type) {
-    PoliceAlertType.radar  => 'Radar',
-    PoliceAlertType.police => 'Polícia',
-    PoliceAlertType.blitz  => 'Blitz / Fiscalização',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(_typeLabel, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(alert.timeRemainingText,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    if (alert.id != null) {
-                      await PoliceAlertService.notThere(alert.id!);
-                    }
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  icon: const Icon(Icons.cancel_outlined),
-                  label: const Text('Não está mais lá'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () async {
-                    if (alert.id != null) {
-                      await PoliceAlertService.confirm(alert.id!);
-                    }
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  icon: const Icon(Icons.check),
-                  label: const Text('Confirmar'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── _ReportPoliceSheet ────────────────────────────────────────────────────────
-
-class _ReportPoliceSheet extends StatelessWidget {
-  const _ReportPoliceSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('O que você viu?', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 16),
-          for (final type in PoliceAlertType.values)
-            ListTile(
-              leading: Icon(switch (type) {
-                PoliceAlertType.radar  => Icons.speed,
-                PoliceAlertType.police => Icons.local_police,
-                PoliceAlertType.blitz  => Icons.assignment_late,
-              }),
-              title: Text(switch (type) {
-                PoliceAlertType.radar  => 'Radar de velocidade',
-                PoliceAlertType.police => 'Polícia na via',
-                PoliceAlertType.blitz  => 'Blitz / Fiscalização',
-              }),
-              onTap: () => Navigator.pop(context, type),
-            ),
         ],
       ),
     );
