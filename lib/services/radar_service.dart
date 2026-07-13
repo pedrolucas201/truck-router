@@ -135,6 +135,19 @@ class RadarService {
     return best;
   }
 
+  /// Distância restante (metros) ao longo da rota, somando os segmentos de
+  /// [fromIdx] até o fim. Para de somar assim que passa de [capM] — barato, o
+  /// chamador só quer saber se está abaixo de um teto (ex: reta final da rota).
+  /// fromIdx fora do intervalo (>= último vértice) → 0.
+  static double remainingAlongRoute(List<LatLng> path, int fromIdx, double capM) {
+    var sum = 0.0;
+    for (var i = fromIdx; i < path.length - 1 && sum <= capM; i++) {
+      sum += haversine(path[i].latitude, path[i].longitude,
+          path[i + 1].latitude, path[i + 1].longitude);
+    }
+    return sum;
+  }
+
   static double haversine(double lat1, double lng1, double lat2, double lng2) {
     const r = 6371000.0;
     final dLat = (lat2 - lat1) * pi / 180;

@@ -319,6 +319,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   // que 40m da âncora durante a contagem, cancela e reroteia (deu a volta).
   static const _arrivalCountdownMs = 15000;
   static const _arrivalMoveM       = 40.0;
+  // Reta final: com a rota restante abaixo disso, uma divergência é manobra de
+  // chegada, não desvio — o reroute cede (senão manda "voltar" pro destino que o
+  // caminhão está passando). P0 Gilberto 2026-07-12.
+  static const _arrivalZoneM       = 150.0;
   static const _radarAlertM         = 400.0;
   static const _restrictionAlertM   = 300.0;
   static const _radarLookAheadM     = 1500.0;
@@ -1135,13 +1139,30 @@ class _NavigationScreenState extends State<NavigationScreen>
       }
       _offRouteCount++;
       if (_offRouteCount >= _offRouteCountLimit) {
+        // Freio de chegada: na reta final da rota, divergência é manobra de
+        // chegada, não desvio. Reroteiar aqui manda o caminhão "voltar" pro
+        // destino que ele está passando (P0 Gilberto 2026-07-12: parou ~85m do
+        // pino, fora do corredor, e tomou 4 reroutes urgentes em 76s até a
+        // chegada armar). Cede ANTES dos outros gates.
+        // ponytail: teto por distância de rota; se tropeçar, virar zona por tempo.
+        final remainingRouteM =
+            RadarService.remainingAlongRoute(pts, bestIdx, _arrivalZoneM);
+        if (remainingRouteM < _arrivalZoneM) {
+          FieldLog.event('reroute_suppressed', {
+            'distM': bestDist.round(),
+            'idxDelta': bestIdx - _offRouteStartIdx,
+            'reason': 'near_dest',
+            'remainingM': remainingRouteM.round(),
+          });
+          _offRouteCount = _offRouteCountLimit - 1; // re-arma sem martelar
+        }
         // Pista dupla: fora do corredor MAS avançando ao longo da rota
         // (movingByRoute) E no mesmo rumo = a linha da HERE está na outra mão da
         // MESMA via. Reroteiar não ajuda (não cruza o canteiro) e gera o storm
         // do field_log (72-77m cravado, rota nova só crescendo). Só reroteia se:
         // travou (não avança), longe demais p/ ser pista paralela (_offRouteHardM),
         // OU saiu de verdade (leavingRoute — apontou pra fora E se afastando).
-        if (!movingByRoute || bestDist > _offRouteHardM || leavingRoute) {
+        else if (!movingByRoute || bestDist > _offRouteHardM || leavingRoute) {
           _reroute(fromPos: latLng, urgent: true);
         } else {
           FieldLog.event('reroute_suppressed', {
