@@ -59,14 +59,84 @@ class _NavTaskHandler extends TaskHandler {
   @override Future<void> onDestroy(DateTime timestamp) async {}
 }
 
-// Puro/testável: o alvo da câmera bate (<40m) com algum move que NÓS comandamos?
+// Velocidade FÍSICA mínima pra confiar no rumo do GPS. Abaixo disso o heading é
+// ruído (parado, o GPS gira sozinho).
+const kRerouteCourseMinKmh = 8.0;
+
+// Janela em que um move de câmera ainda pode ser CONSEQUÊNCIA de um toque (o
+// settle/inércia chega depois do dedo sair). Fora dela, move sem toque = move
+// NOSSO, nunca gesto.
+const kGestureGraceMs = 1200;
+
+// Puro/testável: este move de câmera é um GESTO do motorista (→ olhar-ao-redor)?
+//
+// Portão duro: gesto tem DEDO. Sem toque recente no mapa, nenhum move vira gesto —
+// ponto. O discriminador geométrico (isEcho) sozinho é indefensável: o padding do
+// mapa faz a plataforma reportar um alvo deslocado do que comandamos, e esse
+// deslocamento é fixo em PIXELS — em metros ele cresce ao recuar o zoom E muda com
+// o tamanho da TELA do aparelho. Não existe constante em metros que sirva pra todo
+// device/zoom, e foi por isso que este P0 ressuscitou release após release com cara
+// nova (campo 2026-07-13: 6 free-looks espúrios, panM=127m, ninguém tocando na tela).
+// O dedo não depende de nada disso: settle de câmera NUNCA tem toque; arrasto real
+// SEMPRE tem.
+//
+// isEcho fica como 2ª linha: DENTRO de um toque real, separa o arrasto (alvo novo)
+// do eco do follow. E fingerActive cobre o arrasto COLINEAR (pra frente), que cai
+// perto da rota e pareceria eco.
+bool cameraMoveIsGesture({
+  required int touchAgeMs, // -1 = nunca tocou no mapa
+  required bool isEcho,
+  required bool fingerActive,
+  required bool zoomJustChanged,
+}) {
+  final touchedRecently = touchAgeMs >= 0 && touchAgeMs < kGestureGraceMs;
+  return touchedRecently && ((!isEcho && !zoomJustChanged) || fingerActive);
+}
+
+// Puro/testável: dá pra confiar no rumo do GPS deste fix?
+//
+// Mede a velocidade FÍSICA (a do próprio fix), NUNCA a velocidade ao longo da
+// rota — esta zera quando o caminhão não avança NA rota, que é exatamente o caso
+// de quem anda CONTRA ela, e é justo aí que o rumo é indispensável. Fonte ÚNICA:
+// quem decide "desviou?" e quem decide "mando o course pra HERE?" têm que usar
+// esta mesma resposta. Duas leituras divergentes disso foi o deadlock de campo de
+// 2026-07-13 (42 reroutes em 13 min).
+bool headingIsReliable(double rawSpeedMps, double headingDeg) =>
+    rawSpeedMps * 3.6 >= kRerouteCourseMinKmh && headingDeg >= 0;
+
+// Metros por pixel na projeção do Google Maps (Web Mercator) no zoom/latitude
+// dados. É o que converte um erro de TELA em erro de MUNDO.
+double metersPerPixel(double zoom, double lat) =>
+    156543.03392 * cos(lat * pi / 180) / pow(2, zoom);
+
+// Tolerância do eco, em PIXELS de tela. O erro que ela precisa absorver é o
+// offset do padding da câmera (o mapa é padded pra jogar o puck em _puckYFrac):
+// o alvo reportado pela plataforma não é o que comandamos, e a diferença é fixa
+// em PIXELS. Convertida pra metros ela QUADRUPLICA a cada 2 níveis de zoom.
+const _echoTolPx = 60.0;
+
+// Puro/testável: o alvo da câmera bate com algum move que NÓS comandamos?
 // Sim → eco do follow (ignora). Não → dedo do usuário (free-look). É o
 // discriminador que separa nosso próprio moveCamera (mesmo atrasado por stall)
 // de um gesto real, matando o free-look "do nada" reportado em campo.
-bool targetIsEcho(List<LatLng> cmds, LatLng target) => cmds.any((t) =>
-    RadarService.haversine(
-        t.latitude, t.longitude, target.latitude, target.longitude) <
-    40);
+//
+// A tolerância escala com o zoom porque o erro que ela absorve é de tela, não de
+// mundo. Antes era 40m FIXOS: no zoom 17 (padrão) o offset dá ~32m e passava por
+// baixo dos 40 por 8m de sorte; no zoom 15 (recuado) vira ~128m e TODO move nosso
+// era lido como dedo → free-look → botão azul voltando sozinho. Campo 2026-07-13:
+// 6 freelook_enter com cause=pan e panM travado em 127m. Bater metro contra um
+// erro de pixel é a raiz — os patches anteriores (_zoomJustChanged, janela de
+// 900ms) mascaravam um caller de cada vez.
+bool targetIsEcho(List<LatLng> cmds, LatLng target, double zoom) {
+  // Piso de 40m = a tolerância antiga. Só ALARGA onde o pixel pede (zoom recuado),
+  // nunca aperta: no zoom aproximado a conta daria ~16m e apertar ali plantaria um
+  // free-look espúrio novo pra consertar o antigo. Fix de P0 não inventa P0.
+  final tolM = max(40.0, _echoTolPx * metersPerPixel(zoom, target.latitude));
+  return cmds.any((t) =>
+      RadarService.haversine(
+          t.latitude, t.longitude, target.latitude, target.longitude) <
+      tolM);
+}
 
 class NavigationScreen extends StatefulWidget {
   final RouteResult result;
@@ -108,6 +178,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   LatLng? _currentPos;
   double _bearing = 0;
   double _speedKmh = 0;
+  // Rumo do GPS é confiável? Medido pela velocidade FÍSICA (pos.speed cru), não
+  // pela _speedKmh — esta é a velocidade AO LONGO DA ROTA e zera quando
+  // !movingByRoute, que é exatamente o caso do caminhão andando CONTRA a rota.
+  // Fonte única: calculado no _onPosition e consumido pelo _reroute (o gate do
+  // course). Ver o deadlock do field 2026-07-13 no _reroute.
+  bool _headingReliable = false;
+  double _rawSpeedKmh = 0; // velocidade física do GPS (só p/ telemetria do gate)
   int _closestPolylineIdx = 0;
   int _maneuverIndex = 0;
   double _distToNextManeuver = double.infinity;
@@ -284,9 +361,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   // _offRouteCount (precisa de 3 fixes novos) + guarda _isRerouting.
   static const _rerouteThrottleSec     = 10;
   static const _rerouteUrgentFloorSec  = 4;
-  // Abaixo disso o heading do GPS é ruído — não passa course pra HERE (cairia
-  // num rumo aleatório). Acima, informa o rumo pra HERE recalcular PRA FRENTE.
-  static const _rerouteCourseMinKmh    = 8.0;
+  // O piso de velocidade pra confiar no rumo mora em kRerouteCourseMinKmh (topo
+  // do arquivo), junto de headingIsReliable — fonte única de quem decide "desviou?"
+  // e de quem decide "mando o course pra HERE?".
   // "Map matching do pobre": rumo do caminhão vs rumo da rota no ponto mais
   // próximo. Fora do corredor MAS rumo alinhado = pista paralela (mesma mão) →
   // segura (mata storm). Rumo divergindo = ele virou pra fora da rota → encolhe o
@@ -1108,8 +1185,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     // ponytail: 1 segmento da rota basta — se ficar ruidoso perto de curva,
     // alargar pra média de 2-3 segmentos.
     final vehBearing = pos.heading;
-    final headingReliable =
-        pos.speed * 3.6 >= _rerouteCourseMinKmh && vehBearing >= 0;
+    final headingReliable = headingIsReliable(pos.speed, vehBearing);
     final routeBearing = _segmentBearing(pts, bestIdx);
     final headingDelta = headingReliable
         ? (((vehBearing - routeBearing + 540) % 360) - 180).abs()
@@ -1245,6 +1321,8 @@ class _NavigationScreenState extends State<NavigationScreen>
       _currentPos                 = latLng;
       _snappedPos                 = pts.isNotEmpty ? bestSnap : latLng;
       _bearing                    = pos.heading;
+      _headingReliable            = headingReliable;
+      _rawSpeedKmh                = pos.speed * 3.6;
       _speedKmh                   = effSpeedMps * 3.6 < 2.5 ? 0.0 : (effSpeedMps * 3.6).clamp(0.0, 300.0);
       _closestPolylineIdx         = bestIdx;
       _maneuverIndex              = nextIdx;
@@ -1554,10 +1632,22 @@ class _NavigationScreenState extends State<NavigationScreen>
         ..._result.restrictionsAvoided.map((r) => r.toAvoidArea()),
       ];
 
-      // Rumo de marcha só entra se o caminhão está andando (heading confiável).
-      // Força a HERE a sair PRA FRENTE em vez de mandar dar meia-volta.
-      final course = (_speedKmh >= _rerouteCourseMinKmh && _bearing >= 0) ? _bearing : null;
-      FieldLog.event('reroute_course', {'course': course?.round(), 'speedKmh': _speedKmh.round()});
+      // Rumo de marcha entra sempre que o GPS dá rumo confiável — medido pela
+      // velocidade FÍSICA (_headingReliable), NÃO pela _speedKmh, que é a
+      // velocidade ao longo da rota e zera quando !movingByRoute.
+      //
+      // Era o deadlock do field 2026-07-13 (42 reroutes em 13 min): o caminhão
+      // andava CONTRA a rota → não avançava NA rota → _speedKmh=0 → course=null →
+      // a HERE recalculava CEGA e devolvia a mesma meia-volta → hdgDelta seguia
+      // ~177° → rerotava de novo. O course era suprimido exatamente na situação em
+      // que ele é indispensável. Probe na HERE: sem course a rota nasce a 177° do
+      // rumo dele; com course, a 16° (mesma quilometragem) → o storm morre.
+      final course = _headingReliable ? _bearing : null;
+      FieldLog.event('reroute_course', {
+        'course': course?.round(),
+        'speedKmh': _speedKmh.round(),
+        'rawKmh': _rawSpeedKmh.round(),
+      });
 
       var newResult = await HereRoutingService.calculateRoute(
         origin:      origin,
@@ -1899,7 +1989,9 @@ class _NavigationScreenState extends State<NavigationScreen>
     // comandamos nos últimos frames, foi moveCamera nosso — mesmo atrasado por
     // um stall da main thread (o callback chega defasado, mas a posição defasada
     // ainda é uma que nós mandamos). Só um alvo que NUNCA comandamos é o dedo.
-    final isEcho = targetIsEcho(_cmdTargets, pos.target);
+    // Zoom REPORTADO (pos.zoom), não o comandado: a tolerância tem que valer pro
+    // frame que a plataforma acabou de mandar, que é onde o offset do padding vive.
+    final isEcho = targetIsEcho(_cmdTargets, pos.target, pos.zoom);
 
     // Pinça (zoom): adota o zoom do gesto (fonte única) e MANTÉM o estado — no
     // follow a câmera segue já no novo zoom; em free-look só ajusta o nível. Nunca
@@ -1912,11 +2004,17 @@ class _NavigationScreenState extends State<NavigationScreen>
       return;
     }
 
-    // Olhar-ao-redor: alvo divergente (arrasto lateral) OU dedo na tela. O
-    // _fingerDown cobre o arrasto COLINEAR (pra frente), que fica perto da rota e
-    // seria confundido com eco do follow — sem ele, arrastar reto pra frente não
-    // ativava (item 1 do Gilberto). A seta segue andando; só a câmera descola.
-    if ((!isEcho && !_zoomJustChanged) || _fingerActive) {
+    // Olhar-ao-redor: só com DEDO. Ver cameraMoveIsGesture (topo do arquivo) — é lá
+    // que mora a invariante e o porquê de a geometria sozinha não bastar.
+    final touchAgeMs = _lastPointerAt == null
+        ? -1
+        : DateTime.now().difference(_lastPointerAt!).inMilliseconds;
+    if (cameraMoveIsGesture(
+      touchAgeMs: touchAgeMs,
+      isEcho: isEcho,
+      fingerActive: _fingerActive,
+      zoomJustChanged: _zoomJustChanged,
+    )) {
       // Rescaldo de pinça: o pan que acompanha o zoom não vira olhar-ao-redor —
       // adota o zoom (já feito acima) e segue no follow.
       if (_lastZoomAt != null &&
@@ -1937,10 +2035,16 @@ class _NavigationScreenState extends State<NavigationScreen>
         final cause = isEcho ? 'finger' : 'pan';
         debugPrint('[FREELOOK] enter cause=$cause '
             'panM=${panM.round()} msSinceProg=$msSinceProg');
+        // zoom + touchAgeMs são os pontos cegos que impediram o diagnóstico de
+        // 2026-07-13: sem o zoom não dá pra saber se o panM é offset de padding
+        // (que escala com o zoom) ou arrasto de verdade, e sem a idade do toque
+        // não dá pra provar que ninguém encostou na tela. Nunca mais sem eles.
         FieldLog.event('freelook_enter', {
           'cause': cause,
           'panM': panM.round(),
           'msSinceProg': msSinceProg,
+          'zoom': pos.zoom.toStringAsFixed(1),
+          'touchAgeMs': touchAgeMs,
         });
         setState(() => _freeLook = true);
       }
