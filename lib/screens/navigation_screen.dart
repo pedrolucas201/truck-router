@@ -185,6 +185,14 @@ class _NavigationScreenState extends State<NavigationScreen>
   // course). Ver o deadlock do field 2026-07-13 no _reroute.
   bool _headingReliable = false;
   double _rawSpeedKmh = 0; // velocidade física do GPS (só p/ telemetria do gate)
+  // Telemetria do veredito "parado": o velocímetro mostrou 0 com o caminhão andando
+  // (vídeo do drive 2026-07-13, 18:33:13 → tela 0 km/h, GPS 18 km/h). Duas suspeitas:
+  // (a) movingByRoute mente — o snap não avança na rota; (b) o recálculo congela a
+  // tela. Sem estes três no heartbeat não dá pra separar uma da outra, e o
+  // velocímetro alimenta o alerta de excesso E o flash de radar. Não conserto no escuro.
+  bool _movingByRoute = false;  // avançando AO LONGO da rota (≠ velocidade do GPS)
+  double _netAdvanceM = 0;      // quanto o snap andou na janela (~2,5s)
+  double _offRouteDistM = 0;    // distância perpendicular à linha da rota
   int _closestPolylineIdx = 0;
   int _maneuverIndex = 0;
   double _distToNextManeuver = double.infinity;
@@ -475,7 +483,12 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (_paused || _arrived || _currentPos == null) return;
       FieldLog.event('heartbeat', {
         'idx':  _closestPolylineIdx,
-        'kmh':  _speedKmh.round(),
+        'kmh':  _speedKmh.round(),        // o que o MOTORISTA vê no velocímetro
+        'rawKmh': _rawSpeedKmh.round(),   // o que o GPS realmente diz
+        'moving': _movingByRoute,         // avançando AO LONGO da rota?
+        'netM': _netAdvanceM.round(),     // quanto o snap andou em ~2,5s (limiar: 7m)
+        'offM': _offRouteDistM.round(),   // distância da linha da rota
+        'rerot': _isRerouting,            // a amostra caiu DENTRO de um recálculo?
         'remM': _remainingDistanceM().round(),
       });
     });
@@ -1164,6 +1177,11 @@ class _NavigationScreenState extends State<NavigationScreen>
     // exatamente quando a nav abre perto da 1ª manobra.
     final movingByRoute = windowReady && netAdvanceM >= _stopNetM;
     final effSpeedMps = movingByRoute ? pos.speed : 0.0;
+    // Espelha pro heartbeat (ver comentário na declaração): é o que separa
+    // "movingByRoute mente" de "o recálculo congelou a tela".
+    _movingByRoute = movingByRoute;
+    _netAdvanceM   = netAdvanceM;
+    _offRouteDistM = bestDist;
 
     // Separação da rota está CRESCENDO na janela? Saída real afasta; pista paralela
     // (mesmo numa curva, onde o ângulo engana) fica ~plana. first = amostra mais
@@ -1211,6 +1229,13 @@ class _NavigationScreenState extends State<NavigationScreen>
           'moving': movingByRoute,
           'hdgDelta': headingDelta.round(),
           'growM': distGrowthM.round(),
+          // POR QUE moving deu false? netM é o avanço do snap na janela (limiar 7m).
+          // Suspeita do drive 2026-07-13: no pára-e-anda da cidade netM fica abaixo
+          // de 7m mesmo com o caminhão andando → a supressão de pista paralela nunca
+          // engata (ela EXIGE movingByRoute) → rerota indo reto. 7 dos 12 off_route
+          // vieram com hdgDelta<=20 (alinhado!). Confirmar antes de mexer no gate.
+          'netM': netAdvanceM.round(),
+          'rawKmh': (pos.speed * 3.6).round(),
         });
       }
       _offRouteCount++;
@@ -2485,12 +2510,12 @@ class _NavigationScreenState extends State<NavigationScreen>
           ],
         ),
         child: _curationSpeedStep
-            ? Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  for (final s in [60, 70, 80, 90])
-                    SpeedPlate(kmh: s, onTap: () => _curationSetSpeed(s)),
-                ],
+            // Presets + placa EM BRANCO. O Gilberto passou por um radar de 40 na
+            // cidade e aqui o mínimo era 60 (campo 13/07) — a curadoria não podia
+            // corrigir a velocidade real, que é justamente o que ela existe pra fazer.
+            ? SpeedPlatePicker(
+                selected: null,
+                onChanged: _curationSetSpeed,
               )
             : Row(
                 children: [

@@ -87,17 +87,11 @@ class _AddRadarSheetState extends State<AddRadarSheet> {
                     color: Colors.grey.shade500,
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            // Plaquinhas R-19, mesmas da curadoria. Não selecionada = esmaecida.
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                for (final s in [60, 70, 80, 90])
-                  Opacity(
-                    opacity: _speed == null || _speed == s ? 1.0 : 0.4,
-                    child: SpeedPlate(
-                        kmh: s, onTap: () => setState(() => _speed = s)),
-                  ),
-              ],
+            // Plaquinhas R-19 + a placa EM BRANCO pra digitar (radar de 40 na
+            // cidade não cabia nos presets de rodovia — campo Gilberto 13/07).
+            SpeedPlatePicker(
+              selected: _speed,
+              onChanged: (s) => setState(() => _speed = s),
             ),
           ],
           const SizedBox(height: 16),
