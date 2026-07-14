@@ -131,9 +131,15 @@ class FirestoreRadarService {
   /// por erro de rede).
   static Future<List<RadarPoint>> mergeCrowd(
       List<RadarPoint> csvNearRoute, List<LatLng> points) async {
-    final crowd      = await fetchNearRoute(points);
-    final dismissals = await fetchDismissals(points);
-    final overrides  = await loadOverrides(points);
+    // As três leituras são independentes entre si. Em série custavam 3 round-trips
+    // de Firestore empilhados dentro do recálculo de rota; em paralelo custam só o
+    // mais lento. Cada uma é fail-open por dentro (erro → vazio), então o .wait
+    // não tem como estourar.
+    final (crowd, dismissals, overrides) = await (
+      fetchNearRoute(points),
+      fetchDismissals(points),
+      loadOverrides(points),
+    ).wait;
     // Dispensas antigas (voto por local) → tratadas como override exists=false,
     // sem sobrescrever um override novo mais específico.
     for (final d in dismissals) {
@@ -174,6 +180,13 @@ class FirestoreRadarService {
   /// Chaves de local com verdicto local (pra nav não re-perguntar radar já curado).
   static Future<Set<String>> localOverrideKeys() async =>
       (await _loadLocal()).keys.toSet();
+
+  /// Só os verdictos DESTE device — sem rede (cache em memória após o 1º load).
+  /// A nav usa isto pra aplicar os radares do CSV assim que a rota nova chega, sem
+  /// esperar o Firestore: senão um radar que o curador NEGOU ressuscitaria na tela
+  /// durante a janela do enrichment (a ressurreição que o v2.4.26 matou).
+  static Future<Map<String, RadarOverride>> loadLocalOverrides() async =>
+      Map.of(await _loadLocal());
 
   /// Overrides válidos = Firestore (global) ⊕ local (deste device, vence).
   static Future<Map<String, RadarOverride>> loadOverrides(

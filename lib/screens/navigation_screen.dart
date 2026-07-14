@@ -199,6 +199,11 @@ class _NavigationScreenState extends State<NavigationScreen>
   AudioLevel _audioLevel = AudioLevel.completo;
   ZoomLevel _zoomLevel = ZoomLevel.medio;
   bool _isRerouting = false;
+  // Sequência do recálculo. O enrichment (FASE 2) roda solto, fora do caminho
+  // crítico — quando ele volta, a rota que o originou pode já ter sido substituída
+  // por outro reroute. O seq é o carimbo que deixa o resultado velho ser descartado
+  // em vez de colar radar/restrição da rota morta por cima da viva.
+  int _rerouteSeq = 0;
   Timer? _refreshTimer;
   Timer? _heartbeatTimer;
   DateTime? _lastRerouteAt;
@@ -1646,6 +1651,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _lastPosUpdateAt = null;
 
     setState(() { _isRerouting = true; _offRouteCount = 0; });
+    final seq = ++_rerouteSeq;
     try {
       final prevDistM = _result.distanceMeters;
       final repo = context.read<RestrictionRepository>();
@@ -1674,7 +1680,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         'rawKmh': _rawSpeedKmh.round(),
       });
 
-      var newResult = await HereRoutingService.calculateRoute(
+      final newResult = await HereRoutingService.calculateRoute(
         origin:      origin,
         destination: widget.destination,
         truck:       widget.truck,
@@ -1682,25 +1688,25 @@ class _NavigationScreenState extends State<NavigationScreen>
         waypoints:   widget.waypoints,
         avoidAreas:  manualAvoidAreas,
       );
+      final hereMs = recalcSw.elapsedMilliseconds;
+      if (!mounted || seq != _rerouteSeq) return;
 
-      // Enrichment Firestore — mantém alertas crowd-sourced vivos após recálculo.
-      final firestoreRestrictions = await repo.fetchNearRoute(newResult.polylinePoints);
-      final conflicts = firestoreRestrictions
-          .where((r) => r.conflictsWith(widget.truck))
-          .toList();
-      if (conflicts.isNotEmpty) {
-        newResult = newResult.copyWith(restrictionsBlocked: conflicts);
-      }
-
-      final allRadares = await RadarService.load();
-      final csvNearby = RadarService.deduplicateNearby(
-        RadarService.filterNearRoute(allRadares, newResult.polylinePoints),
-      ).where((r) => !(r.type.toLowerCase().contains('lombada') && r.speedKmh == 0)).toList();
-      final nearby = await FirestoreRadarService.mergeCrowd(csvNearby, newResult.polylinePoints);
-      if (!mounted) return;
+      // ── FASE 1: destravar a tela ─────────────────────────────────────────────
+      // Só entra aqui o que NÃO depende de rede. Enquanto _isRerouting está de pé o
+      // _onPositionUpdate faz early-return: a seta congela, a instrução some e o
+      // velocímetro para. Segurar isso esperando radar do Firestore cegava o
+      // motorista por 2,8s na mediana e 20,8s no pior caso (field 2026-07-13) — e o
+      // Pedro desviou 11 vezes num drive de 12min, ou seja, pagou o preço 11 vezes.
+      // A rota nova é o que tira ele da cegueira; radar e restrição crowd são
+      // enriquecimento e vão pra FASE 2, em background.
+      final csvNearby = await _csvRadaresNearRoute(newResult.polylinePoints);
+      // Verdictos do curador deste device: cache em memória, sem rede. Sem eles um
+      // radar NEGADO ressuscitaria na tela durante a janela do enrichment.
+      final localOverrides = await FirestoreRadarService.loadLocalOverrides();
+      if (!mounted || seq != _rerouteSeq) return;
       setState(() {
         _result                  = newResult;
-        _radares                 = nearby;
+        _radares                 = applyOverrides(csvNearby, localOverrides);
         _closestPolylineIdx      = 0;
         _predIdx                 = 0; // rota nova começa na posição atual (índice 0)
         _anchorIdx               = 0;
@@ -1737,13 +1743,17 @@ class _NavigationScreenState extends State<NavigationScreen>
         if (d <= 200) _announced.add(i * 10 + 1);
         if (d <= 50)  _announced.add(i * 10 + 2);
       }
-      // Instrumentação P0 (logcat / `flutter logs`): separa os 63s em
-      // detecção (corredor) vs recálculo (HERE + Firestore enrichment).
+      // Instrumentação P0 (logcat / `flutter logs`): separa detecção (corredor) de
+      // recálculo. hereMs = só a rota (o que o motorista espera de fato desde o
+      // fix da FASE 1); recalcMs = até a tela destravar. A diferença entre os dois
+      // é o que a FASE 1 tirou do caminho crítico — o antigo recalcMs incluía os 4
+      // round-trips de Firestore que hoje rodam em background.
       debugPrint('[REROUTE] urgent=$urgent detecção=${detectMs}ms '
-          'recálculo=${recalcSw.elapsedMilliseconds}ms');
+          'here=${hereMs}ms destravou=${recalcSw.elapsedMilliseconds}ms');
       FieldLog.event('reroute_done', {
         'urgent':   urgent,
         'detectMs': detectMs,
+        'hereMs':   hereMs,
         'recalcMs': recalcSw.elapsedMilliseconds,
         'points':   newResult.polylinePoints.length,
         'distM':    newResult.distanceMeters.round(),
@@ -1766,12 +1776,71 @@ class _NavigationScreenState extends State<NavigationScreen>
           (newResult.distanceMeters - prevDistM).abs() > 500) {
         _speak('Rota recalculada');
       }
+
+      // ── FASE 2: enrichment ───────────────────────────────────────────────────
+      // Sai do caminho crítico: a rota já está na tela e o _isRerouting cai no
+      // finally logo abaixo. Sem await de propósito — é isto que destrava a seta.
+      unawaited(_enrichRoute(newResult, seq, csvNearby, repo));
     } catch (e, st) {
       // Não vaza pro usuário (princípio do Márcio), mas não some: sobe como
       // non-fatal pro Crashlytics + breadcrumb. Antes era catch(_) {} mudo.
       FieldLog.error('reroute', e, st);
     } finally {
-      if (mounted) setState(() => _isRerouting = false);
+      // Só o reroute mais recente destrava: um encadeado (seq maior) já assumiu o
+      // controle e não pode ter o _isRerouting derrubado pelo finally do antigo.
+      if (mounted && seq == _rerouteSeq) setState(() => _isRerouting = false);
+    }
+  }
+
+  /// Radares do CSV perto da rota. Tudo local: o `load()` é cache estático, o resto
+  /// é CPU. Lombada sem velocidade é ruído da base — não vira alerta.
+  Future<List<RadarPoint>> _csvRadaresNearRoute(List<LatLng> pts) async {
+    final all = await RadarService.load();
+    return RadarService.deduplicateNearby(RadarService.filterNearRoute(all, pts))
+        .where((r) =>
+            !(r.type.toLowerCase().contains('lombada') && r.speedKmh == 0))
+        .toList();
+  }
+
+  /// FASE 2 do recálculo: o que depende de REDE (restrições crowd + radar crowd +
+  /// verdictos globais do curador). Roda DEPOIS que a rota já está na tela, porque
+  /// nada disso justifica congelar a navegação — eram 4 round-trips de Firestore
+  /// em série dentro do recalcMs.
+  ///
+  /// Fail-open: se a rede cair, o motorista fica com a rota da HERE + os radares do
+  /// CSV + os verdictos locais. Perde o crowd, não perde a navegação.
+  Future<void> _enrichRoute(RouteResult route, int seq,
+      List<RadarPoint> csvNearby, RestrictionRepository repo) async {
+    final sw = Stopwatch()..start();
+    try {
+      final pts = route.polylinePoints;
+      // Independentes entre si → em paralelo. Em série uma rede ruim somava os RTTs.
+      final (restrictions, radares) = await (
+        repo.fetchNearRoute(pts),
+        FirestoreRadarService.mergeCrowd(csvNearby, pts),
+      ).wait;
+      // Outro reroute entrou no meio: este resultado é de uma rota que já morreu.
+      // Aplicá-lo colaria radar/restrição da rota velha por cima da nova.
+      if (!mounted || seq != _rerouteSeq) return;
+      final conflicts =
+          restrictions.where((r) => r.conflictsWith(widget.truck)).toList();
+      setState(() {
+        if (conflicts.isNotEmpty) {
+          _result = _result.copyWith(restrictionsBlocked: conflicts);
+        }
+        _radares = radares;
+        // NÃO zera _radarIconsFuture: ele é indexado por _visibleRadares, que não
+        // mudou aqui. O próximo _onPositionUpdate recalcula os visíveis a partir do
+        // _radares novo e refaz os ícones via radarListChanged. Zerar só faria o
+        // radar sumir do mapa até o fix seguinte — um piscar a mais por recálculo.
+      });
+      FieldLog.event('reroute_enrich', {
+        'ms':      sw.elapsedMilliseconds,
+        'radares': radares.length,
+        'restr':   conflicts.length,
+      });
+    } catch (e, st) {
+      FieldLog.error('reroute_enrich', e, st);
     }
   }
 
