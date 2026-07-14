@@ -20,6 +20,16 @@ class FieldLog {
   /// pra agrupar todos os breadcrumbs de uma mesma sessão no Firestore.
   static final String sessionId = _genSession();
 
+  /// Versão do app que emitiu o evento. Injetada pelo `release.ps1`
+  /// (`--dart-define=APP_VERSION=...`, lido do pubspec); 'dev' num `flutter run`.
+  ///
+  /// Sem isto, descobrir QUAL build gerou um log só dava por engenharia reversa nos
+  /// eventos ("esta versão emite reroute_enrich, aquela não") — feito 2x em
+  /// 2026-07-13, e errado uma delas: com o Pedro e o Gilberto dirigindo builds
+  /// diferentes ao mesmo tempo, os logs de um viravam evidência sobre o outro.
+  static const String appVersion =
+      String.fromEnvironment('APP_VERSION', defaultValue: 'dev');
+
   static CollectionReference<Map<String, dynamic>>? _col;
   static CollectionReference<Map<String, dynamic>> get _collection =>
       _col ??= FirebaseFirestore.instance.collection('field_logs');
@@ -40,6 +50,7 @@ class FieldLog {
       // Fire-and-forget: não aguardamos o write (estamos no caminho do GPS).
       _collection.add({
         'session': sessionId,
+        'v': appVersion,
         'event': name,
         'data': data,
         'ts': FieldValue.serverTimestamp(),

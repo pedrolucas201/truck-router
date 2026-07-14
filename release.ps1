@@ -25,8 +25,12 @@ if ($pubspec -match "version:\s*(.+)") {
 
 Write-Host "Buildando v$version..." -ForegroundColor Cyan
 
+# APP_VERSION carimba a versao em TODO evento do field_logs (FieldLog.appVersion).
+# Sem isso, saber qual build gerou um log so dava por engenharia reversa nos eventos
+# — e com dois motoristas em versoes diferentes ao mesmo tempo, isso ja deu errado.
 flutter build apk --release --no-tree-shake-icons `
-    "--dart-define-from-file=dart_defines.json"
+    "--dart-define-from-file=dart_defines.json" `
+    "--dart-define=APP_VERSION=$version"
 
 $apk    = "build\app\outputs\flutter-apk\app-release.apk"
 $dest   = "gs://truck-router-apks/truck-router-v$version.apk"
