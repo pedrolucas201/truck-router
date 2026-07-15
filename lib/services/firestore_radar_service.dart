@@ -47,6 +47,7 @@ class FirestoreRadarService {
   static const _radarsCol     = 'radars';
   static const _dismissalsCol = 'radar_dismissals';
   static const _overridesCol  = 'radar_overrides';
+  static const _radarPassCol  = 'radar_pass';
   static const _localKey      = 'radar_overrides_local';
   // Cache em memória do set local persistente (carrega uma vez).
   static Map<String, RadarOverride>? _localCache;
@@ -292,6 +293,23 @@ class FirestoreRadarService {
           {'reportedBy': FieldValue.increment(1)});
     } catch (e, st) {
       FieldLog.error('radar_report', e, st);
+    }
+  }
+
+  /// Coleta passiva de passagens por radar (radar_pass). Grava o batch já pronto
+  /// vindo do RadarPassLogger — cada item é {rid, h, v, ts}. Best-effort ABSOLUTO:
+  /// erro de write JAMAIS pode afetar a navegação, então engole com log. Só cria
+  /// (a regra do Firestore proíbe read/update/delete nesta coleção).
+  static Future<void> logRadarPasses(List<Map<String, dynamic>> batch) async {
+    if (batch.isEmpty) return;
+    try {
+      final wb = _db.batch();
+      for (final e in batch) {
+        wb.set(_db.collection(_radarPassCol).doc(), e);
+      }
+      await wb.commit();
+    } catch (e, st) {
+      FieldLog.error('radar_pass', e, st);
     }
   }
 

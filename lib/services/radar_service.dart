@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../utils/geo_bounds.dart';
@@ -14,23 +15,51 @@ class RadarService {
     return _cache!;
   }
 
+  @visibleForTesting
+  static List<RadarPoint> parseCsv(String csv) => _parse(csv);
+
   static List<RadarPoint> _parse(String csv) {
     final result = <RadarPoint>[];
     for (final line in csv.split('\n')) {
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
-      final commaIdx1 = trimmed.indexOf(',');
-      if (commaIdx1 == -1) continue;
-      final commaIdx2 = trimmed.indexOf(',', commaIdx1 + 1);
-      if (commaIdx2 == -1) continue;
-      final lng = double.tryParse(trimmed.substring(0, commaIdx1));
-      final lat = double.tryParse(trimmed.substring(commaIdx1 + 1, commaIdx2));
-      if (lng == null || lat == null) continue;
-      final desc = trimmed.substring(commaIdx2 + 1);
+      // Formato base: lng,lat,tipo@vel (3 campos, sem vírgula no desc).
+      // Formato enriquecido (pipeline radar-enrich): +dir1,dir2,dir_src,status,
+      // truck_limit_off (8 campos, com linha de header). Retrocompatível: o
+      // header cai fora no tryParse de lng, e o CSV antigo de 3 campos funciona igual.
+      final parts = trimmed.split(',');
+      if (parts.length < 3) continue;
+      final lng = double.tryParse(parts[0]);
+      final lat = double.tryParse(parts[1]);
+      if (lng == null || lat == null) continue; // pula header/linha inválida
+      final desc = parts[2];
       final atIdx = desc.lastIndexOf('@');
       final type = atIdx > 0 ? desc.substring(0, atIdx).trim() : desc.trim();
       final speed = atIdx > 0 ? int.tryParse(desc.substring(atIdx + 1).trim()) ?? 0 : 0;
-      result.add(RadarPoint(lat: lat, lng: lng, type: type, speedKmh: speed));
+
+      double? dir1, dir2;
+      String? dirSrc, status;
+      int? truckLimitOff;
+      if (parts.length >= 8) {
+        String? nz(String s) => s.trim().isEmpty ? null : s.trim();
+        dir1 = double.tryParse(parts[3].trim());
+        dir2 = double.tryParse(parts[4].trim());
+        dirSrc = nz(parts[5]);
+        status = nz(parts[6]);
+        truckLimitOff = int.tryParse(parts[7].trim());
+      }
+
+      result.add(RadarPoint(
+        lat: lat,
+        lng: lng,
+        type: type,
+        speedKmh: speed,
+        dir1: dir1,
+        dir2: dir2,
+        dirSrc: dirSrc,
+        status: status,
+        truckLimitOff: truckLimitOff,
+      ));
     }
     return result;
   }

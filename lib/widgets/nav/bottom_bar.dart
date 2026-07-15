@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../models/radar_point.dart';
+import '../../services/radar_direction.dart';
 import 'nav_ui_defs.dart';
 
 class BottomBar extends StatefulWidget {
@@ -11,6 +12,7 @@ class BottomBar extends StatefulWidget {
   final String remainingDist;
   final String eta;
   final RadarPoint? radarAlert;
+  final RadarDirMatch dirMatch; // sentido do radar vs motorista (só decora)
 
   const BottomBar({
     super.key,
@@ -19,6 +21,7 @@ class BottomBar extends StatefulWidget {
     required this.remainingDist,
     required this.eta,
     required this.radarAlert,
+    this.dirMatch = RadarDirMatch.unknown,
   });
 
   @override
@@ -49,7 +52,11 @@ class _BottomBarState extends State<BottomBar>
   // rodovia posta 110 do carro, mas o velocímetro fica vermelho nos 90.
   int get _limit {
     final radar = widget.radarAlert;
-    if (radar != null && radar.speedKmh > 0) return min(radar.speedKmh, kTruckCapKmh);
+    if (radar != null && radar.speedKmh > 0) {
+      return truckRadarLimit(radar.speedKmh,
+              officialTruckLimit: radar.truckLimitOff) ??
+          kTruckCapKmh;
+    }
     return min(widget.limitKmh ?? kTruckCapKmh, kTruckCapKmh);
   }
 
@@ -143,37 +150,10 @@ class _BottomBarState extends State<BottomBar>
           const SizedBox(width: 16),
           Expanded(
             child: widget.radarAlert != null
-                ? Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isLombada
-                          ? Colors.orange.shade700
-                          : Colors.red.shade700,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          // Mostra a velocidade do RADAR capada no teto de caminhão
-                          // (ex: radar de carro 110 → "90 km/h"). Sem HERE.
-                          () {
-                            final eff = truckRadarLimit(
-                                widget.radarAlert!.speedKmh);
-                            return eff != null
-                                ? '$eff km/h'
-                                : (isLombada ? 'Lombada' : 'Radar');
-                          }(),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
+                ? _RadarChip(
+                    radar: widget.radarAlert!,
+                    dirMatch: widget.dirMatch,
+                    isLombada: isLombada,
                   )
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -184,6 +164,87 @@ class _BottomBarState extends State<BottomBar>
                     ],
                   ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Chip do radar na barra inferior. A direção (dirMatch) e o status são
+/// DECORAÇÃO: o chip aparece sempre (invariante — nunca suprime). Só muda a cor
+/// e ganha uma etiqueta glanceável.
+///  - same     → seta (radar fiscaliza o seu sentido), cor de alerta normal
+///  - opposite → cor neutra + "sentido oposto" (é do outro lado, mas te avisa)
+///  - inactive → cor neutra + "desativado" (fonte oficial rebaixou; ver voz→bip)
+///  - unknown  → exatamente o visual de hoje, sem etiqueta
+class _RadarChip extends StatelessWidget {
+  final RadarPoint radar;
+  final RadarDirMatch dirMatch;
+  final bool isLombada;
+
+  const _RadarChip({
+    required this.radar,
+    required this.dirMatch,
+    required this.isLombada,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isInactive = radar.status == 'inactive';
+    final isOpposite = dirMatch == RadarDirMatch.opposite;
+
+    final Color color = isInactive
+        ? Colors.blueGrey.shade700
+        : isOpposite
+            ? Colors.grey.shade700
+            : (isLombada ? Colors.orange.shade700 : Colors.red.shade700);
+
+    final eff =
+        truckRadarLimit(radar.speedKmh, officialTruckLimit: radar.truckLimitOff);
+    final mainText =
+        eff != null ? '$eff km/h' : (isLombada ? 'Lombada' : 'Radar');
+    final tag = isInactive
+        ? 'desativado'
+        : (isOpposite ? 'sentido oposto' : null);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+          const SizedBox(width: 8),
+          if (dirMatch == RadarDirMatch.same && !isInactive) ...[
+            const Icon(Icons.arrow_upward, color: Colors.white, size: 16),
+            const SizedBox(width: 2),
+          ],
+          Flexible(
+            child: Text(
+              mainText,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold),
+            ),
+          ),
+          if (tag != null) ...[
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                tag,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
         ],
       ),
     );

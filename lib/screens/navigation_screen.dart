@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart'
     show listEquals, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemSound, SystemSoundType;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -26,6 +27,7 @@ import '../services/field_log.dart';
 import '../services/here_routing_service.dart';
 import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
+import '../services/radar_direction.dart';
 import '../services/firestore_radar_service.dart';
 import '../utils/radar_tts.dart';
 import '../utils/geo_angle.dart';
@@ -212,6 +214,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   DateTime? _offRouteSince; // instrumentação: quando o caminhão saiu do corredor
   DateTime? _rerouteGraceUntil; // janela de carência pós-reroute (anti-encadeamento)
   RadarPoint? _upcomingRadar;
+  // Sentido do _upcomingRadar vs heading do motorista — DECORAÇÃO da UI, nunca
+  // gate (invariante). Calculado APÓS o gate escolher o radar, no setState.
+  RadarDirMatch _upcomingRadarDir = RadarDirMatch.unknown;
+  // Coleta passiva: registra o heading ao cruzar cada radar (1 write por radar por
+  // viagem, best-effort). Alimenta a agregação de direção crowd. Zero efeito na
+  // tela — observação pura, nunca gate.
+  late final RadarPassLogger _radarPassLogger;
   // Curadoria: pop-up que surge sozinho ao chegar num radar SEM verdicto, pergunta
   // "existe?" e (se sim) a velocidade. _curatedKeys = já curados (não re-pergunta);
   // _promptedKeys = já perguntados nesta sessão (não naga na mesma passada).
@@ -447,6 +456,7 @@ class _NavigationScreenState extends State<NavigationScreen>
               _result.polylinePoints.last.latitude, _result.polylinePoints.last.longitude).round()
           : null,
     });
+    _radarPassLogger = RadarPassLogger(flush: FirestoreRadarService.logRadarPasses);
     _radares        = List.of(widget.initialRadares);
     _visibleRadares = List.of(widget.initialRadares);
     _radarIconsFuture = Future.wait(_radares.map(_radarIcon));
@@ -529,6 +539,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _heartbeatTimer?.cancel();
     _arrivalTimer?.cancel();
     _posSub?.cancel();
+    _radarPassLogger.endTrip(); // fecho pelo X manual: drena o que sobrou na fila
     _tts.stop();
     _ttsActive = false;
     _themeController.removeListener(_onThemeChanged);
@@ -826,6 +837,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     // rerroteava de 10 em 10 min parado no destino.
     _refreshTimer?.cancel();
     _posSub?.cancel();
+    _radarPassLogger.endTrip(); // drena a fila de passagens (best-effort)
     // Mesmo motivo do _refreshTimer: stopService vivia só no dispose, que não
     // roda na chegada em background — a notificação "Navegando" ficava órfã
     // (ongoing, não-dismissível) por dias. Para aqui; idempotente (dispose
@@ -945,7 +957,9 @@ class _NavigationScreenState extends State<NavigationScreen>
     }
     // Mais restritivo entre o postado no radar e o limite de caminhão do trecho;
     // piso 90 sem nenhum dado. Nunca avisa no limite de carro (report Gilberto).
-    final limit = truckRadarLimit(radar.speedKmh) ?? kTruckCapKmh;
+    final limit =
+        truckRadarLimit(radar.speedKmh, officialTruckLimit: radar.truckLimitOff) ??
+            kTruckCapKmh;
     if (kmh >= limit + 2) { // +2: folga de arredondamento, evita nag no limite exato
       final now = DateTime.now();
       if (!_speedAlertActive) {
@@ -1358,6 +1372,17 @@ class _NavigationScreenState extends State<NavigationScreen>
       _maneuverIndex              = nextIdx;
       _distToNextManeuver         = distToNext;
       _upcomingRadar              = upcoming;
+      // Classifica DEPOIS do gate ter escolhido (nunca dentro da condição do
+      // gate). Só decora a UI; não altera se/como o alerta dispara.
+      _upcomingRadarDir           = upcoming == null
+          ? RadarDirMatch.unknown
+          : classifyRadarDirection(
+              dir1: upcoming.dir1,
+              dir2: upcoming.dir2,
+              dirSrc: upcoming.dirSrc,
+              userHeading: pos.heading,
+              headingAccuracy: pos.headingAccuracy,
+            );
       _nearbyBlockedRestriction   = nearestBlocked;
       _visibleRadares             = visibleRadares;
       if (radarListChanged) {
@@ -1371,6 +1396,16 @@ class _NavigationScreenState extends State<NavigationScreen>
     _setAnchor(pts.isNotEmpty ? bestSnap : latLng, bestIdx, anchorBearing, effSpeedMps);
     _updateRestrictionAlert(nearestBlocked, nearestBlockedDist);
     _updateRadarAlert(upcoming);
+    // Coleta passiva: observa o cruzamento que o gate JÁ detectou, sem tocá-lo.
+    // rid = chave estável do radar (lat_lng), igual à dedupe do curador. O logger
+    // dedupa 1 write por radar por viagem, então chamar todo tick é inócuo.
+    if (upcoming != null) {
+      _radarPassLogger.onRadarCrossed(
+        radarId: dismissalKey(upcoming.lat, upcoming.lng),
+        heading: pos.heading,
+        speedKmh: _speedKmh,
+      );
+    }
     _checkSpeedAlert(_speedKmh);
     _syncRadarFlash();
     _maybePromptCuration(upcoming, latLng);
@@ -1604,6 +1639,13 @@ class _NavigationScreenState extends State<NavigationScreen>
     final key = '${radar.lat}_${radar.lng}';
     if (key == _lastRadarAlertKey) return;
     _lastRadarAlertKey = key;
+    // EXCEÇÃO ÚNICA do invariante: radar OFICIALMENTE desativado (status inactive,
+    // fonte oficial) rebaixa de fala para bip discreto. Nunca some do mapa (visual
+    // "desativado" na UI). Todo o resto da lógica de voz abaixo fica intacto.
+    if (radar.status == 'inactive') {
+      SystemSound.play(SystemSoundType.click);
+      return;
+    }
     final isLombada = radar.type.toLowerCase().contains('lombada');
     final isPedagio = radar.type.toLowerCase().contains('pedagio');
     if (isLombada) {
@@ -3171,6 +3213,7 @@ class _NavigationScreenState extends State<NavigationScreen>
               remainingDist: _fmtDist(remaining),
               eta:           _fmtEta(remSec),
               radarAlert:    _upcomingRadar,
+              dirMatch:      _upcomingRadarDir,
             ),
           ],
         ),

@@ -17,7 +17,14 @@ const int kTruckCapKmh = 90;
 // (report Gilberto 2026-07-09, com print). Ainda protege contra placa de carro
 // (110 → cap 90, report 2026-07-03). null quando o radar não tem velocidade
 // postada (aí o chamador mostra "Radar" e usa o teto).
-int? truckRadarLimit(int radarSpeedKmh) {
-  if (radarSpeedKmh <= 0) return null;
-  return min(radarSpeedKmh, kTruckCapKmh);
+// [officialTruckLimit] (opcional) = limite de caminhão de fonte OFICIAL
+// (ANTT/DNIT, campo truckLimitOff do RadarPoint). Regra: só ABAIXA, nunca sobe —
+// mesma assimetria (errar pra menos = multa). Ausente => comportamento antigo intacto.
+int? truckRadarLimit(int radarSpeedKmh, {int? officialTruckLimit}) {
+  int? limit = radarSpeedKmh <= 0 ? null : min(radarSpeedKmh, kTruckCapKmh);
+  if (officialTruckLimit != null && officialTruckLimit > 0) {
+    final off = min(officialTruckLimit, kTruckCapKmh);
+    limit = limit == null ? off : min(limit, off);
+  }
+  return limit;
 }
