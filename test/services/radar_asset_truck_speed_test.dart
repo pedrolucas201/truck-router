@@ -31,6 +31,37 @@ void main() {
     expect(at(-22.122788, -42.779015).speedKmh, 40); // postado 60 -> caminhão 40
   });
 
+  test('enriquecimento CET-SP: Marginal Pinheiros expressa mostra 60 pro caminhão, não 90', () async {
+    final radares = await RadarService.load();
+    RadarPoint at(double lat, double lng) => radares.firstWhere(
+        (r) => (r.lat - lat).abs() < 1e-5 && (r.lng - lng).abs() < 1e-5,
+        orElse: () => throw StateError('radar $lat,$lng sumiu do asset'));
+    // Marginal Pinheiros, pista expressa: placa de leve 90, de PESADO 60 (NT-253 da
+    // própria CET). Sem o truck_limit_off o app mostrava min(90, kTruckCapKmh=90) = 90
+    // pro caminhão — 30 km/h acima do limite real = multa, não susto. O cap nacional
+    // NÃO cobre este caso: é limite local menor que o teto (ver TODO, item P1).
+    final r = at(-23.515635, -46.667687);
+    expect(r.speedKmh, 90); // a placa de leve continua 90
+    expect(r.truckLimitOff, 60); // e a CET diz que pesado é 60
+    expect(truckRadarLimit(r.speedKmh, officialTruckLimit: r.truckLimitOff), 60);
+  });
+
+  test('invariante: o asset não silencia radar vivo — inactive é raro e isolado', () async {
+    final radares = await RadarService.load();
+    final inativos = radares.where((r) => r.status == 'inactive').length;
+    // O CET-SP é um HISTÓRICO de equipamentos, não de pontos: quando trocam o
+    // aparelho (às vezes com código novo), o registro velho ganha DESATIVAÇÃO e nasce
+    // outro ATIVO no mesmo lugar. Medido no dump de 2026-07-16: 1114 dos 1191 registros
+    // "desativados" têm um ATIVO a <20m, e 147 dos 195 locais mortos têm um local vivo
+    // (código diferente) a <20m. Mapear desativação linha-a-linha rebaixaria ~1114
+    // radares ATIVOS pra bip — radar real, fiscalizando, silenciado por registro velho.
+    // prep_cet_sp.py cura isso em duas camadas (por CÓDIGO LOCAL + guarda espacial de
+    // 60m). Se alguém remover qualquer uma das duas, este número explode e o teste cai.
+    expect(inativos, lessThan(50),
+        reason: 'inactive=$inativos: a guarda de troca-de-equipamento do prep_cet_sp.py '
+            'provavelmente caiu — radar ativo sendo rebaixado pra bip');
+  });
+
   test('invariante de runtime: truckRadarLimit nunca SOBE o limite (min, nunca max)', () {
     for (final v in [0, 30, 60, 80, 90, 100, 110, 120]) {
       final lim = truckRadarLimit(v);
