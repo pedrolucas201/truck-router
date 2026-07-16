@@ -46,6 +46,21 @@ void main() {
     expect(truckRadarLimit(r.speedKmh, officialTruckLimit: r.truckLimitOff), 60);
   });
 
+  test('enriquecimento DER-SP: rodovia estadual de 100 mostra 80 pro caminhão', () async {
+    final radares = await RadarService.load();
+    RadarPoint at(double lat, double lng) => radares.firstWhere(
+        (r) => (r.lat - lat).abs() < 1e-5 && (r.lng - lng).abs() < 1e-5,
+        orElse: () => throw StateError('radar $lat,$lng sumiu do asset'));
+    // DER-SP `Velocidade` = "100/080 Km/h" = leve/PESADO (convenção R-19; o DER não
+    // publica dicionário — é inferência, corroborada: nos 488 valores compostos da
+    // fonte o 2º número nunca é maior que o 1º). Sem isso o app mostrava
+    // min(100, kTruckCapKmh=90) = 90.
+    final r = at(-22.166328, -51.320689);
+    expect(r.speedKmh, 100); // placa de leve
+    expect(r.truckLimitOff, 80); // DER diz que pesado é 80
+    expect(truckRadarLimit(r.speedKmh, officialTruckLimit: r.truckLimitOff), 80);
+  });
+
   test('invariante: o asset não silencia radar vivo — inactive é raro e isolado', () async {
     final radares = await RadarService.load();
     final inativos = radares.where((r) => r.status == 'inactive').length;

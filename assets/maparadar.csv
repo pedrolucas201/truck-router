@@ -175,7 +175,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -45.409498,-23.813766,Radar Fixo - 40 kmh@40,,,,,
 -52.425814,-26.877371,Radar Fixo - 40 kmh@40,,,,,
 -49.219345,-25.387116,Radar Fixo - 40 kmh@40,,,,,
--48.261249,-22.405031,Radar Fixo - 40 kmh@40,,,,,
+-48.261249,-22.405031,Radar Fixo - 40 kmh@40,,,,,40
 -43.635803,-21.269574,Radar Fixo - 40 kmh@40,,,,,
 -45.415839,-23.622933,Radar Fixo - 40 kmh@40,,,,,
 -51.713405,-20.820431,Radar Fixo - 40 kmh@40,271,91,dnit,,
@@ -183,7 +183,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -46.576488,-23.613167,Radar Fixo - 40 kmh@40,,,,,
 -52.425814,-26.877432,Radar Fixo - 40 kmh@40,,,,,
 -53.437546,-24.924148,Radar Fixo - 40 kmh@40,,,,,
--48.262121,-22.405135,Radar Fixo - 40 kmh@40,,,,,
+-48.262121,-22.405135,Radar Fixo - 40 kmh@40,,,,,40
 -49.301752,-25.413535,Radar Fixo - 40 kmh@40,,,,,
 -54.771364,-20.480540,Radar Fixo - 40 kmh@40,,,,,
 -53.758597,-20.457062,Radar Fixo - 40 kmh@40,265,85,dnit,,
@@ -214,7 +214,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -45.404450,-23.618432,Radar Fixo - 40 kmh@40,,,,,
 -46.751724,-23.362956,Radar Fixo - 40 kmh@40,,,,,
 -46.742302,-19.198352,Radar Fixo - 40 kmh@40,,,,,
--45.440003,-23.589609,Radar Fixo - 40 kmh@40,,,,,
+-45.440003,-23.589609,Radar Fixo - 40 kmh@40,,,,,40
 -46.531989,-21.784264,Radar Fixo - 40 kmh@40,,,,,
 -51.403255,-22.121021,Radar Fixo - 40 kmh@40,,,,,
 -53.422562,-24.973578,Radar Fixo - 40 kmh@40,,,,,
@@ -222,7 +222,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -45.547405,-23.799195,Radar Fixo - 40 kmh@40,,,,,
 -46.750875,-23.328268,Radar Fixo - 40 kmh@40,,,,,
 -46.741388,-19.200121,Radar Fixo - 40 kmh@40,,,,,
--45.447743,-23.586832,Radar Fixo - 40 kmh@40,,,,,
+-45.447743,-23.586832,Radar Fixo - 40 kmh@40,,,,,40
 -46.141825,-23.849434,Radar Fixo - 40 kmh@40,,,,,
 -46.654115,-23.544621,Radar Fixo - 40 kmh@40,,,,active,40
 -53.421651,-24.927386,Radar Fixo - 40 kmh@40,,,,,
@@ -230,7 +230,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -56.044222,-15.606168,Radar Fixo - 40 kmh@40,,,,,
 -46.754104,-23.316482,Radar Fixo - 40 kmh@40,,,,,
 -48.594154,-1.498668,Radar Fixo - 40 kmh@40,,,,,
--45.449690,-23.600329,Radar Fixo - 40 kmh@40,,,,,
+-45.449690,-23.600329,Radar Fixo - 40 kmh@40,,,,,40
 -46.086740,-23.804821,Radar Fixo - 40 kmh@40,,,,,
 -46.668871,-19.160076,Radar Fixo - 40 kmh@40,306,,dnit,,
 -53.500300,-24.957806,Radar Fixo - 40 kmh@40,,,,,
@@ -251,7 +251,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.330675,-20.768826,Radar Fixo - 40 kmh@40,,,,,
 -53.503444,-24.970544,Radar Fixo - 40 kmh@40,,,,,
 -46.579593,-21.846577,Radar Fixo - 40 kmh@40,,,,,
--47.337397,-23.403113,Radar Fixo - 40 kmh@40,,,,,
+-47.337397,-23.403113,Radar Fixo - 40 kmh@40,,,,,40
 -46.701003,-23.330720,Radar Fixo - 40 kmh@40,,,,,
 -48.700162,-1.521801,Radar Fixo - 40 kmh@40,,,,,
 -42.996896,-22.482270,Radar Fixo - 40 kmh@40,290,,antt,active,40
@@ -296,7 +296,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.611412,-1.509324,Radar Fixo - 40 kmh@40,,,,,
 -51.037473,-30.077650,Radar Fixo - 40 kmh@40,,,,,
 -45.459007,-22.949862,Radar Fixo - 40 kmh@40,,,,,
--47.907648,-21.821728,Radar Fixo - 40 kmh@40,,,,,
+-47.907648,-21.821728,Radar Fixo - 40 kmh@40,,,,,40
 -49.234635,-25.397816,Radar Fixo - 40 kmh@40,,,,,
 -46.532425,-21.793112,Radar Fixo - 40 kmh@40,,,,,
 -46.840658,-23.221364,Radar Fixo - 40 kmh@40,,,,,
@@ -304,7 +304,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.618459,-1.504153,Radar Fixo - 40 kmh@40,,,,,
 -51.026305,-30.067278,Radar Fixo - 40 kmh@40,,,,,
 -44.262523,-2.628080,Radar Fixo - 40 kmh@40,34,,dnit,,
--47.907774,-21.821035,Radar Fixo - 40 kmh@40,,,,,
+-47.907774,-21.821035,Radar Fixo - 40 kmh@40,,,,,40
 -49.235812,-25.398605,Radar Fixo - 40 kmh@40,,,,,
 -46.532546,-21.793117,Radar Fixo - 40 kmh@40,,,,,
 -40.706138,-20.831766,Radar Fixo - 40 kmh@40,,,,,
@@ -328,7 +328,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.431828,-22.006397,Radar Fixo - 40 kmh@40,,,,,
 -45.607304,-23.782021,Radar Fixo - 40 kmh@40,,,,,
 -46.346613,-23.527348,Radar Fixo - 40 kmh@40,,,,,
--48.243412,-22.256199,Radar Fixo - 40 kmh@40,,,,,
+-48.243412,-22.256199,Radar Fixo - 40 kmh@40,,,,,40
 -49.254625,-25.362916,Radar Fixo - 40 kmh@40,,,,,
 -49.274034,-25.437981,Radar Fixo - 40 kmh@40,,,,,
 -52.406284,-26.861046,Radar Fixo - 40 kmh@40,,,,,
@@ -336,7 +336,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.432276,-22.004440,Radar Fixo - 40 kmh@40,,,,,
 -45.529588,-23.814160,Radar Fixo - 40 kmh@40,,,,,
 -39.556904,-16.580014,Radar Fixo - 40 kmh@40,166,346,dnit,,
--48.244268,-22.255712,Radar Fixo - 40 kmh@40,,,,,
+-48.244268,-22.255712,Radar Fixo - 40 kmh@40,,,,,40
 -49.244905,-25.361178,Radar Fixo - 40 kmh@40,,,,,
 -49.243152,-25.428244,Radar Fixo - 40 kmh@40,,,,,
 -52.395699,-26.878279,Radar Fixo - 40 kmh@40,,,,,
@@ -425,7 +425,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -51.694481,-20.792929,Radar Fixo - 40 kmh@40,,,,,
 -49.193669,-16.684011,Radar Fixo - 40 kmh@40,,,,,
 -48.561671,-16.008552,Radar Fixo - 40 kmh@40,,,,,
--47.895299,-20.851291,Radar Fixo - 40 kmh@40,,,,,
+-47.895299,-20.851291,Radar Fixo - 40 kmh@40,,,,,40
 -46.685623,-24.125939,Radar Fixo - 40 kmh@40,,,,,
 -38.425232,-12.147075,Radar Fixo - 40 kmh@40,,,,,
 -49.275839,-21.347597,Radar Fixo - 40 kmh@40,,,,,
@@ -433,7 +433,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -51.694718,-20.792955,Radar Fixo - 40 kmh@40,,,,,
 -52.317994,-15.878096,Radar Fixo - 40 kmh@40,269,89,dnit,,
 -46.930060,-15.798391,Radar Fixo - 40 kmh@40,,,,,
--47.895799,-20.850547,Radar Fixo - 40 kmh@40,,,,,
+-47.895799,-20.850547,Radar Fixo - 40 kmh@40,,,,,40
 -42.651952,-21.524545,Radar Fixo - 40 kmh@40,,,,,
 -38.425477,-12.147279,Radar Fixo - 40 kmh@40,,,,,
 -46.754377,-23.610917,Radar Fixo - 40 kmh@40,,,,,
@@ -441,7 +441,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -51.720727,-20.781727,Radar Fixo - 40 kmh@40,,,,,
 -52.295231,-15.878080,Radar Fixo - 40 kmh@40,270,90,dnit,,
 -40.697054,-19.941882,Radar Fixo - 40 kmh@40,,,,,
--47.663776,-21.414519,Radar Fixo - 40 kmh@40,,,,,
+-47.663776,-21.414519,Radar Fixo - 40 kmh@40,,,,,40
 -46.335916,-23.465082,Radar Fixo - 40 kmh@40,,,,,
 -45.015414,-12.132057,Radar Fixo - 40 kmh@40,,,,,
 -40.652943,-3.551251,Radar Fixo - 40 kmh@40,,,,,
@@ -449,7 +449,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -51.697008,-20.780896,Radar Fixo - 40 kmh@40,,,,,
 -52.295006,-15.877850,Radar Fixo - 40 kmh@40,270,90,dnit,,
 -46.575443,-23.159549,Radar Fixo - 40 kmh@40,,,,,
--47.664720,-21.414367,Radar Fixo - 40 kmh@40,,,,,
+-47.664720,-21.414367,Radar Fixo - 40 kmh@40,,,,,40
 -46.329300,-23.473901,Radar Fixo - 40 kmh@40,,,,,
 -55.529502,-11.839723,Radar Fixo - 40 kmh@40,,,,,
 -40.653274,-3.551032,Radar Fixo - 40 kmh@40,,,,,
@@ -457,7 +457,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -51.700897,-20.787046,Radar Fixo - 40 kmh@40,,,,,
 -42.699194,-21.627859,Radar Fixo - 40 kmh@40,305,,antt,active,40
 -41.602191,-2.904899,Radar Fixo - 40 kmh@40,,,,,
--47.608615,-21.658730,Radar Fixo - 40 kmh@40,,,,,
+-47.608615,-21.658730,Radar Fixo - 40 kmh@40,,,,,40
 -45.412371,-23.759397,Radar Fixo - 40 kmh@40,,,,,
 -37.441233,-11.261322,Radar Fixo - 40 kmh@40,189,9,dnit,,
 -40.622727,-3.642097,Radar Fixo - 40 kmh@40,,,,,
@@ -465,7 +465,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -51.715203,-20.788368,Radar Fixo - 40 kmh@40,,,,,
 -42.902478,-21.987846,Radar Fixo - 40 kmh@40,,,,,
 -44.293788,-2.496655,Radar Fixo - 40 kmh@40,,,,,
--47.609339,-21.658174,Radar Fixo - 40 kmh@40,,,,,
+-47.609339,-21.658174,Radar Fixo - 40 kmh@40,,,,,40
 -45.412194,-23.760044,Radar Fixo - 40 kmh@40,,,,,
 -44.053848,-19.800673,Radar Fixo - 40 kmh@40,,,,,
 -49.333695,-25.448590,Radar Fixo - 40 kmh@40,,,,,
@@ -571,7 +571,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.275426,-21.348169,Radar Fixo - 40 kmh@40,,,,,
 -48.268149,-15.764942,Radar Fixo - 40 kmh@40,,,,,
 -44.573486,-20.068389,Radar Fixo - 40 kmh@40,,,,,
--47.813727,-20.379788,Radar Fixo - 40 kmh@40,,,,,
+-47.813727,-20.379788,Radar Fixo - 40 kmh@40,,,,,40
 -49.121226,-15.336009,Radar Fixo - 40 kmh@40,,,,,
 -43.472720,-19.946254,Radar Fixo - 40 kmh@40,,,,,
 -40.924924,-19.508272,Radar Fixo - 40 kmh@40,101,,dnit,,
@@ -579,7 +579,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.626632,-17.798459,Radar Fixo - 40 kmh@40,,,,,
 -48.261788,-15.759364,Radar Fixo - 40 kmh@40,,,,,
 -44.564410,-20.076113,Radar Fixo - 40 kmh@40,,,,,
--47.813422,-20.380627,Radar Fixo - 40 kmh@40,,,,,
+-47.813422,-20.380627,Radar Fixo - 40 kmh@40,,,,,40
 -49.139966,-15.326797,Radar Fixo - 40 kmh@40,,,,,
 -43.472903,-19.949986,Radar Fixo - 40 kmh@40,,,,,
 -45.414445,-23.810342,Radar Fixo - 40 kmh@40,,,,,
@@ -596,7 +596,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -44.930908,-22.253113,Radar Fixo - 40 kmh@40,123,303,dnit,,
 -46.524074,-21.794539,Radar Fixo - 40 kmh@40,,,,,
 -44.820926,-21.923175,Radar Fixo - 40 kmh@40,272,92,dnit,,
--48.201985,-22.517764,Radar Fixo - 40 kmh@40,,,,,
+-48.201985,-22.517764,Radar Fixo - 40 kmh@40,,,,,40
 -49.699728,-15.362885,Radar Fixo - 40 kmh@40,,,,,
 -45.436011,-23.725883,Radar Fixo - 40 kmh@40,,,,,
 -39.577762,-16.371747,Radar Fixo - 40 kmh@40,,,,,
@@ -1333,7 +1333,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -46.506564,-23.781983,Radar Fixo - 40 kmh@40,,,,,
 -39.306514,-14.954662,Radar Fixo - 40 kmh@40,183,3,dnit,,
 -42.554402,-18.249291,Radar Fixo - 40 kmh@40,,,,,
--49.972397,-22.235451,Radar Fixo - 40 kmh@40,,,,,
+-49.972397,-22.235451,Radar Fixo - 40 kmh@40,,,,,60
 -39.272072,-12.964474,Radar Fixo - 40 kmh@40,196,16,dnit,,
 -47.495073,-3.742747,Radar Fixo - 40 kmh@40,,,,,
 -45.255660,-22.863438,Radar Fixo - 40 kmh@40,172,,dnit,,
@@ -3007,7 +3007,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -34.849761,-7.072422,Radar Fixo - 50 kmh@50,170,,dnit,,
 -49.405922,-28.803990,Radar Fixo - 50 kmh@50,,,,,
 -49.360452,-28.718729,Radar Fixo - 50 kmh@50,,,,,
--45.430634,-23.612246,Radar Fixo - 50 kmh@50,,,,,
+-45.430634,-23.612246,Radar Fixo - 50 kmh@50,,,,,50
 -41.922477,-18.580102,Radar Fixo - 50 kmh@50,184,4,dnit,,
 -42.718936,-22.926119,Radar Fixo - 50 kmh@50,,,,,
 -47.073159,-22.874696,Radar Fixo - 50 kmh@50,,,,,
@@ -4096,7 +4096,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.311688,-22.893595,Radar Fixo - 50 kmh@50,,,,,
 -46.631011,-23.504001,Radar Fixo - 50 kmh@50,,,,active,50
 -52.243673,-27.640958,Radar Fixo - 50 kmh@50,220,,dnit,,
--48.374937,-21.988388,Radar Fixo - 50 kmh@50,,,,,
+-48.374937,-21.988388,Radar Fixo - 50 kmh@50,,,,,60
 -46.625372,-23.527436,Radar Fixo - 50 kmh@50,,,,inactive,50
 -46.824195,-23.557861,Radar Fixo - 50 kmh@50,,,,,
 -49.385790,-16.671155,Radar Fixo - 50 kmh@50,,,,,
@@ -4104,7 +4104,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.510162,-23.495134,Radar Fixo - 50 kmh@50,,,,,
 -46.589659,-23.518151,Radar Fixo - 50 kmh@50,,,,active,50
 -52.246858,-27.643464,Radar Fixo - 50 kmh@50,57,,dnit,,
--48.374884,-21.988170,Radar Fixo - 50 kmh@50,,,,,
+-48.374884,-21.988170,Radar Fixo - 50 kmh@50,,,,,60
 -49.308808,-16.645793,Radar Fixo - 50 kmh@50,,,,,
 -39.113034,-12.665357,Radar Fixo - 50 kmh@50,,,,,
 -49.386227,-16.669250,Radar Fixo - 50 kmh@50,,,,,
@@ -4240,7 +4240,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.171818,-22.881155,Radar Fixo - 50 kmh@50,,,,,
 -42.247399,-22.858234,Radar Fixo - 50 kmh@50,,,,,
 -46.589656,-23.518377,Radar Fixo - 50 kmh@50,,,,active,50
--48.740747,-22.092368,Radar Fixo - 50 kmh@50,,,,,
+-48.740747,-22.092368,Radar Fixo - 50 kmh@50,,,,,50
 -46.633296,-22.487696,Radar Fixo - 50 kmh@50,,,,,
 -35.281028,-5.765546,Radar Fixo - 50 kmh@50,111,,dnit,,
 -46.388038,-23.441551,Radar Fixo - 50 kmh@50,,,,,
@@ -4442,7 +4442,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.488177,-23.489691,Radar Fixo - 50 kmh@50,,,,,
 -35.930938,-9.315856,Radar Fixo - 50 kmh@50,145,325,dnit,,
 -40.059632,-13.867884,Radar Fixo - 50 kmh@50,95,275,dnit,,
--45.431202,-23.615694,Radar Fixo - 50 kmh@50,,,,,
+-45.431202,-23.615694,Radar Fixo - 50 kmh@50,,,,,50
 -46.964312,-22.432459,Radar Fixo - 50 kmh@50,,,,,
 -45.000372,-12.122221,Radar Fixo - 50 kmh@50,,,,,
 -42.478269,-20.296168,Radar Fixo - 50 kmh@50,292,112,dnit,,
@@ -5699,7 +5699,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -36.002689,-8.302400,Radar Fixo - 60 kmh@60,255,75,dnit,,
 -38.927164,-12.256340,Radar Fixo - 60 kmh@60,,,,,
 -51.094982,0.088256,Radar Fixo - 60 kmh@60,,,,,
--47.758586,-21.206053,Radar Fixo - 60 kmh@60,,,,,
+-47.758586,-21.206053,Radar Fixo - 60 kmh@60,,,,,60
 -60.048501,-2.983024,Radar Fixo - 60 kmh@60,,,,,
 -46.234937,-19.216828,Radar Fixo - 60 kmh@60,,,,,
 -42.779015,-22.122788,Radar Fixo - 60 kmh@40,165,345,antt,active,40
@@ -5719,7 +5719,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.182972,-25.360754,Radar Fixo - 60 kmh@60,,,,,
 -41.225733,-20.318320,Radar Fixo - 60 kmh@60,,,,,
 -41.994704,-20.482314,Radar Fixo - 60 kmh@60,,,,,
--45.456170,-23.587723,Radar Fixo - 60 kmh@60,,,,,
+-45.456170,-23.587723,Radar Fixo - 60 kmh@60,,,,,60
 -52.792017,-29.681160,Radar Fixo - 60 kmh@60,,,,,
 -38.899150,-12.289348,Radar Fixo - 60 kmh@60,,,,,
 -46.958162,-18.950072,Radar Fixo - 60 kmh@60,,,,,
@@ -5736,7 +5736,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -41.153592,-20.330027,Radar Fixo - 60 kmh@60,,,,,
 -50.403173,-16.533455,Radar Fixo - 60 kmh@60,,,,,
 -40.284278,-19.686879,Radar Fixo - 60 kmh@60,51,,antt,active,60
--48.109293,-22.344042,Radar Fixo - 60 kmh@60,,,,,
+-48.109293,-22.344042,Radar Fixo - 60 kmh@60,,,,,60
 -53.640068,-30.081657,Radar Fixo - 60 kmh@60,158,,dnit,,
 -48.716628,-17.190460,Radar Fixo - 60 kmh@60,,,,,
 -46.986683,-23.629552,Radar Fixo - 60 kmh@60,,,,,
@@ -5848,7 +5848,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -42.565132,-19.497223,Radar Fixo - 60 kmh@60,,,,,
 -44.113888,-19.945836,Radar Fixo - 60 kmh@60,,,,,
 -41.728622,-2.942592,Radar Fixo - 60 kmh@60,,,,,
--46.747241,-22.394557,Radar Fixo - 60 kmh@60,,,,,
+-46.747241,-22.394557,Radar Fixo - 60 kmh@60,,,,,60
 -56.220488,-14.567267,Radar Fixo - 60 kmh@60,,,,,
 -52.862885,-24.138798,Radar Fixo - 60 kmh@60,268,88,dnit,,
 -46.359328,-18.634512,Radar Fixo - 60 kmh@60,231,,dnit,,
@@ -5856,7 +5856,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -42.306516,-19.214694,Radar Fixo - 60 kmh@60,,,,,
 -48.786543,-1.788535,Radar Fixo - 60 kmh@60,,,,,
 -41.753927,-2.962191,Radar Fixo - 60 kmh@60,,,,,
--46.744641,-22.392429,Radar Fixo - 60 kmh@60,,,,,
+-46.744641,-22.392429,Radar Fixo - 60 kmh@60,,,,,60
 -47.883519,-15.796306,Radar Fixo - 60 kmh@60,,,,,
 -52.631287,-24.092529,Radar Fixo - 60 kmh@60,255,75,dnit,,
 -39.419496,-7.213035,Radar Fixo - 60 kmh@60,,,,,
@@ -5930,7 +5930,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.898411,-22.034828,Radar Fixo - 60 kmh@60,,,,,
 -48.573135,-20.579463,Radar Fixo - 60 kmh@60,,,,,
 -51.438984,-22.091023,Radar Fixo - 60 kmh@60,,,,,
--49.973891,-22.237459,Radar Fixo - 60 kmh@60,,,,,
+-49.973891,-22.237459,Radar Fixo - 60 kmh@60,,,,,80
 -43.504213,-18.154445,Radar Fixo - 60 kmh@60,,,,,
 -48.304663,-18.910635,Radar Fixo - 60 kmh@60,106,,dnit,,
 -40.384141,-20.357522,Radar Fixo - 60 kmh@60,,,,,
@@ -5960,7 +5960,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -46.464078,-18.571377,Radar Fixo - 60 kmh@60,,,,,
 -42.804322,-20.756640,Radar Fixo - 60 kmh@60,,,,,
 -47.905900,-22.029014,Radar Fixo - 60 kmh@60,,,,,
--48.336359,-21.940852,Radar Fixo - 60 kmh@60,,,,,
+-48.336359,-21.940852,Radar Fixo - 60 kmh@60,,,,,60
 -51.386224,-22.097213,Radar Fixo - 60 kmh@60,,,,,
 -52.367761,-26.881030,Radar Fixo - 60 kmh@60,266,,dnit,,
 -38.428783,-3.806631,Radar Fixo - 60 kmh@60,,,,,
@@ -5968,7 +5968,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.878265,-15.672367,Radar Fixo - 60 kmh@60,,,,,
 -51.074229,0.036715,Radar Fixo - 60 kmh@60,,,,,
 -46.387769,-22.728457,Radar Fixo - 60 kmh@60,,,,,
--48.337831,-21.942792,Radar Fixo - 60 kmh@60,,,,,
+-48.337831,-21.942792,Radar Fixo - 60 kmh@60,,,,,60
 -45.977746,-22.251306,Radar Fixo - 60 kmh@60,,,,,
 -52.263815,-26.857689,Radar Fixo - 60 kmh@60,253,,dnit,,
 -38.428841,-3.809113,Radar Fixo - 60 kmh@60,,,,,
@@ -6051,7 +6051,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -39.997176,-18.983794,Radar Fixo - 60 kmh@60,24,,antt,active,80
 -44.178615,-19.413612,Radar Fixo - 60 kmh@60,,,,,
 -51.966623,-23.419265,Radar Fixo - 60 kmh@60,,,,,
--50.198958,-22.397881,Radar Fixo - 60 kmh@60,,,,,
+-50.198958,-22.397881,Radar Fixo - 60 kmh@60,,,,,60
 -50.223586,-25.889270,Radar Fixo - 60 kmh@60,266,86,dnit,,
 -46.532266,-22.425736,Radar Fixo - 60 kmh@60,,,,,
 -44.100764,-22.662090,Radar Fixo - 60 kmh@60,,,,,
@@ -6059,7 +6059,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -39.995729,-18.980743,Radar Fixo - 60 kmh@60,204,,antt,active,80
 -44.252552,-19.472525,Radar Fixo - 60 kmh@60,,,,,
 -51.826857,-23.467080,Radar Fixo - 60 kmh@60,123,,antt,active,60
--50.010340,-22.287435,Radar Fixo - 60 kmh@60,,,,,
+-50.010340,-22.287435,Radar Fixo - 60 kmh@60,,,,,60
 -46.328656,-23.425010,Radar Fixo - 60 kmh@60,,,,,
 -46.502594,-22.404329,Radar Fixo - 60 kmh@60,,,,,
 -43.581379,-17.410694,Radar Fixo - 60 kmh@60,,,,,
@@ -6067,7 +6067,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -42.549664,-16.799966,Radar Fixo - 60 kmh@60,,,,,
 -44.251775,-19.471603,Radar Fixo - 60 kmh@60,,,,,
 -51.826966,-23.467164,Radar Fixo - 60 kmh@60,123,,antt,active,60
--50.010281,-22.287475,Radar Fixo - 60 kmh@60,,,,,
+-50.010281,-22.287475,Radar Fixo - 60 kmh@60,,,,,60
 -51.893952,-23.428080,Radar Fixo - 60 kmh@60,,,,,
 -44.217045,-21.073407,Radar Fixo - 60 kmh@60,,,,,
 -43.580847,-17.411965,Radar Fixo - 60 kmh@60,,,,,
@@ -6075,7 +6075,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -42.925514,-17.278372,Radar Fixo - 60 kmh@60,,,,,
 -44.238527,-19.493155,Radar Fixo - 60 kmh@60,,,,,
 -51.841767,-23.458570,Radar Fixo - 60 kmh@60,122,302,dnit,active,60
--50.052241,-22.302738,Radar Fixo - 60 kmh@60,,,,,
+-50.052241,-22.302738,Radar Fixo - 60 kmh@60,,,,,80
 -51.897348,-23.425932,Radar Fixo - 60 kmh@60,,,,,
 -49.815890,-26.159981,Radar Fixo - 60 kmh@60,32,212,dnit,,
 -43.883525,-16.768555,Radar Fixo - 60 kmh@60,,,,,
@@ -6131,7 +6131,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -39.972358,-18.931956,Radar Fixo - 60 kmh@60,205,,antt,active,80
 -54.574876,-25.481582,Radar Fixo - 60 kmh@60,,,,,
 -46.016857,-19.334438,Radar Fixo - 60 kmh@60,,,,,
--46.926106,-23.515107,Radar Fixo - 60 kmh@60,,,,,
+-46.926106,-23.515107,Radar Fixo - 60 kmh@60,,,,,60
 -48.600358,-27.050930,Radar Fixo - 60 kmh@60,176,,antt,active,60
 -53.148044,-26.223098,Radar Fixo - 60 kmh@60,,,,,
 -48.051915,-15.832006,Radar Fixo - 60 kmh@60,,,,,
@@ -6180,7 +6180,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -52.597383,-26.982181,Radar Fixo - 60 kmh@60,64,,dnit,,
 -41.027481,-3.761030,Radar Fixo - 60 kmh@60,,,,,
 -42.953874,-22.400881,Radar Fixo - 60 kmh@60,143,,antt,active,60
--46.361104,-23.417694,Radar Fixo - 60 kmh@60,,,,,
+-46.361104,-23.417694,Radar Fixo - 60 kmh@60,,,,,60
 -43.920484,-19.919889,Radar Fixo - 60 kmh@60,,,,,
 -46.375072,-17.662328,Radar Fixo - 60 kmh@60,,,,,
 -42.224929,-3.891028,Radar Fixo - 60 kmh@60,,,,,
@@ -6387,7 +6387,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.897714,-15.718821,Radar Fixo - 60 kmh@60,,,,,
 -53.362527,-21.700875,Radar Fixo - 60 kmh@60,,,,,
 -44.241498,-2.942306,Radar Fixo - 60 kmh@60,,,,,
--50.479618,-21.956603,Radar Fixo - 60 kmh@60,,,,,
+-50.479618,-21.956603,Radar Fixo - 60 kmh@60,,,,,60
 -46.558384,-22.929021,Radar Fixo - 60 kmh@60,,,,,
 -47.485617,-18.818956,Radar Fixo - 60 kmh@60,,,,,
 -38.333422,-12.901348,Radar Fixo - 60 kmh@60,,,,,
@@ -6395,7 +6395,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -42.052078,-22.855774,Radar Fixo - 60 kmh@60,,,,,
 -45.857110,-23.212128,Radar Fixo - 60 kmh@60,,,,,
 -44.215746,-2.949571,Radar Fixo - 60 kmh@60,,,,,
--50.492734,-21.954216,Radar Fixo - 60 kmh@60,,,,,
+-50.492734,-21.954216,Radar Fixo - 60 kmh@60,,,,,60
 -48.726910,-23.391760,Radar Fixo - 60 kmh@60,,,,,
 -47.518404,-18.743185,Radar Fixo - 60 kmh@60,,,,,
 -38.328376,-12.894841,Radar Fixo - 60 kmh@60,,,,,
@@ -6530,7 +6530,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.942963,-25.863719,Radar Fixo - 60 kmh@60,276,,antt,active,60
 -39.345375,-14.728190,Radar Fixo - 60 kmh@60,,,,,
 -40.405196,-20.342110,Radar Fixo - 60 kmh@60,192,,antt,active,60
--48.474995,-22.890776,Radar Fixo - 60 kmh@60,,,,,
+-48.474995,-22.890776,Radar Fixo - 60 kmh@60,,,,,60
 -48.222579,-24.834804,Radar Fixo - 60 kmh@60,178,,antt,active,60
 -51.731222,-24.121223,Radar Fixo - 60 kmh@60,,,,,
 -52.945773,-22.517418,Radar Fixo - 60 kmh@60,,,,,
@@ -6650,7 +6650,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -56.118269,-15.589703,Radar Fixo - 60 kmh@60,,,,,
 -48.949223,-25.865202,Radar Fixo - 60 kmh@60,170,,antt,active,60
 -43.866166,-19.876986,Radar Fixo - 60 kmh@60,,,,,
--46.814083,-23.517326,Radar Fixo - 60 kmh@60,,,,,
+-46.814083,-23.517326,Radar Fixo - 60 kmh@60,,,,,60
 -47.798495,-23.372465,Radar Fixo - 60 kmh@60,,,,,
 -46.926537,-19.582797,Radar Fixo - 60 kmh@60,,,,,
 -53.312182,-21.936097,Radar Fixo - 60 kmh@60,,,,,
@@ -6808,7 +6808,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.993163,-19.957397,Radar Fixo - 60 kmh@60,,,,,
 -60.022292,-2.056062,Radar Fixo - 60 kmh@60,329,149,dnit,,
 -42.784275,-5.150032,Radar Fixo - 60 kmh@60,,,,,
--46.347154,-23.458774,Radar Fixo - 60 kmh@60,,,,,
+-46.347154,-23.458774,Radar Fixo - 60 kmh@60,,,,,60
 -48.832760,-26.310861,Radar Fixo - 60 kmh@60,,,,,
 -50.122024,-18.875751,Radar Fixo - 60 kmh@60,,,,,
 -48.314512,-15.742166,Radar Fixo - 60 kmh@60,239,59,dnit,,
@@ -6818,7 +6818,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -45.891391,-23.212760,Radar Fixo - 60 kmh@60,,,,,
 -48.118138,-15.790631,Radar Fixo - 60 kmh@60,,,,,
 -49.105530,-26.916589,Radar Fixo - 60 kmh@60,,,,,
--49.646175,-22.884727,Radar Fixo - 60 kmh@60,,,,,
+-49.646175,-22.884727,Radar Fixo - 60 kmh@60,,,,,60
 -48.314740,-15.741806,Radar Fixo - 60 kmh@60,239,59,dnit,,
 -48.292770,-18.905017,Radar Fixo - 60 kmh@60,85,,dnit,,
 -50.876790,-20.459366,Radar Fixo - 60 kmh@60,,,,,
@@ -6900,7 +6900,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -50.623233,-18.955283,Radar Fixo - 60 kmh@60,,,,,
 -37.068926,-10.962608,Radar Fixo - 60 kmh@60,,,,,
 -47.986008,-15.994154,Radar Fixo - 60 kmh@60,,,,,
--48.478287,-22.892576,Radar Fixo - 60 kmh@60,,,,,
+-48.478287,-22.892576,Radar Fixo - 60 kmh@60,,,,,60
 -46.774116,-23.175068,Radar Fixo - 60 kmh@60,,,,,
 -47.272079,-22.803563,Radar Fixo - 60 kmh@60,,,,,
 -49.293663,-16.740089,Radar Fixo - 60 kmh@60,,,,,
@@ -6982,7 +6982,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.309522,-18.880518,Radar Fixo - 60 kmh@60,,,,,
 -44.016909,-19.991712,Radar Fixo - 60 kmh@60,,,,,
 -44.263406,-19.483666,Radar Fixo - 60 kmh@60,,,,,
--45.709832,-23.347169,Radar Fixo - 60 kmh@60,,,,,
+-45.709832,-23.347169,Radar Fixo - 60 kmh@60,,,,,60
 -48.292514,-18.904954,Radar Fixo - 60 kmh@60,266,,dnit,,
 -40.960809,-18.777188,Radar Fixo - 60 kmh@60,,,,,
 -50.578238,-25.992688,Radar Fixo - 60 kmh@60,235,55,dnit,,
@@ -7085,7 +7085,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -37.155204,-10.909171,Radar Fixo - 60 kmh@60,233,,dnit,,
 -39.313869,-7.298056,Radar Fixo - 60 kmh@60,,,,,
 -43.356547,-21.734875,Radar Fixo - 60 kmh@60,,,,,
--50.704706,-22.261462,Radar Fixo - 60 kmh@60,,,,,
+-50.704706,-22.261462,Radar Fixo - 60 kmh@60,,,,,60
 -46.727563,-23.647903,Radar Fixo - 60 kmh@60,,,,active,50
 -46.640294,-23.562271,Radar Fixo - 60 kmh@60,,,,active,50
 -46.732028,-23.516759,Radar Fixo - 60 kmh@60,,,,active,50
@@ -7419,7 +7419,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -38.495557,-3.853792,Radar Fixo - 60 kmh@60,,,,,
 -54.903321,-9.938503,Radar Fixo - 60 kmh@60,177,,antt,active,40
 -51.946689,-23.436278,Radar Fixo - 60 kmh@60,,,,,
--47.608545,-22.663041,Radar Fixo - 60 kmh@60,,,,,
+-47.608545,-22.663041,Radar Fixo - 60 kmh@60,,,,,60
 -45.510796,-21.258710,Radar Fixo - 60 kmh@60,,,,,
 -40.761004,-17.720574,Radar Fixo - 60 kmh@60,,,,,
 -44.289818,-2.501423,Radar Fixo - 60 kmh@60,,,,,
@@ -7486,7 +7486,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -51.948118,-23.393751,Radar Fixo - 60 kmh@60,,,,,
 -51.026043,-30.023079,Radar Fixo - 60 kmh@60,,,,,
 -48.864312,-26.288971,Radar Fixo - 60 kmh@60,,,,,
--46.344372,-23.459280,Radar Fixo - 60 kmh@60,,,,,
+-46.344372,-23.459280,Radar Fixo - 60 kmh@60,,,,,60
 -48.615935,-27.562892,Radar Fixo - 60 kmh@60,154,,antt,active,60
 -35.575140,-8.196543,Radar Fixo - 60 kmh@60,,,,,
 -47.061407,-22.957578,Radar Fixo - 60 kmh@60,,,,,
@@ -7551,7 +7551,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -46.646245,-21.832809,Radar Fixo - 60 kmh@60,,,,,
 -43.811421,-16.728538,Radar Fixo - 60 kmh@60,,,,,
 -47.954001,-15.846704,Radar Fixo - 60 kmh@60,,,,,
--49.392319,-22.419853,Radar Fixo - 60 kmh@60,,,,,
+-49.392319,-22.419853,Radar Fixo - 60 kmh@60,,,,,60
 -54.565722,-25.555595,Radar Fixo - 60 kmh@60,,,,,
 -39.348164,-3.678164,Radar Fixo - 60 kmh@60,246,,dnit,,
 -47.445342,-23.454120,Radar Fixo - 60 kmh@60,,,,,
@@ -7599,7 +7599,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.646409,-23.310652,Radar Fixo - 60 kmh@60,,,,,
 -44.220036,-2.572027,Radar Fixo - 60 kmh@60,,,,,
 -46.782754,-22.981722,Radar Fixo - 60 kmh@60,,,,,
--48.796492,-22.323653,Radar Fixo - 60 kmh@60,,,,,
+-48.796492,-22.323653,Radar Fixo - 60 kmh@60,,,,,60
 -39.265133,-7.299294,Radar Fixo - 60 kmh@60,,,,,
 -61.901575,-11.178680,Radar Fixo - 60 kmh@60,0,180,dnit,,
 -46.780255,-23.298449,Radar Fixo - 60 kmh@60,,,,,
@@ -7677,7 +7677,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -41.813108,-22.407262,Radar Fixo - 60 kmh@60,,,,,
 -47.244178,-22.804922,Radar Fixo - 60 kmh@60,,,,,
 -51.891439,-23.439561,Radar Fixo - 60 kmh@60,,,,,
--48.781293,-22.193055,Radar Fixo - 60 kmh@60,,,,,
+-48.781293,-22.193055,Radar Fixo - 60 kmh@60,,,,,60
 -49.240565,-21.467991,Radar Fixo - 60 kmh@60,,,,,
 -42.314781,-16.164532,Radar Fixo - 60 kmh@60,200,20,dnit,,
 -56.084028,-15.605012,Radar Fixo - 60 kmh@60,,,,,
@@ -7735,7 +7735,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -39.294586,-3.406371,Radar Fixo - 60 kmh@60,,,,,
 -38.984029,-7.490096,Radar Fixo - 60 kmh@60,184,4,dnit,,
 -45.952446,-23.281082,Radar Fixo - 60 kmh@60,,,,,
--48.461005,-22.402953,Radar Fixo - 60 kmh@60,,,,,
+-48.461005,-22.402953,Radar Fixo - 60 kmh@60,,,,,80
 -39.038044,-7.294341,Radar Fixo - 60 kmh@60,,,,,
 -45.886295,-22.239664,Radar Fixo - 60 kmh@60,,,,,
 -49.563241,-15.171694,Radar Fixo - 60 kmh@60,,,,,
@@ -7765,7 +7765,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.958507,-19.862235,Radar Fixo - 60 kmh@60,,,,,
 -44.948984,-12.140934,Radar Fixo - 60 kmh@60,,,,,
 -43.963673,-19.860653,Radar Fixo - 60 kmh@60,,,,,
--50.530297,-21.937772,Radar Fixo - 60 kmh@60,,,,,
+-50.530297,-21.937772,Radar Fixo - 60 kmh@60,,,,,60
 -47.084416,-22.929068,Radar Fixo - 60 kmh@60,,,,,
 -44.267882,-19.480331,Radar Fixo - 60 kmh@60,,,,,
 -38.083766,-5.109449,Radar Fixo - 60 kmh@60,,,,,
@@ -7948,7 +7948,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -45.796322,-21.595715,Radar Fixo - 60 kmh@60,,,,,
 -45.952348,-23.281686,Radar Fixo - 60 kmh@60,,,,,
 -38.894014,-7.302324,Radar Fixo - 60 kmh@60,,,,,
--47.995073,-23.026280,Radar Fixo - 60 kmh@60,,,,,
+-47.995073,-23.026280,Radar Fixo - 60 kmh@60,,,,,60
 -46.374881,-23.658134,Radar Fixo - 60 kmh@60,,,,,
 -38.552551,-3.780495,Radar Fixo - 60 kmh@60,,,,,
 -50.184315,-19.718406,Radar Fixo - 60 kmh@60,,,,,
@@ -9813,11 +9813,11 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.373059,-22.883981,Radar Fixo - 60 kmh@60,,,,,
 -47.170411,-22.941213,Radar Fixo - 60 kmh@60,,,,,
 -60.065019,-3.028216,Radar Fixo - 60 kmh@60,,,,,
--46.326083,-23.876820,Radar Fixo - 60 kmh@60,,,,,
+-46.326083,-23.876820,Radar Fixo - 60 kmh@60,,,,,60
 -48.847378,-26.279224,Radar Fixo - 60 kmh@60,,,,,
 -47.129721,-22.931300,Radar Fixo - 60 kmh@60,,,,,
 -46.961213,-23.092864,Radar Fixo - 60 kmh@60,,,,,
--46.339320,-23.873546,Radar Fixo - 60 kmh@60,,,,,
+-46.339320,-23.873546,Radar Fixo - 60 kmh@60,,,,,60
 -44.080706,-19.933170,Radar Fixo - 60 kmh@60,,,,,
 -47.991987,-16.004417,Radar Fixo - 60 kmh@60,,,,,
 -38.592190,-3.756864,Radar Fixo - 60 kmh@60,,,,,
@@ -9920,7 +9920,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -46.575700,-22.435845,Radar Fixo - 60 kmh@60,,,,,
 -38.482382,-3.832003,Radar Fixo - 60 kmh@60,,,,,
 -47.902748,-22.016653,Radar Fixo - 60 kmh@60,,,,,
--46.930660,-23.087735,Radar Fixo - 60 kmh@60,,,,,
+-46.930660,-23.087735,Radar Fixo - 60 kmh@60,,,,,60
 -45.952191,-23.283698,Radar Fixo - 60 kmh@60,,,,,
 -38.482388,-3.830610,Radar Fixo - 60 kmh@60,,,,,
 -47.905330,-22.029436,Radar Fixo - 60 kmh@60,,,,,
@@ -9970,7 +9970,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.881803,-15.767835,Radar Fixo - 60 kmh@60,,,,,
 -48.092978,-15.826004,Radar Fixo - 60 kmh@60,,,,,
 -39.292746,-6.776279,Radar Fixo - 60 kmh@60,,,,,
--50.482732,-21.956054,Radar Fixo - 60 kmh@60,,,,,
+-50.482732,-21.956054,Radar Fixo - 60 kmh@60,,,,,60
 -38.494378,-3.842587,Radar Fixo - 60 kmh@60,,,,,
 -48.095119,-15.820560,Radar Fixo - 60 kmh@60,,,,,
 -38.562547,-3.841561,Radar Fixo - 60 kmh@60,,,,,
@@ -10018,7 +10018,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -40.025114,-5.909447,Radar Fixo - 60 kmh@60,,,,,
 -47.047214,-22.892474,Radar Fixo - 60 kmh@60,,,,,
 -40.023837,-5.910583,Radar Fixo - 60 kmh@60,,,,,
--46.969626,-23.615355,Radar Fixo - 60 kmh@60,,,,,
+-46.969626,-23.615355,Radar Fixo - 60 kmh@60,,,,,60
 -40.881738,-4.381026,Radar Fixo - 60 kmh@60,,,,,
 -38.609051,-3.938916,Radar Fixo - 60 kmh@60,,,,,
 -40.889291,-4.391253,Radar Fixo - 60 kmh@60,,,,,
@@ -10359,13 +10359,13 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -53.695395,-24.759431,Radar Fixo - 80 kmh@80,344,,dnit,,
 -60.747808,2.745709,Radar Fixo - 80 kmh@80,,,,,
 -47.772541,-15.649370,Radar Fixo - 80 kmh@80,,,,,
--50.144536,-22.338581,Radar Fixo - 80 kmh@80,,,,,
+-50.144536,-22.338581,Radar Fixo - 80 kmh@80,,,,,60
 -49.193599,-25.389162,Radar Fixo - 80 kmh@80,,,,,
 -45.411781,-23.609902,Radar Fixo - 80 kmh@80,,,,,
 -49.136116,-13.475008,Radar Fixo - 80 kmh@80,,,,,
 -51.008299,-17.822803,Radar Fixo - 80 kmh@80,,,,,
 -34.902768,-7.162445,Radar Fixo - 80 kmh@80,,,,,
--48.432120,-22.394411,Radar Fixo - 80 kmh@80,,,,,
+-48.432120,-22.394411,Radar Fixo - 80 kmh@80,,,,,80
 -47.777292,-15.651570,Radar Fixo - 80 kmh@80,,,,,
 -53.922220,-31.368280,Radar Fixo - 80 kmh@80,,,,,
 -49.193594,-25.389046,Radar Fixo - 80 kmh@80,,,,,
@@ -10414,7 +10414,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -37.355963,-5.026351,Radar Fixo - 80 kmh@80,,,,,
 -53.723188,-29.922795,Radar Fixo - 80 kmh@80,,,,,
 -46.928837,-23.602382,Radar Fixo - 80 kmh@80,,,,,
--45.486913,-23.574668,Radar Fixo - 80 kmh@80,,,,,
+-45.486913,-23.574668,Radar Fixo - 80 kmh@80,,,,,60
 -49.071379,-26.892411,Radar Fixo - 80 kmh@80,,,,,
 -40.087498,-19.278712,Radar Fixo - 80 kmh@80,174,,antt,active,80
 -49.076617,-25.845213,Radar Fixo - 80 kmh@80,92,,antt,active,80
@@ -10428,7 +10428,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -46.564267,-23.421904,Radar Fixo - 80 kmh@80,,,,,
 -45.737879,-22.692294,Radar Fixo - 80 kmh@80,,,,,
 -36.192242,-5.714058,Radar Fixo - 80 kmh@80,,,,,
--49.963182,-22.208911,Radar Fixo - 80 kmh@80,,,,,
+-49.963182,-22.208911,Radar Fixo - 80 kmh@80,,,,,80
 -47.704898,-1.317170,Radar Fixo - 80 kmh@80,,,,,
 -49.127388,-25.381527,Radar Fixo - 80 kmh@80,,,,,
 -43.888468,-22.905995,Radar Fixo - 80 kmh@80,238,,antt,active,80
@@ -10517,7 +10517,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -38.348028,-12.634771,Radar Fixo - 80 kmh@80,,,,,
 -53.498814,-30.425342,Radar Fixo - 80 kmh@80,,,,,
 -48.631430,-27.818180,Radar Fixo - 80 kmh@80,163,,antt,active,80
--46.846971,-23.087969,Radar Fixo - 80 kmh@80,,,,,
+-46.846971,-23.087969,Radar Fixo - 80 kmh@80,,,,,80
 -48.536007,-22.236010,Radar Fixo - 80 kmh@80,,,,,
 -47.807885,-23.356207,Radar Fixo - 80 kmh@80,,,,,
 -49.884260,-20.097378,Radar Fixo - 80 kmh@80,,,,,
@@ -10584,7 +10584,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.963339,-15.903584,Radar Fixo - 80 kmh@80,,,,,
 -38.356950,-12.920815,Radar Fixo - 80 kmh@80,,,,,
 -40.405759,-20.559164,Radar Fixo - 80 kmh@80,,,,,
--49.967414,-22.171586,Radar Fixo - 80 kmh@80,,,,,
+-49.967414,-22.171586,Radar Fixo - 80 kmh@80,,,,,80
 -50.580152,-29.147268,Radar Fixo - 80 kmh@80,,,,,
 -48.098232,-16.383118,Radar Fixo - 80 kmh@80,,,,,
 -45.468044,-23.671317,Radar Fixo - 80 kmh@80,,,,,
@@ -10595,7 +10595,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.455360,-15.581629,Radar Fixo - 80 kmh@80,110,,dnit,,
 -50.391105,-29.230511,Radar Fixo - 80 kmh@80,,,,,
 -48.934578,-16.618175,Radar Fixo - 80 kmh@80,,,,,
--47.695230,-22.277537,Radar Fixo - 80 kmh@80,,,,,
+-47.695230,-22.277537,Radar Fixo - 80 kmh@80,,,,,60
 -43.184944,-22.868349,Radar Fixo - 80 kmh@80,95,,antt,active,80
 -51.589626,-29.293661,Radar Fixo - 80 kmh@80,,,,,
 -48.507397,-17.303899,Radar Fixo - 80 kmh@80,,,,,
@@ -10606,7 +10606,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -45.487652,-20.960309,Radar Fixo - 80 kmh@80,,,,,
 -43.208731,-22.876107,Radar Fixo - 80 kmh@80,40,,antt,active,80
 -46.790236,-23.248309,Radar Fixo - 80 kmh@80,,,,,
--45.487011,-23.574400,Radar Fixo - 80 kmh@80,,,,,
+-45.487011,-23.574400,Radar Fixo - 80 kmh@80,,,,,60
 -35.212173,-5.831992,Radar Fixo - 80 kmh@80,194,,dnit,,
 -48.998251,-25.854621,Radar Fixo - 80 kmh@80,131,,antt,active,80
 -43.361370,-22.971099,Radar Fixo - 80 kmh@80,,,,,
@@ -10627,7 +10627,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.253451,-16.030470,Radar Fixo - 80 kmh@80,,,,,
 -38.644148,-3.729778,Radar Fixo - 80 kmh@80,,,,,
 -49.247128,-16.683413,Radar Fixo - 80 kmh@80,,,,,
--47.700637,-22.273462,Radar Fixo - 80 kmh@80,,,,,
+-47.700637,-22.273462,Radar Fixo - 80 kmh@80,,,,,60
 -43.147201,-22.871871,Radar Fixo - 80 kmh@80,96,,antt,active,80
 -51.267405,-29.201187,Radar Fixo - 80 kmh@80,,,,,
 -57.432121,-19.449952,Radar Fixo - 80 kmh@80,,,,,
@@ -10635,7 +10635,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -50.263131,-29.927577,Radar Fixo - 80 kmh@80,,,,,
 -51.267411,-29.201061,Radar Fixo - 80 kmh@80,,,,,
 -35.211655,-5.830870,Radar Fixo - 80 kmh@80,194,,dnit,,
--47.680070,-22.284477,Radar Fixo - 80 kmh@80,,,,,
+-47.680070,-22.284477,Radar Fixo - 80 kmh@80,,,,,60
 -43.163196,-22.870298,Radar Fixo - 80 kmh@80,277,,antt,active,80
 -51.351698,-29.449804,Radar Fixo - 80 kmh@80,,,,,
 -48.110985,-16.393235,Radar Fixo - 80 kmh@80,,,,,
@@ -10650,7 +10650,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -34.990816,-7.559638,Radar Fixo - 80 kmh@80,172,,dnit,,
 -51.178439,-20.115620,Radar Fixo - 80 kmh@80,,,,,
 -51.307603,-29.629466,Radar Fixo - 80 kmh@80,,,,,
--45.766200,-23.309242,Radar Fixo - 80 kmh@80,,,,,
+-45.766200,-23.309242,Radar Fixo - 80 kmh@80,,,,,60
 -54.756673,-17.366706,Radar Fixo - 80 kmh@80,175,,antt,active,80
 -57.019674,-19.661732,Radar Fixo - 80 kmh@80,332,152,dnit,,
 -51.266938,-29.009748,Radar Fixo - 80 kmh@80,,,,,
@@ -10658,7 +10658,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.994598,-19.968060,Radar Fixo - 80 kmh@80,,,,,
 -47.741431,-23.487812,Radar Fixo - 80 kmh@80,,,,,
 -38.345867,-12.916213,Radar Fixo - 80 kmh@80,,,,,
--45.690724,-23.364170,Radar Fixo - 80 kmh@80,,,,,
+-45.690724,-23.364170,Radar Fixo - 80 kmh@80,,,,,60
 -48.532404,-17.294475,Radar Fixo - 80 kmh@80,,,,,
 -48.791019,-27.687778,Radar Fixo - 80 kmh@80,223,43,dnit,,
 -50.213039,-21.117622,Radar Fixo - 80 kmh@80,,,,,
@@ -10709,7 +10709,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.587339,-25.462902,Radar Fixo - 80 kmh@80,254,,antt,active,80
 -48.563514,-22.435609,Radar Fixo - 80 kmh@80,,,,,
 -46.098123,-22.676048,Radar Fixo - 80 kmh@60,1,,antt,active,60
--48.554422,-22.524917,Radar Fixo - 80 kmh@80,,,,,
+-48.554422,-22.524917,Radar Fixo - 80 kmh@80,,,,,50
 -48.893955,-16.164983,Radar Fixo - 80 kmh@80,,,,,
 -38.361984,-12.854751,Radar Fixo - 80 kmh@80,,,,,
 -49.242053,-16.558790,Radar Fixo - 80 kmh@80,,,,,
@@ -10739,7 +10739,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.894219,-26.172076,Radar Fixo - 80 kmh@80,301,121,dnit,,
 -48.524854,-21.449628,Radar Fixo - 80 kmh@80,,,,,
 -47.614103,-22.720790,Radar Fixo - 80 kmh@80,,,,,
--48.095146,-21.876441,Radar Fixo - 80 kmh@80,,,,,
+-48.095146,-21.876441,Radar Fixo - 80 kmh@80,,,,,80
 -50.185196,-25.119977,Radar Fixo - 80 kmh@80,158,,antt,active,80
 -49.673467,-21.104826,Radar Fixo - 80 kmh@80,,,,,
 -38.345511,-12.916100,Radar Fixo - 80 kmh@80,,,,,
@@ -10747,7 +10747,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -38.217157,-4.210419,Radar Fixo - 80 kmh@80,,,,,
 -49.537739,-21.228649,Radar Fixo - 80 kmh@80,,,,,
 -49.149827,-14.501524,Radar Fixo - 80 kmh@80,,,,,
--48.531671,-22.231495,Radar Fixo - 80 kmh@80,,,,,
+-48.531671,-22.231495,Radar Fixo - 80 kmh@80,,,,,80
 -50.178296,-25.126461,Radar Fixo - 80 kmh@80,304,,dnit,active,80
 -49.116852,-22.302254,Radar Fixo - 80 kmh@80,,,,,
 -49.069047,-26.872924,Radar Fixo - 80 kmh@80,,,,,
@@ -10842,7 +10842,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.698837,-28.020228,Radar Fixo - 80 kmh@80,257,,antt,active,80
 -47.994429,-15.876584,Radar Fixo - 80 kmh@80,,,,,
 -49.221661,-16.661321,Radar Fixo - 80 kmh@80,,,,,
--46.488594,-23.882364,Radar Fixo - 80 kmh@80,,,,,
+-46.488594,-23.882364,Radar Fixo - 80 kmh@80,,,,,80
 -45.887709,-23.215993,Radar Fixo - 80 kmh@80,,,,,
 -47.947334,-15.868838,Radar Fixo - 80 kmh@80,,,,,
 -49.226385,-16.668504,Radar Fixo - 80 kmh@80,,,,,
@@ -10931,7 +10931,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.022642,-15.876674,Radar Fixo - 80 kmh@80,,,,,
 -46.554148,-23.368875,Radar Fixo - 80 kmh@60,63,,antt,active,60
 -37.243592,-10.958338,Radar Fixo - 80 kmh@80,268,,dnit,,
--46.967966,-22.065882,Radar Fixo - 80 kmh@80,,,,,
+-46.967966,-22.065882,Radar Fixo - 80 kmh@80,,,,,80
 -38.429942,-12.956391,Radar Fixo - 80 kmh@80,,,,,
 -46.569271,-23.387857,Radar Fixo - 80 kmh@60,353,,antt,active,60
 -48.779131,-17.715451,Radar Fixo - 80 kmh@80,,,,,
@@ -10955,11 +10955,11 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.621230,-22.968357,Radar Fixo - 80 kmh@80,,,,,
 -48.190418,-22.970348,Radar Fixo - 80 kmh@80,,,,,
 -37.243586,-10.958443,Radar Fixo - 80 kmh@80,268,,dnit,,
--46.500697,-23.884021,Radar Fixo - 80 kmh@80,,,,,
+-46.500697,-23.884021,Radar Fixo - 80 kmh@80,,,,,80
 -47.969237,-15.913763,Radar Fixo - 80 kmh@80,,,,,
 -44.334463,-20.167033,Radar Fixo - 80 kmh@60,140,,antt,active,60
 -38.267588,-4.136197,Radar Fixo - 80 kmh@80,,,,,
--47.733146,-23.141170,Radar Fixo - 80 kmh@80,,,,,
+-47.733146,-23.141170,Radar Fixo - 80 kmh@80,,,,,60
 -43.453637,-23.011180,Radar Fixo - 80 kmh@80,,,,,
 -46.166913,-22.760646,Radar Fixo - 80 kmh@80,267,,antt,active,60
 -43.292393,-23.012258,Radar Fixo - 80 kmh@80,,,,,
@@ -10971,7 +10971,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.453300,-23.010839,Radar Fixo - 80 kmh@80,,,,,
 -44.086538,-19.959489,Radar Fixo - 80 kmh@80,273,,antt,active,60
 -48.152134,-15.910236,Radar Fixo - 80 kmh@80,,,,,
--48.799029,-22.584646,Radar Fixo - 80 kmh@80,,,,,
+-48.799029,-22.584646,Radar Fixo - 80 kmh@80,,,,,80
 -43.847788,-22.665802,Radar Fixo - 80 kmh@80,303,,antt,active,80
 -44.171682,-19.964358,Radar Fixo - 80 kmh@60,254,,antt,active,60
 -38.234084,-4.161247,Radar Fixo - 80 kmh@80,,,,,
@@ -10987,11 +10987,11 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -34.940676,-7.127183,Radar Fixo - 80 kmh@80,294,,dnit,,
 -47.870123,-15.814750,Radar Fixo - 80 kmh@80,,,,,
 -48.628586,-27.341870,Radar Fixo - 80 kmh@80,33,,antt,active,80
--47.812894,-23.071102,Radar Fixo - 80 kmh@80,,,,,
+-47.812894,-23.071102,Radar Fixo - 80 kmh@80,,,,,80
 -47.969231,-15.913479,Radar Fixo - 80 kmh@80,,,,,
 -47.892392,-15.707443,Radar Fixo - 80 kmh@80,,,,,
 -38.229434,-4.184774,Radar Fixo - 80 kmh@80,,,,,
--47.888811,-21.975309,Radar Fixo - 80 kmh@80,,,,,
+-47.888811,-21.975309,Radar Fixo - 80 kmh@80,,,,,80
 -35.198760,-7.185725,Radar Fixo - 80 kmh@80,56,,dnit,,
 -47.887147,-15.752494,Radar Fixo - 80 kmh@80,,,,,
 -40.233228,-19.646347,Radar Fixo - 80 kmh@80,158,,antt,active,80
@@ -11017,21 +11017,21 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.355934,-16.659472,Radar Fixo - 80 kmh@80,,,,,
 -43.402088,-23.000185,Radar Fixo - 80 kmh@80,,,,,
 -43.526922,-23.014569,Radar Fixo - 80 kmh@80,,,,,
--46.967883,-22.065993,Radar Fixo - 80 kmh@80,,,,,
+-46.967883,-22.065993,Radar Fixo - 80 kmh@80,,,,,80
 -38.319811,-4.017524,Radar Fixo - 80 kmh@80,,,,,
--46.524714,-23.912147,Radar Fixo - 80 kmh@80,,,,,
+-46.524714,-23.912147,Radar Fixo - 80 kmh@80,,,,,80
 -50.994129,-30.030307,Radar Fixo - 80 kmh@80,,,,,
 -49.239409,-16.768180,Radar Fixo - 80 kmh@80,354,,antt,active,80
 -48.007342,-15.815667,Radar Fixo - 80 kmh@80,,,,,
 -41.975595,-18.661807,Radar Fixo - 80 kmh@80,223,,dnit,,
--47.781786,-21.221806,Radar Fixo - 80 kmh@80,,,,,
+-47.781786,-21.221806,Radar Fixo - 80 kmh@80,,,,,80
 -38.524294,-3.783087,Radar Fixo - 80 kmh@80,,,,,
 -38.324126,-4.011325,Radar Fixo - 80 kmh@80,,,,,
--46.464242,-23.901939,Radar Fixo - 80 kmh@80,,,,,
+-46.464242,-23.901939,Radar Fixo - 80 kmh@80,,,,,80
 -47.823147,-15.841139,Radar Fixo - 80 kmh@80,,,,,
 -43.265520,-22.997915,Radar Fixo - 80 kmh@80,,,,,
 -47.982706,-15.812313,Radar Fixo - 80 kmh@80,,,,,
--48.937557,-23.090684,Radar Fixo - 80 kmh@80,,,,,
+-48.937557,-23.090684,Radar Fixo - 80 kmh@80,,,,,80
 -47.947422,-15.788022,Radar Fixo - 80 kmh@80,,,,,
 -47.895603,-15.726513,Radar Fixo - 80 kmh@80,,,,,
 -38.216237,-4.209943,Radar Fixo - 80 kmh@80,,,,,
@@ -11073,9 +11073,9 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.193874,-22.920425,Radar Fixo - 80 kmh@80,,,,,
 -50.232342,-29.959332,Radar Fixo - 80 kmh@80,,,,,
 -49.237928,-16.718496,Radar Fixo - 80 kmh@80,29,,antt,active,80
--49.966505,-22.221440,Radar Fixo - 80 kmh@80,,,,,
+-49.966505,-22.221440,Radar Fixo - 80 kmh@80,,,,,80
 -43.186193,-22.930588,Radar Fixo - 80 kmh@80,,,,,
--49.964255,-22.202178,Radar Fixo - 80 kmh@80,,,,,
+-49.964255,-22.202178,Radar Fixo - 80 kmh@80,,,,,80
 -49.030893,-16.109245,Radar Fixo - 80 kmh@80,187,7,antt,active,80
 -47.986798,-15.939874,Radar Fixo - 80 kmh@80,,,,,
 -47.996083,-15.811145,Radar Fixo - 80 kmh@80,,,,,
@@ -11096,29 +11096,29 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.320700,-25.547622,Radar Fixo - 80 kmh@80,68,,antt,active,80
 -46.231639,-23.483238,Radar Fixo - 80 kmh@80,,,,,
 -49.321111,-25.547597,Radar Fixo - 80 kmh@80,247,,antt,active,80
--48.472884,-22.879807,Radar Fixo - 80 kmh@80,,,,,
+-48.472884,-22.879807,Radar Fixo - 80 kmh@80,,,,,80
 -48.605162,-27.030320,Radar Fixo - 80 kmh@80,279,,antt,active,80
 -44.879458,-22.585059,Radar Fixo - 80 kmh@80,77,,antt,active,80
 -35.819127,-5.525926,Radar Fixo - 80 kmh@80,155,335,dnit,,
 -50.437925,-21.238699,Radar Fixo - 80 kmh@80,,,,,
 -44.170748,-22.562581,Radar Fixo - 80 kmh@80,133,,antt,active,80
 -50.477618,-21.207012,Radar Fixo - 80 kmh@80,,,,,
--47.626924,-22.368158,Radar Fixo - 80 kmh@80,,,,,
--47.076876,-22.849757,Radar Fixo - 80 kmh@80,,,,,
+-47.626924,-22.368158,Radar Fixo - 80 kmh@80,,,,,80
+-47.076876,-22.849757,Radar Fixo - 80 kmh@80,,,,,80
 -43.154577,-21.266777,Radar Fixo - 80 kmh@80,,,,,
--49.050421,-22.330553,Radar Fixo - 80 kmh@80,,,,,
+-49.050421,-22.330553,Radar Fixo - 80 kmh@80,,,,,80
 -50.224571,-19.726771,Radar Fixo - 80 kmh@80,,,,,
--49.053562,-22.319938,Radar Fixo - 80 kmh@80,,,,,
+-49.053562,-22.319938,Radar Fixo - 80 kmh@80,,,,,80
 -35.891903,-7.299279,Radar Fixo - 80 kmh@80,190,,dnit,,
--49.056280,-22.311330,Radar Fixo - 80 kmh@80,,,,,
+-49.056280,-22.311330,Radar Fixo - 80 kmh@80,,,,,80
 -38.307998,-4.030826,Radar Fixo - 80 kmh@80,,,,,
--46.917629,-23.081270,Radar Fixo - 80 kmh@80,,,,,
+-46.917629,-23.081270,Radar Fixo - 80 kmh@80,,,,,60
 -38.308977,-4.030461,Radar Fixo - 80 kmh@80,,,,,
 -47.196960,-24.283936,Radar Fixo - 80 kmh@80,,,,,
 -38.387936,-12.928772,Radar Fixo - 80 kmh@80,,,,,
 -38.978217,-3.598597,Radar Fixo - 80 kmh@80,,,,,
 -47.098891,-22.848190,Radar Fixo - 80 kmh@80,,,,,
--47.072465,-22.858912,Radar Fixo - 80 kmh@80,,,,,
+-47.072465,-22.858912,Radar Fixo - 80 kmh@80,,,,,80
 -38.362121,-12.854751,Radar Fixo - 80 kmh@80,,,,,
 -50.135360,-29.871783,Radar Fixo - 80 kmh@80,,,,,
 -38.437181,-12.965055,Radar Fixo - 80 kmh@80,,,,,
@@ -11139,30 +11139,30 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.918628,-15.743193,Radar Fixo - 80 kmh@80,,,,,
 -48.004370,-15.786417,Radar Fixo - 80 kmh@80,,,,,
 -43.420426,-22.780378,Radar Fixo - 90 kmh@90,,,,,
--48.563993,-22.274982,Radar Fixo - 90 kmh@90,,,,,
+-48.563993,-22.274982,Radar Fixo - 90 kmh@90,,,,,90
 -43.203027,-22.946827,Radar Fixo - 90 kmh@90,,,,,
 -46.667687,-23.515635,Radar Fixo - 90 kmh@90,,,,active,60
--49.376363,-20.823498,Radar Fixo - 90 kmh@90,,,,,
+-49.376363,-20.823498,Radar Fixo - 90 kmh@90,,,,,90
 -46.674963,-23.513669,Radar Fixo - 90 kmh@90,,,,active,60
 -43.282871,-22.807650,Radar Fixo - 90 kmh@90,,,,,
 -43.482461,-22.855421,Radar Fixo - 90 kmh@90,,,,,
 -43.420352,-22.780337,Radar Fixo - 90 kmh@90,,,,,
--47.818755,-21.234755,Radar Fixo - 90 kmh@90,,,,,
+-47.818755,-21.234755,Radar Fixo - 90 kmh@90,,,,,90
 -46.952007,-22.346687,Radar Fixo - 90 kmh@90,,,,,
 -47.356247,-22.762085,Radar Fixo - 90 kmh@90,,,,,
 -52.474646,-22.502530,Radar Fixo - 90 kmh@90,,,,,
 -46.551987,-23.493287,Radar Fixo - 90 kmh@90,51,,antt,active,90
--47.429406,-23.472183,Radar Fixo - 90 kmh@90,,,,,
+-47.429406,-23.472183,Radar Fixo - 90 kmh@90,,,,,90
 -46.937263,-22.336024,Radar Fixo - 90 kmh@90,,,,,
 -43.357998,-22.797540,Radar Fixo - 90 kmh@90,122,,antt,active,80
 -43.533450,-22.861038,Radar Fixo - 90 kmh@90,,,,,
 -46.691420,-23.509221,Radar Fixo - 90 kmh@90,,,,active,60
 -47.325071,-22.759829,Radar Fixo - 90 kmh@90,,,,,
 -47.758107,-21.203567,Radar Fixo - 90 kmh@90,,,,,
--47.758554,-21.209169,Radar Fixo - 90 kmh@90,,,,,
+-47.758554,-21.209169,Radar Fixo - 90 kmh@90,,,,,90
 -47.574270,-22.426321,Radar Fixo - 90 kmh@90,,,,,
 -43.411204,-22.862004,Radar Fixo - 90 kmh@90,,,,,
--47.819170,-21.242063,Radar Fixo - 90 kmh@90,,,,,
+-47.819170,-21.242063,Radar Fixo - 90 kmh@90,,,,,90
 -43.173449,-22.913223,Radar Fixo - 90 kmh@90,,,,,
 -46.742792,-23.539403,Radar Fixo - 90 kmh@90,,,,active,50
 -46.716967,-23.556628,Radar Fixo - 90 kmh@90,,,,active,60
@@ -11184,17 +11184,17 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -46.661552,-23.515349,Radar Fixo - 90 kmh@90,,,,active,60
 -43.502149,-22.858606,Radar Fixo - 90 kmh@90,,,,,
 -46.499104,-23.465109,Radar Fixo - 90 kmh@90,69,,antt,active,90
--47.754718,-21.262416,Radar Fixo - 90 kmh@90,,,,,
+-47.754718,-21.262416,Radar Fixo - 90 kmh@90,,,,,90
 -47.452516,-23.527214,Radar Fixo - 90 kmh@90,,,,,
 -50.950135,-20.173855,Radar Fixo - 90 kmh@90,,,,,
 -47.757021,-21.182862,Radar Fixo - 90 kmh@90,,,,,
--47.754873,-21.253991,Radar Fixo - 90 kmh@90,,,,,
+-47.754873,-21.253991,Radar Fixo - 90 kmh@90,,,,,90
 -46.595204,-23.528466,Radar Fixo - 90 kmh@90,,,,active,60
 -46.736295,-23.518245,Radar Fixo - 90 kmh@90,,,,active,60
--46.593379,-23.638263,Radar Fixo - 90 kmh@90,,,,,
+-46.593379,-23.638263,Radar Fixo - 90 kmh@90,,,,,90
 -43.414127,-22.787201,Radar Fixo - 90 kmh@90,,,,,
 -43.574695,-22.865367,Radar Fixo - 90 kmh@90,,,,,
--48.577746,-22.287802,Radar Fixo - 90 kmh@90,,,,,
+-48.577746,-22.287802,Radar Fixo - 90 kmh@90,,,,,90
 -43.574314,-22.865471,Radar Fixo - 90 kmh@90,,,,,
 -43.210144,-22.914198,Radar Fixo - 90 kmh@90,,,,,
 -46.701517,-23.617460,Radar Fixo - 90 kmh@90,,,,active,60
@@ -11206,8 +11206,8 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.411282,-22.861885,Radar Fixo - 90 kmh@90,,,,,
 -43.210048,-22.914088,Radar Fixo - 90 kmh@90,,,,,
 -43.283617,-22.645773,Radar Fixo - 90 kmh@90,359,,antt,active,90
--47.842008,-21.213478,Radar Fixo - 90 kmh@90,,,,,
--47.780240,-21.231525,Radar Fixo - 90 kmh@90,,,,,
+-47.842008,-21.213478,Radar Fixo - 90 kmh@90,,,,,90
+-47.780240,-21.231525,Radar Fixo - 90 kmh@90,,,,,90
 -43.171742,-22.926678,Radar Fixo - 90 kmh@90,,,,,
 -46.598535,-23.527033,Radar Fixo - 90 kmh@90,,,,active,60
 -43.378526,-22.845925,Radar Fixo - 90 kmh@90,,,,,
@@ -11223,21 +11223,21 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.612066,-22.875332,Radar Fixo - 90 kmh@90,243,,antt,active,90
 -47.387779,-22.764262,Radar Fixo - 90 kmh@90,,,,,
 -46.746100,-23.534608,Radar Fixo - 90 kmh@90,,,,active,60
--48.575461,-22.284043,Radar Fixo - 90 kmh@90,,,,,
+-48.575461,-22.284043,Radar Fixo - 90 kmh@90,,,,,90
 -46.564946,-23.523294,Radar Fixo - 90 kmh@90,,,,active,60
 -46.571137,-23.526806,Radar Fixo - 90 kmh@90,,,,active,60
--49.350654,-20.842957,Radar Fixo - 90 kmh@90,,,,,
+-49.350654,-20.842957,Radar Fixo - 90 kmh@90,,,,,90
 -47.356271,-22.761961,Radar Fixo - 90 kmh@90,,,,,
 -46.555197,-23.519290,Radar Fixo - 90 kmh@90,,,,active,60
 -46.482162,-23.458353,Radar Fixo - 90 kmh@90,250,,antt,active,90
 -43.427915,-22.772025,Radar Fixo - 90 kmh@90,,,,,
--51.433348,-22.124582,Radar Fixo - 90 kmh@90,,,,,
--47.682003,-22.281418,Radar Fixo - 90 kmh@90,,,,,
+-51.433348,-22.124582,Radar Fixo - 90 kmh@90,,,,,90
+-47.682003,-22.281418,Radar Fixo - 90 kmh@90,,,,,90
 -47.861635,-22.039975,Radar Fixo - 90 kmh@90,,,,,
 -43.401868,-22.800704,Radar Fixo - 90 kmh@90,,,,,
 -46.698610,-23.507573,Radar Fixo - 90 kmh@90,,,,active,60
 -47.587865,-22.406722,Radar Fixo - 90 kmh@90,,,,,
--47.933889,-21.975805,Radar Fixo - 90 kmh@90,,,,,
+-47.933889,-21.975805,Radar Fixo - 90 kmh@90,,,,,90
 -43.401801,-22.800910,Radar Fixo - 90 kmh@90,,,,,
 -46.711120,-23.557858,Radar Fixo - 90 kmh@90,,,,active,50
 -47.583668,-22.411191,Radar Fixo - 90 kmh@90,,,,,
@@ -11275,17 +11275,17 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.975830,-20.058362,Radar Fixo - 100 kmh@100,213,,antt,active,80
 -48.166095,-21.814298,Radar Fixo - 100 kmh@100,,,,,
 -49.857698,-29.410275,Radar Fixo - 100 kmh@80,204,,antt,active,80
--51.320689,-22.166328,Radar Fixo - 100 kmh@100,,,,,
+-51.320689,-22.166328,Radar Fixo - 100 kmh@100,,,,,80
 -48.600875,-27.597058,Radar Fixo - 100 kmh@100,347,,dnit,,
 -54.537890,-20.378411,Radar Fixo - 100 kmh@80,32,212,antt,active,80
--47.836407,-23.558781,Radar Fixo - 100 kmh@100,,,,,
+-47.836407,-23.558781,Radar Fixo - 100 kmh@100,,,,,80
 -48.714303,-27.498979,Radar Fixo - 100 kmh@100,,,,active,80
 -34.998394,-7.145211,Radar Fixo - 100 kmh@100,54,,dnit,,
 -48.664878,-27.689144,Radar Fixo - 100 kmh@80,339,,antt,active,80
 -49.857464,-29.410185,Radar Fixo - 100 kmh@80,204,,antt,active,80
 -51.292759,-22.364169,Radar Fixo - 100 kmh@100,,,,,
 -48.600774,-27.596867,Radar Fixo - 100 kmh@100,347,,dnit,,
--47.009082,-22.905540,Radar Fixo - 100 kmh@100,,,,,
+-47.009082,-22.905540,Radar Fixo - 100 kmh@100,,,,,80
 -48.000185,-19.665789,Radar Fixo - 100 kmh@100,,,,,
 -48.722710,-27.470780,Radar Fixo - 100 kmh@100,,,,active,80
 -43.305012,-22.905693,Radar Fixo - 100 kmh@100,,,,,
@@ -11293,7 +11293,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.640777,-27.475666,Radar Fixo - 100 kmh@80,174,,antt,active,80
 -48.361141,-21.257665,Radar Fixo - 100 kmh@100,,,,,
 -34.977145,-7.438901,Radar Fixo - 100 kmh@100,15,,dnit,,
--46.421300,-23.468156,Radar Fixo - 100 kmh@100,,,,,
+-46.421300,-23.468156,Radar Fixo - 100 kmh@100,,,,,80
 -50.942523,-20.619721,Radar Fixo - 100 kmh@100,,,,,
 -48.713290,-27.489604,Radar Fixo - 100 kmh@80,,,,active,80
 -49.232323,-20.774607,Radar Fixo - 100 kmh@100,,,,,
@@ -11302,7 +11302,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -42.661271,-22.707419,Radar Fixo - 100 kmh@100,,,,,
 -48.747749,-23.934250,Radar Fixo - 100 kmh@100,,,,,
 -54.833136,-22.553921,Radar Fixo - 100 kmh@80,324,144,antt,active,80
--47.381161,-20.572186,Radar Fixo - 100 kmh@100,,,,,
+-47.381161,-20.572186,Radar Fixo - 100 kmh@100,,,,,80
 -48.712444,-27.435864,Radar Fixo - 100 kmh@80,166,,antt,active,80
 -49.232892,-20.774849,Radar Fixo - 100 kmh@100,,,,,
 -51.182870,-29.971115,Radar Fixo - 100 kmh@100,105,,antt,active,90
@@ -11313,7 +11313,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.588602,-20.912577,Radar Fixo - 100 kmh@100,,,,,
 -48.700417,-27.549024,Radar Fixo - 100 kmh@80,,,,active,80
 -51.212229,-29.889496,Radar Fixo - 100 kmh@80,103,,antt,active,80
--48.415004,-22.043813,Radar Fixo - 100 kmh@100,,,,,
+-48.415004,-22.043813,Radar Fixo - 100 kmh@100,,,,,80
 -54.828034,-18.959435,Radar Fixo - 100 kmh@80,331,,antt,active,80
 -48.649715,-27.487010,Radar Fixo - 100 kmh@80,70,,antt,active,80
 -49.044398,-24.064579,Radar Fixo - 100 kmh@100,,,,,
@@ -11322,7 +11322,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.695055,-27.589894,Radar Fixo - 100 kmh@80,,,,active,80
 -51.470978,-29.817990,Radar Fixo - 100 kmh@80,280,,antt,active,80
 -52.860654,-22.552209,Radar Fixo - 100 kmh@100,,,,,
--46.432127,-23.708467,Radar Fixo - 100 kmh@100,,,,,
+-46.432127,-23.708467,Radar Fixo - 100 kmh@100,,,,,80
 -51.203626,-29.846005,Radar Fixo - 100 kmh@80,259,,antt,active,80
 -43.413162,-22.766563,Radar Fixo - 100 kmh@100,298,,antt,active,80
 -48.840992,-23.975915,Radar Fixo - 100 kmh@100,,,,,
@@ -11330,7 +11330,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.702454,-27.675517,Radar Fixo - 100 kmh@80,,,,active,80
 -51.553084,-29.780167,Radar Fixo - 100 kmh@80,292,,antt,active,80
 -51.567683,-21.351914,Radar Fixo - 100 kmh@100,,,,,
--46.399510,-23.676858,Radar Fixo - 100 kmh@100,,,,,
+-46.399510,-23.676858,Radar Fixo - 100 kmh@100,,,,,80
 -51.204039,-29.845984,Radar Fixo - 100 kmh@80,259,,antt,active,80
 -43.319993,-22.915531,Radar Fixo - 100 kmh@100,,,,,
 -47.424284,-20.532019,Radar Fixo - 100 kmh@100,,,,,
@@ -11364,23 +11364,23 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.743347,-20.854007,Radar Fixo - 100 kmh@100,,,,,
 -51.070359,-22.193087,Radar Fixo - 100 kmh@100,,,,,
 -45.220360,-22.835828,Radar Fixo - 100 kmh@80,229,,antt,active,80
--47.685464,-21.055210,Radar Fixo - 100 kmh@100,,,,,
+-47.685464,-21.055210,Radar Fixo - 100 kmh@100,,,,,80
 -48.852098,-20.739205,Radar Fixo - 100 kmh@100,,,,,
--47.028508,-22.850055,Radar Fixo - 100 kmh@100,,,,,
+-47.028508,-22.850055,Radar Fixo - 100 kmh@100,,,,,80
 -48.653695,-27.366165,Radar Fixo - 100 kmh@80,,,,active,80
 -50.217892,-29.761315,Radar Fixo - 100 kmh@80,188,,antt,active,80
 -48.545717,-20.918392,Radar Fixo - 100 kmh@100,,,,,
 -50.880051,-22.164635,Radar Fixo - 100 kmh@100,,,,,
 -48.616145,-27.562190,Radar Fixo - 100 kmh@80,153,,antt,active,80
--46.811629,-23.717195,Radar Fixo - 100 kmh@100,,,,,
+-46.811629,-23.717195,Radar Fixo - 100 kmh@100,,,,,80
 -48.894416,-20.695298,Radar Fixo - 100 kmh@100,,,,,
--47.092228,-22.921383,Radar Fixo - 100 kmh@100,,,,,
+-47.092228,-22.921383,Radar Fixo - 100 kmh@100,,,,,80
 -48.646923,-27.362087,Radar Fixo - 100 kmh@80,,,,active,80
 -50.217725,-29.761223,Radar Fixo - 100 kmh@80,188,,antt,active,80
 -42.933114,-22.772142,Radar Fixo - 100 kmh@80,245,,antt,active,80
 -50.899100,-22.190775,Radar Fixo - 100 kmh@100,,,,,
 -48.615702,-27.584414,Radar Fixo - 100 kmh@80,194,,antt,active,80
--46.668404,-23.800471,Radar Fixo - 100 kmh@100,,,,,
+-46.668404,-23.800471,Radar Fixo - 100 kmh@100,,,,,80
 -42.935846,-22.773533,Radar Fixo - 100 kmh@80,65,,antt,active,80
 -47.147437,-22.700486,Radar Fixo - 100 kmh@100,,,,,
 -48.687234,-27.685812,Radar Fixo - 100 kmh@80,,,,active,80
@@ -11390,7 +11390,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -45.197021,-22.821734,Radar Fixo - 100 kmh@100,113,,antt,active,100
 -47.410648,-20.506404,Radar Fixo - 100 kmh@100,,,,,
 -43.093088,-22.829868,Radar Fixo - 100 kmh@100,202,,antt,active,80
--47.156926,-22.738076,Radar Fixo - 100 kmh@100,,,,,
+-47.156926,-22.738076,Radar Fixo - 100 kmh@100,,,,,80
 -48.704371,-27.672828,Radar Fixo - 100 kmh@80,,,,active,80
 -48.650894,-27.621887,Radar Fixo - 100 kmh@80,223,,antt,active,80
 -43.079183,-22.817776,Radar Fixo - 100 kmh@80,227,,antt,active,80
@@ -11412,23 +11412,23 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.281875,-20.620366,Radar Fixo - 100 kmh@100,,,,,
 -47.853540,-20.755797,Radar Fixo - 100 kmh@100,,,,,
 -43.346305,-22.934598,Radar Fixo - 100 kmh@100,,,,,
--47.305421,-22.701574,Radar Fixo - 100 kmh@100,,,,,
--47.598498,-22.750431,Radar Fixo - 100 kmh@100,,,,,
+-47.305421,-22.701574,Radar Fixo - 100 kmh@100,,,,,80
+-47.598498,-22.750431,Radar Fixo - 100 kmh@100,,,,,80
 -43.792205,-22.860644,Radar Fixo - 100 kmh@100,,,,,
 -48.725743,-27.650355,Radar Fixo - 100 kmh@80,,,,active,80
 -48.695279,-27.679321,Radar Fixo - 100 kmh@80,,,,active,80
 -34.982197,-7.142527,Radar Fixo - 100 kmh@100,,,,,
 -44.122095,-22.563434,Radar Fixo - 100 kmh@80,9,,antt,active,80
 -48.869592,-21.092021,Radar Fixo - 100 kmh@100,,,,,
--48.220106,-21.825956,Radar Fixo - 100 kmh@100,,,,,
+-48.220106,-21.825956,Radar Fixo - 100 kmh@100,,,,,80
 -34.974831,-7.140084,Radar Fixo - 100 kmh@100,245,,dnit,,
 -46.561896,-23.898886,Radar Fixo - 100 kmh@100,,,,,
 -43.970455,-20.016339,Radar Fixo - 100 kmh@100,213,,antt,active,80
 -48.708427,-27.670731,Radar Fixo - 100 kmh@80,,,,active,80
 -47.576314,-22.819033,Radar Fixo - 100 kmh@100,,,,,
--47.159979,-22.849662,Radar Fixo - 100 kmh@100,,,,,
+-47.159979,-22.849662,Radar Fixo - 100 kmh@100,,,,,80
 -43.619035,-22.731819,Radar Fixo - 100 kmh@100,96,,antt,active,80
--46.563319,-23.895787,Radar Fixo - 100 kmh@100,,,,,
+-46.563319,-23.895787,Radar Fixo - 100 kmh@100,,,,,100
 -46.406797,-23.391007,Radar Fixo - 100 kmh@100,,,,,
 -48.716121,-27.663260,Radar Fixo - 100 kmh@100,,,,active,80
 -52.284058,-30.168415,Radar Fixo - 100 kmh@100,,,,,
@@ -11445,13 +11445,13 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.717422,-27.634484,Radar Fixo - 100 kmh@80,,,,active,80
 -51.840883,-29.580871,Radar Fixo - 100 kmh@80,136,,antt,active,80
 -48.872936,-26.317198,Radar Fixo - 100 kmh@80,325,,antt,active,80
--47.268052,-22.743909,Radar Fixo - 100 kmh@100,,,,,
+-47.268052,-22.743909,Radar Fixo - 100 kmh@100,,,,,80
 -48.711088,-27.634845,Radar Fixo - 100 kmh@80,,,,active,80
 -51.841000,-29.581273,Radar Fixo - 100 kmh@80,136,,antt,active,80
 -48.873622,-26.315419,Radar Fixo - 100 kmh@80,179,,antt,active,80
 -43.346159,-22.934684,Radar Fixo - 100 kmh@100,,,,,
 -48.700363,-27.632014,Radar Fixo - 100 kmh@80,,,,active,80
--46.394648,-23.666155,Radar Fixo - 100 kmh@100,,,,,
+-46.394648,-23.666155,Radar Fixo - 100 kmh@100,,,,,80
 -48.719705,-26.516858,Radar Fixo - 100 kmh@80,332,,antt,active,80
 -35.228976,-6.122107,Radar Fixo - 100 kmh@100,,,,,
 -48.694876,-27.621334,Radar Fixo - 100 kmh@80,,,,active,80
@@ -11473,19 +11473,19 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.709346,-27.522796,Radar Fixo - 100 kmh@80,,,,active,80
 -38.566194,-12.557041,Radar Fixo - 100 kmh@100,,,,,
 -48.637058,-27.608117,Radar Fixo - 100 kmh@80,222,,antt,active,80
--46.543213,-23.763258,Radar Fixo - 100 kmh@100,,,,,
+-46.543213,-23.763258,Radar Fixo - 100 kmh@100,,,,,80
 -48.720072,-27.461928,Radar Fixo - 100 kmh@80,,,,active,80
--46.567199,-23.757078,Radar Fixo - 100 kmh@100,,,,,
+-46.567199,-23.757078,Radar Fixo - 100 kmh@100,,,,,80
 -48.669097,-27.642387,Radar Fixo - 100 kmh@80,213,,antt,active,80
--46.512417,-23.874702,Radar Fixo - 100 kmh@100,,,,,
+-46.512417,-23.874702,Radar Fixo - 100 kmh@100,,,,,80
 -48.711171,-27.447951,Radar Fixo - 100 kmh@80,,,,active,80
--46.744593,-23.798894,Radar Fixo - 100 kmh@100,,,,,
+-46.744593,-23.798894,Radar Fixo - 100 kmh@100,,,,,80
 -35.118755,-7.203301,Radar Fixo - 100 kmh@100,,,,,
--46.797812,-23.753531,Radar Fixo - 100 kmh@100,,,,,
+-46.797812,-23.753531,Radar Fixo - 100 kmh@100,,,,,80
 -48.710452,-27.422884,Radar Fixo - 100 kmh@80,,,,active,80
 -46.522897,-23.916671,Radar Fixo - 100 kmh@100,,,,,
 -48.708887,-27.418565,Radar Fixo - 100 kmh@80,,,,active,80
--48.170907,-23.832642,Radar Fixo - 100 kmh@100,,,,,
+-48.170907,-23.832642,Radar Fixo - 100 kmh@100,,,,,80
 -48.701323,-27.395523,Radar Fixo - 100 kmh@80,,,,active,80
 -46.848386,-23.361749,Radar Fixo - 100 kmh@100,,,,,
 -48.638210,-27.355846,Radar Fixo - 100 kmh@80,,,,active,80
@@ -11498,12 +11498,12 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.792326,-22.860630,Radar Fixo - 100 kmh@100,,,,,
 -43.429826,-22.757780,Radar Fixo - 100 kmh@100,127,,antt,active,80
 -48.668853,-23.928368,Radar Fixo - 100 kmh@100,,,,,
--47.160120,-22.849808,Radar Fixo - 100 kmh@100,,,,,
+-47.160120,-22.849808,Radar Fixo - 100 kmh@100,,,,,80
 -43.414034,-22.765961,Radar Fixo - 100 kmh@80,298,,antt,active,80
 -43.455833,-22.740621,Radar Fixo - 100 kmh@100,,,,,
 -48.781437,-21.786333,Radar Fixo - 100 kmh@100,,,,,
 -47.860453,-21.172707,Radar Fixo - 100 kmh@100,,,,,
--46.977574,-23.083190,Radar Fixo - 100 kmh@100,,,,,
+-46.977574,-23.083190,Radar Fixo - 100 kmh@100,,,,,80
 -48.455432,-22.101111,Radar Fixo - 100 kmh@100,,,,,
 -48.694539,-27.571323,Radar Fixo - 100 kmh@80,,,,active,80
 -48.684267,-27.380833,Radar Fixo - 100 kmh@80,,,,active,80
@@ -11511,28 +11511,28 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.949747,-19.800200,Radar Fixo - 110 kmh@110,,,,,
 -46.969841,-22.364424,Radar Fixo - 110 kmh@110,,,,,
 -50.943622,-20.186363,Radar Fixo - 110 kmh@110,,,,,
--47.930993,-21.533305,Radar Fixo - 110 kmh@110,,,,,
+-47.930993,-21.533305,Radar Fixo - 110 kmh@110,,,,,90
 -43.949980,-19.799978,Radar Fixo - 110 kmh@110,,,,,
 -51.832269,-21.897163,Radar Fixo - 110 kmh@110,,,,,
--48.688717,-22.309295,Radar Fixo - 110 kmh@110,,,,,
+-48.688717,-22.309295,Radar Fixo - 110 kmh@110,,,,,90
 -43.967697,-19.704951,Radar Fixo - 110 kmh@110,,,,,
--46.632942,-23.664456,Radar Fixo - 110 kmh@110,,,,,
+-46.632942,-23.664456,Radar Fixo - 110 kmh@110,,,,,90
 -47.013059,-22.703083,Radar Fixo - 110 kmh@110,,,,,
 -50.934630,-20.188490,Radar Fixo - 110 kmh@110,,,,,
 -47.417343,-22.094591,Radar Fixo - 110 kmh@110,,,,,
 -48.153163,-21.028116,Radar Fixo - 110 kmh@110,,,,,
 -49.627761,-22.241485,Radar Fixo - 110 kmh@110,,,,,
--48.666295,-22.307996,Radar Fixo - 110 kmh@110,,,,,
+-48.666295,-22.307996,Radar Fixo - 110 kmh@110,,,,,90
 -44.055659,-22.585992,Radar Fixo - 110 kmh@110,67,,antt,active,90
--48.206481,-21.798333,Radar Fixo - 110 kmh@110,,,,,
--47.117264,-23.013206,Radar Fixo - 110 kmh@110,,,,,
--47.786535,-20.054478,Radar Fixo - 110 kmh@110,,,,,
+-48.206481,-21.798333,Radar Fixo - 110 kmh@110,,,,,90
+-47.117264,-23.013206,Radar Fixo - 110 kmh@110,,,,,90
+-47.786535,-20.054478,Radar Fixo - 110 kmh@110,,,,,90
 -49.050467,-28.582115,Radar Fixo - 110 kmh@110,329,,antt,active,90
 -47.420329,-23.510562,Radar Fixo - 110 kmh@110,,,,,
 -50.185567,-22.749291,Radar Fixo - 110 kmh@110,,,,,
--48.732609,-22.323583,Radar Fixo - 110 kmh@110,,,,,
+-48.732609,-22.323583,Radar Fixo - 110 kmh@110,,,,,90
 -43.565631,-22.729911,Radar Fixo - 110 kmh@110,,,,,
--51.366421,-20.884830,Radar Fixo - 110 kmh@110,,,,,
+-51.366421,-20.884830,Radar Fixo - 110 kmh@110,,,,,90
 -43.913872,-19.700269,Radar Fixo - 110 kmh@110,,,,,
 -49.528812,-28.972319,Radar Fixo - 110 kmh@110,222,,antt,active,90
 -49.570623,-20.741524,Radar Fixo - 110 kmh@110,,,,,
@@ -11541,11 +11541,11 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.939203,-21.201456,Radar Fixo - 110 kmh@110,,,,,
 -43.960032,-19.722478,Radar Fixo - 110 kmh@110,,,,,
 -47.953177,-23.447373,Radar Fixo - 110 kmh@110,,,,,
--46.524652,-23.784706,Radar Fixo - 110 kmh@110,,,,,
+-46.524652,-23.784706,Radar Fixo - 110 kmh@110,,,,,90
 -49.351799,-28.793644,Radar Fixo - 110 kmh@110,56,,antt,active,90
 -43.283721,-22.652429,Radar Fixo - 110 kmh@110,,,,,
 -43.907614,-19.676840,Radar Fixo - 110 kmh@110,,,,,
--49.001245,-22.421267,Radar Fixo - 110 kmh@110,,,,,
+-49.001245,-22.421267,Radar Fixo - 110 kmh@110,,,,,90
 -47.020365,-22.752089,Radar Fixo - 110 kmh@110,,,,,
 -43.961531,-19.724145,Radar Fixo - 110 kmh@110,,,,,
 -46.538866,-23.484471,Radar Fixo - 110 kmh@110,233,,antt,active,90
@@ -11553,47 +11553,47 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.232230,-28.717211,Radar Fixo - 110 kmh@110,232,,antt,active,90
 -48.881121,-28.428280,Radar Fixo - 110 kmh@110,111,,antt,active,90
 -47.327970,-23.319651,Radar Fixo - 110 kmh@110,,,,,
--50.453735,-22.635352,Radar Fixo - 110 kmh@110,,,,,
+-50.453735,-22.635352,Radar Fixo - 110 kmh@110,,,,,90
 -46.970066,-22.364220,Radar Fixo - 110 kmh@110,,,,,
 -43.955801,-19.741494,Radar Fixo - 110 kmh@110,,,,,
--49.806780,-21.653763,Radar Fixo - 110 kmh@110,,,,,
+-49.806780,-21.653763,Radar Fixo - 110 kmh@110,,,,,90
 -48.460007,-20.910283,Radar Fixo - 110 kmh@110,,,,,
 -49.221332,-28.714489,Radar Fixo - 110 kmh@110,78,,antt,active,90
 -48.451638,-16.105426,Radar Fixo - 110 kmh@110,,,,,
 -43.945880,-19.736168,Radar Fixo - 110 kmh@110,,,,,
--51.346784,-22.217146,Radar Fixo - 110 kmh@110,,,,,
--46.972482,-22.394983,Radar Fixo - 110 kmh@110,,,,,
+-51.346784,-22.217146,Radar Fixo - 110 kmh@110,,,,,90
+-46.972482,-22.394983,Radar Fixo - 110 kmh@110,,,,,90
 -43.956023,-19.744657,Radar Fixo - 110 kmh@110,,,,,
 -49.165886,-22.220671,Radar Fixo - 110 kmh@110,,,,,
 -48.457051,-20.918679,Radar Fixo - 110 kmh@110,,,,,
 -49.181353,-28.697709,Radar Fixo - 110 kmh@110,85,,antt,active,90
--47.810655,-21.071364,Radar Fixo - 110 kmh@110,,,,,
+-47.810655,-21.071364,Radar Fixo - 110 kmh@110,,,,,90
 -45.727978,-23.123165,Radar Fixo - 110 kmh@110,243,,antt,active,90
--50.243514,-22.719910,Radar Fixo - 110 kmh@110,,,,,
+-50.243514,-22.719910,Radar Fixo - 110 kmh@110,,,,,90
 -47.013289,-22.703085,Radar Fixo - 110 kmh@110,,,,,
 -43.948386,-19.770839,Radar Fixo - 110 kmh@110,,,,,
--49.018870,-22.394933,Radar Fixo - 110 kmh@110,,,,,
+-49.018870,-22.394933,Radar Fixo - 110 kmh@110,,,,,90
 -46.342839,-23.409484,Radar Fixo - 110 kmh@110,255,,antt,active,90
 -49.052429,-28.577424,Radar Fixo - 110 kmh@110,173,,antt,active,90
--47.863604,-20.557439,Radar Fixo - 110 kmh@110,,,,,
+-47.863604,-20.557439,Radar Fixo - 110 kmh@110,,,,,90
 -48.699835,-28.276550,Radar Fixo - 110 kmh@110,,,,,
--46.771554,-23.004232,Radar Fixo - 110 kmh@110,,,,,
+-46.771554,-23.004232,Radar Fixo - 110 kmh@110,,,,,90
 -47.584372,-22.524227,Radar Fixo - 110 kmh@110,,,,,
 -43.948632,-19.770859,Radar Fixo - 110 kmh@110,,,,,
 -49.007889,-21.143650,Radar Fixo - 110 kmh@110,,,,,
 -45.961060,-23.266575,Radar Fixo - 110 kmh@110,,,,,
 -48.944375,-28.426007,Radar Fixo - 110 kmh@110,59,,antt,active,90
--47.842034,-20.526259,Radar Fixo - 110 kmh@110,,,,,
+-47.842034,-20.526259,Radar Fixo - 110 kmh@110,,,,,90
 -49.144244,-28.681222,Radar Fixo - 110 kmh@110,240,,antt,active,90
--47.788489,-21.101050,Radar Fixo - 110 kmh@110,,,,,
+-47.788489,-21.101050,Radar Fixo - 110 kmh@110,,,,,90
 -46.974448,-22.278653,Radar Fixo - 110 kmh@110,,,,,
 -43.905169,-19.685174,Radar Fixo - 110 kmh@110,,,,,
 -49.706941,-16.096912,Radar Fixo - 110 kmh@110,,,,,
 -45.973862,-23.274703,Radar Fixo - 110 kmh@110,,,,,
 -48.935916,-28.424608,Radar Fixo - 110 kmh@110,278,,antt,active,90
--47.839336,-20.522210,Radar Fixo - 110 kmh@110,,,,,
+-47.839336,-20.522210,Radar Fixo - 110 kmh@110,,,,,90
 -48.766045,-16.265696,Radar Fixo - 110 kmh@110,,,,,
--49.500649,-22.772278,Radar Fixo - 110 kmh@110,,,,,
+-49.500649,-22.772278,Radar Fixo - 110 kmh@110,,,,,90
 -46.974209,-22.278611,Radar Fixo - 110 kmh@110,,,,,
 -48.545333,-20.665838,Radar Fixo - 110 kmh@110,,,,,
 -35.977738,-8.167595,Radar Fixo - 110 kmh@110,,,,,
@@ -11616,7 +11616,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -44.643614,-22.496799,Radar Fixo - 110 kmh@110,297,,antt,active,90
 -48.694482,-28.170225,Radar Fixo - 110 kmh@110,186,,antt,active,90
 -44.995584,-22.671718,Radar Fixo - 110 kmh@110,28,,antt,active,90
--49.806891,-21.653945,Radar Fixo - 110 kmh@110,,,,,
+-49.806891,-21.653945,Radar Fixo - 110 kmh@110,,,,,90
 -46.686743,-23.037886,Radar Fixo - 110 kmh@110,,,,,
 -46.256126,-23.378805,Radar Fixo - 110 kmh@110,,,,,
 -48.679338,-27.961639,Radar Fixo - 110 kmh@110,14,,antt,active,90
@@ -11625,36 +11625,36 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.692920,-28.157274,Radar Fixo - 110 kmh@110,188,,antt,active,90
 -48.677874,-27.958265,Radar Fixo - 110 kmh@110,,,,,
 -35.977008,-8.233754,Radar Fixo - 110 kmh@110,,,,,
--47.493448,-21.858000,Radar Fixo - 110 kmh@110,,,,,
+-47.493448,-21.858000,Radar Fixo - 110 kmh@110,,,,,90
 -46.538360,-23.484014,Radar Fixo - 110 kmh@110,233,,antt,active,90
 -47.840965,-23.328096,Radar Fixo - 110 kmh@110,,,,,
 -46.406152,-23.852951,Radar Fixo - 110 kmh@110,,,,,
 -45.114443,-22.757534,Radar Fixo - 110 kmh@110,52,,antt,active,90
 -48.705554,-28.097757,Radar Fixo - 110 kmh@110,325,,antt,active,90
--48.501867,-22.267413,Radar Fixo - 110 kmh@110,,,,,
+-48.501867,-22.267413,Radar Fixo - 110 kmh@110,,,,,90
 -46.406566,-23.853205,Radar Fixo - 110 kmh@110,,,,,
 -47.883245,-20.667533,Radar Fixo - 110 kmh@110,,,,,
 -45.728154,-23.123118,Radar Fixo - 110 kmh@110,243,,antt,active,90
--48.996306,-22.316696,Radar Fixo - 110 kmh@110,,,,,
+-48.996306,-22.316696,Radar Fixo - 110 kmh@110,,,,,90
 -50.492716,-20.272390,Radar Fixo - 110 kmh@110,,,,,
 -44.669334,-22.502124,Radar Fixo - 110 kmh@110,,,,,
 -48.717004,-28.059614,Radar Fixo - 110 kmh@110,346,,antt,active,90
 -48.882947,-22.337162,Radar Fixo - 110 kmh@110,,,,,
 -49.129991,-28.676415,Radar Fixo - 110 kmh@110,82,,antt,active,90
--47.883246,-20.600577,Radar Fixo - 110 kmh@110,,,,,
+-47.883246,-20.600577,Radar Fixo - 110 kmh@110,,,,,90
 -47.553147,-22.453819,Radar Fixo - 110 kmh@110,,,,,
--48.976759,-22.320338,Radar Fixo - 110 kmh@110,,,,,
+-48.976759,-22.320338,Radar Fixo - 110 kmh@110,,,,,90
 -49.119782,-28.669341,Radar Fixo - 110 kmh@110,233,,antt,active,90
 -44.395776,-22.455705,Radar Fixo - 110 kmh@110,265,,antt,active,90
 -47.761877,-22.221102,Radar Fixo - 110 kmh@110,,,,,
 -49.550207,-22.824117,Radar Fixo - 110 kmh@110,,,,,
 -49.026373,-28.474363,Radar Fixo - 110 kmh@110,55,,antt,active,90
 -47.000466,-22.562903,Radar Fixo - 110 kmh@110,,,,,
--47.111854,-23.002971,Radar Fixo - 110 kmh@110,,,,,
+-47.111854,-23.002971,Radar Fixo - 110 kmh@110,,,,,90
 -45.610990,-23.054688,Radar Fixo - 110 kmh@110,249,,antt,active,90
--46.972281,-22.395019,Radar Fixo - 110 kmh@110,,,,,
+-46.972281,-22.395019,Radar Fixo - 110 kmh@110,,,,,90
 -49.528656,-28.972294,Radar Fixo - 110 kmh@110,222,,antt,active,90
--48.178269,-21.818447,Radar Fixo - 110 kmh@110,,,,,
+-48.178269,-21.818447,Radar Fixo - 110 kmh@110,,,,,90
 -45.423381,-22.961601,Radar Fixo - 110 kmh@110,61,,antt,active,90
 -49.772476,-22.909444,Radar Fixo - 110 kmh@110,,,,,
 -48.471405,-16.100175,Radar Fixo - 110 kmh@110,,,,,
@@ -11668,11 +11668,11 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.289509,-22.698990,Radar Fixo - 110 kmh@110,,,,,
 -49.025570,-16.448358,Radar Fixo - 110 kmh@110,,,,,
 -50.642675,-20.238173,Radar Fixo - 110 kmh@110,,,,,
--47.885729,-21.191750,Radar Fixo - 110 kmh@110,,,,,
+-47.885729,-21.191750,Radar Fixo - 110 kmh@110,,,,,90
 -48.391561,-16.115595,Radar Fixo - 110 kmh@110,,,,,
 -48.262157,-16.057586,Radar Fixo - 110 kmh@110,,,,,
 -50.642636,-20.237998,Radar Fixo - 110 kmh@110,,,,,
--47.447460,-21.993545,Radar Fixo - 110 kmh@110,,,,,
+-47.447460,-21.993545,Radar Fixo - 110 kmh@110,,,,,90
 -48.363170,-16.109674,Radar Fixo - 110 kmh@110,,,,,
 -49.001477,-16.883079,Radar Fixo - 110 kmh@110,,,,,
 -49.570725,-20.741099,Radar Fixo - 110 kmh@110,,,,,
@@ -11686,7 +11686,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -50.529679,-20.264887,Radar Fixo - 110 kmh@110,,,,,
 -48.774407,-28.387981,Radar Fixo - 110 kmh@110,40,,antt,active,90
 -49.630554,-29.085085,Radar Fixo - 110 kmh@110,194,,antt,active,90
--47.830582,-21.118603,Radar Fixo - 110 kmh@110,,,,,
+-47.830582,-21.118603,Radar Fixo - 110 kmh@110,,,,,90
 -50.240765,-20.272811,Radar Fixo - 110 kmh@110,,,,,
 -48.827413,-18.849682,Radar Fixo - 110 kmh@110,85,,antt,active,90
 -49.527598,-28.944136,Radar Fixo - 110 kmh@110,,,,active,90
@@ -11724,45 +11724,45 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.995297,-20.399130,Radar Fixo - 110 kmh@110,,,,,
 -49.794162,-20.490512,Radar Fixo - 110 kmh@110,,,,,
 -47.511213,-22.467818,Radar Fixo - 110 kmh@110,,,,,
--49.286857,-20.914482,Radar Fixo - 110 kmh@110,,,,,
--47.656718,-22.324662,Radar Fixo - 110 kmh@110,,,,,
+-49.286857,-20.914482,Radar Fixo - 110 kmh@110,,,,,90
+-47.656718,-22.324662,Radar Fixo - 110 kmh@110,,,,,90
 -47.504192,-22.471064,Radar Fixo - 110 kmh@110,,,,,
 -47.473936,-22.480474,Radar Fixo - 110 kmh@110,,,,,
--47.673373,-22.297328,Radar Fixo - 110 kmh@110,,,,,
+-47.673373,-22.297328,Radar Fixo - 110 kmh@110,,,,,90
 -47.613064,-22.380579,Radar Fixo - 110 kmh@110,,,,,
 -47.477811,-22.479056,Radar Fixo - 110 kmh@110,,,,,
--47.892883,-20.753836,Radar Fixo - 110 kmh@110,,,,,
--47.785214,-21.105941,Radar Fixo - 110 kmh@110,,,,,
+-47.892883,-20.753836,Radar Fixo - 110 kmh@110,,,,,90
+-47.785214,-21.105941,Radar Fixo - 110 kmh@110,,,,,90
 -49.253311,-16.942017,Radar Fixo - 110 kmh@110,,,,,
 -49.254821,-16.901039,Radar Fixo - 110 kmh@110,,,,,
 -50.608369,-20.246292,Radar Fixo - 110 kmh@110,,,,,
 -50.599630,-20.248162,Radar Fixo - 110 kmh@110,,,,,
--47.825180,-21.050245,Radar Fixo - 110 kmh@110,,,,,
+-47.825180,-21.050245,Radar Fixo - 110 kmh@110,,,,,90
 -47.707542,-16.677949,Radar Fixo - 110 kmh@110,,,,,
--48.440358,-23.138634,Radar Fixo - 120 kmh@120,,,,,
--46.077342,-23.359685,Radar Fixo - 120 kmh@120,,,,,
--48.209323,-23.203472,Radar Fixo - 120 kmh@120,,,,,
--47.266121,-22.871719,Radar Fixo - 120 kmh@120,,,,,
--46.960233,-23.516767,Radar Fixo - 120 kmh@120,,,,,
+-48.440358,-23.138634,Radar Fixo - 120 kmh@120,,,,,90
+-46.077342,-23.359685,Radar Fixo - 120 kmh@120,,,,,90
+-48.209323,-23.203472,Radar Fixo - 120 kmh@120,,,,,90
+-47.266121,-22.871719,Radar Fixo - 120 kmh@120,,,,,90
+-46.960233,-23.516767,Radar Fixo - 120 kmh@120,,,,,90
 -48.415716,-23.143406,Radar Fixo - 120 kmh@120,,,,,
 -46.956942,-23.154039,Radar Fixo - 120 kmh@120,,,,,
--47.792906,-23.283655,Radar Fixo - 120 kmh@120,,,,,
+-47.792906,-23.283655,Radar Fixo - 120 kmh@120,,,,,90
 -47.098174,-23.003867,Radar Fixo - 120 kmh@120,,,,,
 -45.845242,-23.277924,Radar Fixo - 120 kmh@120,,,,,
 -47.090244,-23.436161,Radar Fixo - 120 kmh@120,,,,,
--47.270499,-23.413911,Radar Fixo - 120 kmh@120,,,,,
+-47.270499,-23.413911,Radar Fixo - 120 kmh@120,,,,,90
 -47.021179,-23.468240,Radar Fixo - 120 kmh@120,,,,,
 -48.235783,-23.193986,Radar Fixo - 120 kmh@120,,,,,
--46.847715,-23.284679,Radar Fixo - 120 kmh@120,,,,,
--47.192621,-23.420323,Radar Fixo - 120 kmh@120,,,,,
--47.433627,-22.782497,Radar Fixo - 120 kmh@120,,,,,
--45.915570,-23.324424,Radar Fixo - 120 kmh@120,,,,,
--47.516047,-23.350301,Radar Fixo - 120 kmh@120,,,,,
--46.311764,-23.444154,Radar Fixo - 120 kmh@120,,,,,
+-46.847715,-23.284679,Radar Fixo - 120 kmh@120,,,,,90
+-47.192621,-23.420323,Radar Fixo - 120 kmh@120,,,,,90
+-47.433627,-22.782497,Radar Fixo - 120 kmh@120,,,,,90
+-45.915570,-23.324424,Radar Fixo - 120 kmh@120,,,,,90
+-47.516047,-23.350301,Radar Fixo - 120 kmh@120,,,,,90
+-46.311764,-23.444154,Radar Fixo - 120 kmh@120,,,,,90
 -47.372732,-22.824701,Radar Fixo - 120 kmh@120,,,,,
--46.205159,-23.419932,Radar Fixo - 120 kmh@120,,,,,
+-46.205159,-23.419932,Radar Fixo - 120 kmh@120,,,,,90
 -46.947426,-23.162559,Radar Fixo - 120 kmh@120,,,,,
--46.571990,-23.870660,Radar Fixo - 120 kmh@120,,,,,
+-46.571990,-23.870660,Radar Fixo - 120 kmh@120,,,,,90
 -46.594546,-23.753618,Radar Fixo - 120 kmh@120,,,,,
 -46.745613,-23.474654,Radar Fixo - 120 kmh@120,,,,,
 -113.909613,50.888440,Radar Movel - 40 kmh@40,,,,,
@@ -12353,7 +12353,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.483364,-23.532966,Radar Movel - 70 kmh@70,,,,,
 -47.763244,-21.202949,Radar Movel - 70 kmh@70,,,,,
 -48.172231,-21.790168,Radar Movel - 70 kmh@70,,,,,
--47.775426,-21.193906,Radar Movel - 70 kmh@70,,,,,
+-47.775426,-21.193906,Radar Movel - 70 kmh@70,,,,,70
 -47.430828,-23.516647,Radar Movel - 70 kmh@70,,,,,
 -48.155200,-21.764198,Radar Movel - 70 kmh@70,,,,,
 -47.473700,-23.531088,Radar Movel - 70 kmh@70,,,,,
@@ -12361,7 +12361,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -38.495411,-12.981455,Radar Movel - 70 kmh@70,,,,,
 -46.699837,-23.618168,Radar Movel - 70 kmh@70,,,,,
 -48.172341,-21.790168,Radar Movel - 70 kmh@70,,,,,
--47.777314,-21.192792,Radar Movel - 70 kmh@70,,,,,
+-47.777314,-21.192792,Radar Movel - 70 kmh@70,,,,,70
 -46.582361,-23.646839,Radar Movel - 70 kmh@70,,,,,
 -47.810867,-21.156817,Radar Movel - 70 kmh@70,,,,,
 -47.397640,-22.585202,Radar Movel - 70 kmh@70,,,,,
@@ -12709,7 +12709,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -53.656306,-29.711039,Radar Movel - 80 kmh@80,,,,,
 -54.319068,-24.895740,Radar Movel - 80 kmh@80,,,,,
 -49.908870,-26.252173,Radar Movel - 80 kmh@80,,,,,
--49.966777,-22.221824,Radar Movel - 80 kmh@80,,,,,
+-49.966777,-22.221824,Radar Movel - 80 kmh@80,,,,,80
 -45.707585,-23.350975,Radar Movel - 80 kmh@80,,,,,
 -49.071542,-26.866233,Radar Movel - 80 kmh@80,,,,,
 -56.025956,-21.386715,Radar Movel - 80 kmh@80,,,,,
@@ -12729,7 +12729,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -46.737908,-21.964093,Radar Movel - 80 kmh@80,,,,,
 -50.691066,-22.827760,Radar Movel - 80 kmh@80,,,,,
 -49.448551,-16.729284,Radar Movel - 80 kmh@80,,,,,
--49.913903,-22.229919,Radar Movel - 80 kmh@80,,,,,
+-49.913903,-22.229919,Radar Movel - 80 kmh@80,,,,,80
 -46.738021,-21.964029,Radar Movel - 80 kmh@80,,,,,
 -53.461462,-23.891525,Radar Movel - 80 kmh@80,,,,,
 -51.242619,-29.184724,Radar Movel - 80 kmh@80,,,,,
@@ -12803,7 +12803,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -52.232402,-27.844594,Radar Movel - 80 kmh@80,,,,,
 -40.802564,-20.809963,Radar Movel - 80 kmh@80,,,,,
 -63.016851,-9.990697,Radar Movel - 80 kmh@80,,,,,
--46.847062,-23.087906,Radar Movel - 80 kmh@80,,,,,
+-46.847062,-23.087906,Radar Movel - 80 kmh@80,,,,,80
 -45.963385,-22.415358,Radar Movel - 80 kmh@80,,,,,
 -49.783909,-21.576169,Radar Movel - 80 kmh@80,,,,,
 -46.440135,-23.916679,Radar Movel - 80 kmh@80,,,,,
@@ -12965,7 +12965,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.431536,-20.819744,Radar Movel - 90 kmh@90,,,,,
 -46.734280,-23.545145,Radar Movel - 90 kmh@90,,,,,
 -47.030510,-22.788338,Radar Movel - 90 kmh@90,,,,,
--47.800135,-21.223519,Radar Movel - 90 kmh@90,,,,,
+-47.800135,-21.223519,Radar Movel - 90 kmh@90,,,,,90
 -46.582934,-23.647255,Radar Movel - 90 kmh@90,,,,,
 -51.447718,-22.114961,Radar Movel - 90 kmh@90,,,,,
 -50.340223,-21.269124,Radar Movel - 90 kmh@90,,,,,
@@ -12980,7 +12980,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.394552,-20.823275,Radar Movel - 90 kmh@90,,,,,
 -47.676943,-22.685208,Radar Movel - 90 kmh@90,,,,,
 -46.724439,-23.503750,Radar Movel - 90 kmh@90,,,,,
--47.773268,-21.215293,Radar Movel - 90 kmh@90,,,,,
+-47.773268,-21.215293,Radar Movel - 90 kmh@90,,,,,90
 -47.029809,-22.786793,Radar Movel - 90 kmh@90,,,,,
 -46.729384,-23.498041,Radar Movel - 90 kmh@90,,,,,
 -46.947694,-22.343680,Radar Movel - 90 kmh@90,,,,,
@@ -13011,7 +13011,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -46.576441,-23.657580,Radar Movel - 90 kmh@90,,,,,
 -48.615993,-21.472160,Radar Movel - 90 kmh@90,,,,,
 -46.559209,-23.497804,Radar Movel - 90 kmh@90,,,,,
--49.449547,-20.816079,Radar Movel - 90 kmh@90,,,,,
+-49.449547,-20.816079,Radar Movel - 90 kmh@90,,,,,90
 -47.330291,-22.760087,Radar Movel - 90 kmh@90,,,,,
 -47.315536,-22.758435,Radar Movel - 90 kmh@90,,,,,
 -49.353266,-20.840242,Radar Movel - 90 kmh@90,,,,,
@@ -13101,7 +13101,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.836632,-26.410508,Radar Movel - 100 kmh@100,,,,,
 -47.073923,-23.247786,Radar Movel - 100 kmh@100,,,,,
 -46.807256,-23.726745,Radar Movel - 100 kmh@100,,,,,
--48.568876,-22.379544,Radar Movel - 100 kmh@100,,,,,
+-48.568876,-22.379544,Radar Movel - 100 kmh@100,,,,,80
 -48.475456,-22.746976,Radar Movel - 100 kmh@100,,,,,
 -46.717468,-23.804438,Radar Movel - 100 kmh@100,,,,,
 -48.946827,-23.381948,Radar Movel - 100 kmh@100,,,,,
@@ -13109,7 +13109,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.852507,-22.563221,Radar Movel - 100 kmh@100,,,,,
 -49.210577,-22.468858,Radar Movel - 100 kmh@100,,,,,
 -48.238740,-18.801608,Radar Movel - 100 kmh@100,,,,,
--48.568863,-22.379822,Radar Movel - 100 kmh@100,,,,,
+-48.568863,-22.379822,Radar Movel - 100 kmh@100,,,,,80
 -48.627212,-27.337783,Radar Movel - 100 kmh@100,,,,,
 -48.462897,-22.140096,Radar Movel - 100 kmh@100,,,,,
 -48.182068,-22.984783,Radar Movel - 100 kmh@100,,,,,
@@ -13203,7 +13203,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -51.250978,-23.252105,Radar Movel - 100 kmh@100,,,,,
 -44.166125,-17.937461,Radar Movel - 100 kmh@100,,,,,
 -46.961644,-23.107115,Radar Movel - 100 kmh@100,,,,,
--47.268296,-22.743864,Radar Movel - 100 kmh@100,,,,,
+-47.268296,-22.743864,Radar Movel - 100 kmh@100,,,,,80
 -47.506762,-20.966686,Radar Movel - 100 kmh@100,,,,,
 -52.372640,-28.953885,Radar Movel - 100 kmh@100,,,,,
 -47.031691,-22.999577,Radar Movel - 100 kmh@100,,,,,
@@ -13232,7 +13232,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.868344,-26.099426,Radar Movel - 100 kmh@100,,,,,
 -46.575285,-23.142132,Radar Movel - 100 kmh@100,,,,,
 -48.631851,-27.268244,Radar Movel - 100 kmh@100,,,,,
--50.473605,-22.667134,Radar Movel - 100 kmh@100,,,,,
+-50.473605,-22.667134,Radar Movel - 100 kmh@100,,,,,80
 -44.453221,-18.388203,Radar Movel - 100 kmh@100,,,,,
 -46.817548,-23.509326,Radar Movel - 100 kmh@100,,,,,
 -46.372596,-23.627063,Radar Movel - 100 kmh@100,,,,,
@@ -13297,7 +13297,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -51.198745,-21.572636,Radar Movel - 100 kmh@100,,,,,
 -49.324394,-20.797296,Radar Movel - 100 kmh@100,,,,,
 -48.858966,-26.363288,Radar Movel - 100 kmh@100,,,,,
--51.177545,-22.124431,Radar Movel - 100 kmh@100,,,,,
+-51.177545,-22.124431,Radar Movel - 100 kmh@100,,,,,80
 -46.876476,-22.451099,Radar Movel - 100 kmh@100,,,,,
 -46.933108,-23.517437,Radar Movel - 100 kmh@100,,,,,
 -52.526850,-21.803753,Radar Movel - 100 kmh@100,,,,,
@@ -13540,7 +13540,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.655773,-22.328357,Radar Movel - 110 kmh@110,,,,,
 -53.554537,-24.887967,Radar Movel - 110 kmh@110,,,,,
 -48.754585,-16.228779,Radar Movel - 110 kmh@110,,,,,
--49.837435,-22.217836,Radar Movel - 110 kmh@110,,,,,
+-49.837435,-22.217836,Radar Movel - 110 kmh@110,,,,,90
 -50.141440,-25.008627,Radar Movel - 110 kmh@110,,,,,
 -53.554728,-24.888028,Radar Movel - 110 kmh@110,,,,,
 -48.529816,-22.822484,Radar Movel - 110 kmh@110,,,,,
@@ -13548,7 +13548,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.787168,-22.229908,Radar Movel - 110 kmh@110,,,,,
 -46.978298,-22.904729,Radar Movel - 110 kmh@110,,,,,
 -49.028903,-22.380188,Radar Movel - 110 kmh@110,,,,,
--49.837524,-22.217898,Radar Movel - 110 kmh@110,,,,,
+-49.837524,-22.217898,Radar Movel - 110 kmh@110,,,,,90
 -47.372692,-23.435019,Radar Movel - 110 kmh@110,,,,,
 -46.986839,-22.505741,Radar Movel - 110 kmh@110,,,,,
 -48.549216,-22.791137,Radar Movel - 110 kmh@110,,,,,
@@ -13576,7 +13576,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.007239,-22.609224,Radar Movel - 110 kmh@110,,,,,
 -46.962728,-22.320881,Radar Movel - 110 kmh@110,,,,,
 -49.262521,-22.150930,Radar Movel - 110 kmh@110,,,,,
--47.971732,-21.161833,Radar Movel - 110 kmh@110,,,,,
+-47.971732,-21.161833,Radar Movel - 110 kmh@110,,,,,90
 -47.965719,-23.468069,Radar Movel - 110 kmh@110,,,,,
 -46.988664,-22.179250,Radar Movel - 110 kmh@110,,,,,
 -47.642834,-21.518714,Radar Movel - 110 kmh@110,,,,,
@@ -13631,7 +13631,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.326207,-23.361451,Radar Movel - 110 kmh@110,,,,,
 -47.038430,-21.585104,Radar Movel - 110 kmh@110,,,,,
 -47.881053,-20.640125,Radar Movel - 110 kmh@110,,,,,
--48.205861,-21.798552,Radar Movel - 110 kmh@110,,,,,
+-48.205861,-21.798552,Radar Movel - 110 kmh@110,,,,,90
 -49.927031,-20.434068,Radar Movel - 110 kmh@110,,,,,
 -50.016919,-23.433117,Radar Movel - 110 kmh@110,,,,,
 -48.628790,-22.305792,Radar Movel - 110 kmh@110,,,,,
@@ -13759,7 +13759,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.057723,-23.449439,Radar Movel - 120 kmh@120,,,,,
 -46.011761,-23.344627,Radar Movel - 120 kmh@120,,,,,
 -48.172076,-23.227198,Radar Movel - 120 kmh@120,,,,,
--48.234030,-23.193808,Radar Movel - 120 kmh@120,,,,,
+-48.234030,-23.193808,Radar Movel - 120 kmh@120,,,,,90
 -48.047580,-23.245822,Radar Movel - 120 kmh@120,,,,,
 -47.322739,-22.852513,Radar Movel - 120 kmh@120,,,,,
 -47.936858,-23.253520,Radar Movel - 120 kmh@120,,,,,
@@ -13771,7 +13771,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.835693,-23.268601,Radar Movel - 120 kmh@120,,,,,
 -47.001997,-23.475837,Radar Movel - 120 kmh@120,,,,,
 -47.936912,-23.254210,Radar Movel - 120 kmh@120,,,,,
--46.204106,-23.419321,Radar Movel - 120 kmh@120,,,,,
+-46.204106,-23.419321,Radar Movel - 120 kmh@120,,,,,90
 -46.605280,-23.717528,Radar Movel - 120 kmh@120,,,,,
 -45.738892,-23.198653,Radar Movel - 120 kmh@120,,,,,
 -47.277968,-23.410029,Radar Movel - 120 kmh@120,,,,,
@@ -13808,7 +13808,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.410891,-22.795789,Radar Movel - 120 kmh@120,,,,,
 -47.222183,-23.419557,Radar Movel - 120 kmh@120,,,,,
 -46.817010,-23.342908,Radar Movel - 120 kmh@120,,,,,
--47.266571,-22.871919,Radar Movel - 120 kmh@120,,,,,
+-47.266571,-22.871919,Radar Movel - 120 kmh@120,,,,,90
 -49.398547,-22.767850,Radar Movel - 120 kmh@120,,,,,
 -47.485129,-23.361942,Radar Movel - 120 kmh@120,,,,,
 -45.967221,-23.342207,Radar Movel - 120 kmh@120,,,,,
@@ -18733,7 +18733,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.953986,-3.528955,Policia Rodoviaria - 40 kmh@40,,,,,
 -51.843016,-23.194425,Policia Rodoviaria - 40 kmh@40,,,,,
 -34.832182,-7.880497,Policia Rodoviaria - 40 kmh@40,,,,,
--48.801190,-21.546085,Policia Rodoviaria - 40 kmh@40,,,,,
+-48.801190,-21.546085,Policia Rodoviaria - 40 kmh@40,,,,,80
 -40.078073,-7.878281,Policia Rodoviaria - 40 kmh@40,,,,,
 -48.510860,-27.696541,Policia Rodoviaria - 40 kmh@40,,,,,
 -42.954059,-21.109869,Policia Rodoviaria - 40 kmh@40,,,,,
@@ -19637,10 +19637,10 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.432503,-21.998723,Policia Rodoviaria - 110 kmh@110,,,,,
 -50.084598,-21.475070,Policia Rodoviaria - 110 kmh@110,,,,,
 -47.804313,-23.282918,Policia Rodoviaria - 120 kmh@120,,,,,
--48.440770,-23.138574,Policia Rodoviaria - 120 kmh@120,,,,,
+-48.440770,-23.138574,Policia Rodoviaria - 120 kmh@120,,,,,90
 -46.750801,-23.465601,Policia Rodoviaria - 120 kmh@120,,,,,
 -47.293171,-23.407076,Policia Rodoviaria - 120 kmh@120,,,,,
--48.440677,-23.138201,Policia Rodoviaria - 120 kmh@120,,,,,
+-48.440677,-23.138201,Policia Rodoviaria - 120 kmh@120,,,,,90
 -47.089961,-23.010606,Policia Rodoviaria - 120 kmh@120,,,,,
 -46.135641,-23.370122,Policia Rodoviaria - 120 kmh@120,,,,,
 -47.046691,-23.458511,Policia Rodoviaria - 120 kmh@120,,,,,
@@ -19699,7 +19699,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -38.361492,-12.848017,Pedagio - 0 kmh@0,,,,,
 -51.078492,-29.656576,Pedagio - 0 kmh@0,,,,,
 -47.575370,-23.050847,Pedagio - 0 kmh@0,,,,,
--48.725579,-22.318150,Pedagio - 0 kmh@0,,,,,
+-48.725579,-22.318150,Pedagio - 0 kmh@0,,,,,40
 -47.154901,-22.690093,Pedagio - 0 kmh@0,,,,,
 -48.235662,-18.749761,Pedagio - 0 kmh@0,,,,,
 -56.022860,-13.265986,Pedagio - 0 kmh@0,,,,,
@@ -19761,7 +19761,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.662330,-21.262710,Pedagio - 0 kmh@0,,,,,
 -52.326033,-31.851920,Pedagio - 0 kmh@0,,,,,
 -49.042451,-14.814295,Pedagio - 0 kmh@0,,,,,
--48.537000,-20.688641,Pedagio - 0 kmh@0,,,,,
+-48.537000,-20.688641,Pedagio - 0 kmh@0,,,,,40
 -47.193326,-21.807819,Pedagio - 0 kmh@0,,,,,
 -47.249881,-22.489190,Pedagio - 0 kmh@0,,,,,
 -46.894235,-23.055264,Pedagio - 0 kmh@0,,,,,
@@ -19773,7 +19773,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -45.598332,-20.487160,Pedagio - 0 kmh@0,,,,,
 -49.739971,-26.070784,Pedagio - 0 kmh@0,,,,,
 -46.894200,-23.055368,Pedagio - 0 kmh@0,,,,,
--48.403090,-22.027437,Pedagio - 0 kmh@0,,,,,
+-48.403090,-22.027437,Pedagio - 0 kmh@0,,,,,40
 -49.110697,-20.142441,Pedagio - 0 kmh@0,,,,,
 -52.318253,-31.625217,Pedagio - 0 kmh@0,,,,,
 -49.284191,-14.799313,Pedagio - 0 kmh@0,,,,,
@@ -19781,7 +19781,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -55.587352,-12.311458,Pedagio - 0 kmh@0,,,,,
 -49.739882,-26.070972,Pedagio - 0 kmh@0,,,,,
 -51.650136,-29.334896,Pedagio - 0 kmh@0,,,,,
--48.403227,-22.027316,Pedagio - 0 kmh@0,,,,,
+-48.403227,-22.027316,Pedagio - 0 kmh@0,,,,,40
 -54.412689,-20.040845,Pedagio - 0 kmh@0,,,,,
 -52.640555,-31.449689,Pedagio - 0 kmh@0,,,,,
 -49.158303,-14.373013,Pedagio - 0 kmh@0,,,,,
@@ -19789,7 +19789,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -55.587378,-12.311508,Pedagio - 0 kmh@0,,,,,
 -48.822992,-22.980787,Pedagio - 0 kmh@0,,,,,
 -51.899716,-29.284961,Pedagio - 0 kmh@0,,,,,
--49.276631,-23.621597,Pedagio - 0 kmh@0,,,,,
+-49.276631,-23.621597,Pedagio - 0 kmh@0,,,,,40
 -54.412868,-20.040769,Pedagio - 0 kmh@0,,,,,
 -52.049353,-31.026314,Pedagio - 0 kmh@0,,,,,
 -49.158091,-14.373005,Pedagio - 0 kmh@0,,,,,
@@ -19797,14 +19797,14 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.749882,-17.772043,Pedagio - 0 kmh@0,,,,,
 -48.822850,-22.980905,Pedagio - 0 kmh@0,,,,,
 -50.592011,-29.732312,Pedagio - 0 kmh@0,,,,,
--49.276791,-23.621485,Pedagio - 0 kmh@0,,,,,
+-49.276791,-23.621485,Pedagio - 0 kmh@0,,,,,40
 -54.860943,-22.475905,Pedagio - 0 kmh@0,,,,,
 -50.942017,-30.110692,Pedagio - 0 kmh@0,,,,,
 -49.281652,-15.827181,Pedagio - 0 kmh@0,,,,,
 -43.086197,-22.657367,Pedagio - 0 kmh@0,,,,,
 -47.750005,-17.771941,Pedagio - 0 kmh@0,,,,,
 -52.526668,-31.820103,Pedagio - 0 kmh@0,,,,,
--48.390059,-21.126394,Pedagio - 0 kmh@0,,,,,
+-48.390059,-21.126394,Pedagio - 0 kmh@0,,,,,40
 -46.240077,-19.647319,Pedagio - 0 kmh@0,,,,,
 -54.860820,-22.476016,Pedagio - 0 kmh@0,,,,,
 -50.859166,-29.924810,Pedagio - 0 kmh@0,,,,,
@@ -19826,15 +19826,15 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -50.592024,-29.732204,Pedagio - 0 kmh@0,,,,,
 -48.841333,-16.003905,Pedagio - 0 kmh@0,,,,,
 -45.698025,-23.155740,Pedagio - 0 kmh@0,,,,,
--48.764345,-22.897520,Pedagio - 0 kmh@0,,,,,
+-48.764345,-22.897520,Pedagio - 0 kmh@0,,,,,40
 -49.239796,-22.167416,Pedagio - 0 kmh@0,,,,,
--47.609227,-21.658426,Pedagio - 0 kmh@0,,,,,
+-47.609227,-21.658426,Pedagio - 0 kmh@0,,,,,40
 -46.564697,-17.506011,Pedagio - 0 kmh@0,,,,,
 -48.458195,-19.776974,Pedagio - 0 kmh@0,,,,,
 -52.715213,-29.680797,Pedagio - 0 kmh@0,,,,,
 -51.415469,-29.335863,Pedagio - 0 kmh@0,,,,,
 -50.976735,-21.140474,Pedagio - 0 kmh@0,,,,,
--49.134509,-23.467453,Pedagio - 0 kmh@0,,,,,
+-49.134509,-23.467453,Pedagio - 0 kmh@0,,,,,40
 -43.316384,-21.928228,Pedagio - 0 kmh@0,,,,,
 -47.535740,-21.869660,Pedagio - 0 kmh@0,,,,,
 -46.564566,-17.505887,Pedagio - 0 kmh@0,,,,,
@@ -19842,7 +19842,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -52.277853,-29.667734,Pedagio - 0 kmh@0,,,,,
 -51.188043,-28.938456,Pedagio - 0 kmh@0,,,,,
 -50.976843,-21.140629,Pedagio - 0 kmh@0,,,,,
--49.134663,-23.467246,Pedagio - 0 kmh@0,,,,,
+-49.134663,-23.467246,Pedagio - 0 kmh@0,,,,,40
 -43.120207,-22.283776,Pedagio - 0 kmh@0,,,,,
 -47.051619,-21.918876,Pedagio - 0 kmh@0,,,,,
 -46.034063,-17.945887,Pedagio - 0 kmh@0,,,,,
@@ -19868,7 +19868,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -50.732318,-21.210329,Pedagio - 0 kmh@0,,,,,
 -49.035240,-18.881660,Pedagio - 0 kmh@0,,,,,
 -45.860564,-23.283525,Pedagio - 0 kmh@0,,,,,
--48.731447,-21.383099,Pedagio - 0 kmh@0,,,,,
+-48.731447,-21.383099,Pedagio - 0 kmh@0,,,,,40
 -45.408132,-18.132631,Pedagio - 0 kmh@0,,,,,
 -54.751158,-17.765199,Pedagio - 0 kmh@0,,,,,
 -51.650203,-29.334847,Pedagio - 0 kmh@0,,,,,
@@ -19892,7 +19892,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.898731,-22.336325,Pedagio - 0 kmh@0,,,,,
 -46.367000,-23.466438,Pedagio - 0 kmh@0,,,,,
 -42.088632,-22.475991,Pedagio - 0 kmh@0,,,,,
--48.789225,-21.543755,Pedagio - 0 kmh@0,,,,,
+-48.789225,-21.543755,Pedagio - 0 kmh@0,,,,,80
 -44.506754,-19.909917,Pedagio - 0 kmh@0,,,,,
 -54.496883,-19.473363,Pedagio - 0 kmh@0,,,,,
 -51.182138,-28.995732,Pedagio - 0 kmh@0,,,,,
@@ -19900,7 +19900,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.898935,-22.336307,Pedagio - 0 kmh@0,,,,,
 -46.156622,-23.385687,Pedagio - 0 kmh@0,,,,,
 -38.251375,-12.821768,Pedagio - 0 kmh@0,,,,,
--49.105029,-21.068042,Pedagio - 0 kmh@0,,,,,
+-49.105029,-21.068042,Pedagio - 0 kmh@0,,,,,40
 -46.464278,-23.716261,Pedagio - 0 kmh@0,,,,,
 -54.497025,-19.473482,Pedagio - 0 kmh@0,,,,,
 -52.306962,-28.162289,Pedagio - 0 kmh@0,,,,,
@@ -19916,8 +19916,8 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.984490,-23.031092,Pedagio - 0 kmh@0,,,,,
 -55.730955,-10.451895,Pedagio - 0 kmh@0,,,,,
 -47.397124,-22.509829,Pedagio - 0 kmh@0,,,,,
--48.332571,-21.557630,Pedagio - 0 kmh@0,,,,,
--46.344231,-23.458294,Pedagio - 0 kmh@0,,,,,
+-48.332571,-21.557630,Pedagio - 0 kmh@0,,,,,40
+-46.344231,-23.458294,Pedagio - 0 kmh@0,,,,,60
 -47.346526,-19.617504,Pedagio - 0 kmh@0,,,,,
 -48.612625,-27.184888,Pedagio - 0 kmh@0,,,,,
 -45.525043,-23.550419,Pedagio - 0 kmh@0,,,,,
@@ -19931,16 +19931,16 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -45.524708,-23.550264,Pedagio - 0 kmh@0,,,,,
 -50.086790,-24.912135,Pedagio - 0 kmh@0,,,,,
 -56.240813,-14.599706,Pedagio - 0 kmh@0,228,,antt,active,40
--47.621939,-22.372305,Pedagio - 0 kmh@0,,,,,
+-47.621939,-22.372305,Pedagio - 0 kmh@0,,,,,40
 -46.696472,-21.930453,Pedagio - 0 kmh@0,,,,,
 -47.026267,-17.098289,Pedagio - 0 kmh@0,,,,,
 -56.241008,-14.599462,Pedagio - 0 kmh@0,228,,antt,active,40
 -48.881151,-25.991753,Pedagio - 0 kmh@0,,,,,
--47.902474,-22.263917,Pedagio - 0 kmh@0,,,,,
+-47.902474,-22.263917,Pedagio - 0 kmh@0,,,,,40
 -49.778709,-24.319357,Pedagio - 0 kmh@0,,,,,
 -55.309376,-15.812194,Pedagio - 0 kmh@0,235,,antt,active,40
 -46.077699,-22.628648,Pedagio - 0 kmh@0,,,,,
--48.243926,-22.256015,Pedagio - 0 kmh@0,,,,,
+-48.243926,-22.256015,Pedagio - 0 kmh@0,,,,,40
 -47.026085,-17.098229,Pedagio - 0 kmh@0,,,,,
 -55.309482,-15.812049,Pedagio - 0 kmh@0,235,,antt,active,40
 -49.699967,-25.725632,Pedagio - 0 kmh@0,,,,,
@@ -19978,11 +19978,11 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -49.904040,-25.468304,Pedagio - 0 kmh@0,,,,,
 -49.318406,-25.714604,Pedagio - 0 kmh@0,,,,,
 -49.478447,-22.748878,Pedagio - 0 kmh@0,,,,,
--47.907578,-21.821401,Pedagio - 0 kmh@0,,,,,
+-47.907578,-21.821401,Pedagio - 0 kmh@0,,,,,40
 -42.540379,-22.686749,Pedagio - 0 kmh@0,,,,,
 -47.980811,-21.234417,Pedagio - 0 kmh@0,,,,,
 -44.222111,-19.601249,Pedagio - 0 kmh@0,,,,,
--47.907833,-21.821356,Pedagio - 0 kmh@0,,,,,
+-47.907833,-21.821356,Pedagio - 0 kmh@0,,,,,40
 -51.859033,-25.443831,Pedagio - 0 kmh@0,,,,,
 -48.247411,-21.667205,Pedagio - 0 kmh@0,,,,,
 -49.478270,-22.749027,Pedagio - 0 kmh@0,,,,,
@@ -20026,27 +20026,27 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -51.168224,-25.309627,Pedagio - 0 kmh@0,,,,,
 -47.041258,-23.056623,Pedagio - 0 kmh@0,,,,,
 -47.360808,-23.134743,Pedagio - 0 kmh@0,,,,,
--49.304612,-21.661864,Pedagio - 0 kmh@0,,,,,
+-49.304612,-21.661864,Pedagio - 0 kmh@0,,,,,40
 -43.031668,-22.610851,Pedagio - 0 kmh@0,,,,,
--47.813641,-20.380202,Pedagio - 0 kmh@0,,,,,
+-47.813641,-20.380202,Pedagio - 0 kmh@0,,,,,40
 -49.018907,-16.438460,Pedagio - 0 kmh@0,,,,,
--49.304574,-21.662141,Pedagio - 0 kmh@0,,,,,
+-49.304574,-21.662141,Pedagio - 0 kmh@0,,,,,40
 -50.542820,-25.157119,Pedagio - 0 kmh@0,,,,,
 -48.722269,-26.591732,Pedagio - 0 kmh@0,,,,,
 -34.999463,-8.319218,Pedagio - 0 kmh@0,,,,,
--49.909470,-22.091092,Pedagio - 0 kmh@0,,,,,
+-49.909470,-22.091092,Pedagio - 0 kmh@0,,,,,40
 -43.032436,-22.610780,Pedagio - 0 kmh@0,,,,,
 -46.542100,-23.756570,Pedagio - 0 kmh@0,,,,,
 -49.019569,-16.438431,Pedagio - 0 kmh@0,,,,,
--49.909606,-22.090863,Pedagio - 0 kmh@0,,,,,
+-49.909606,-22.090863,Pedagio - 0 kmh@0,,,,,40
 -53.713532,-25.084037,Pedagio - 0 kmh@0,,,,,
 -46.581611,-23.763828,Pedagio - 0 kmh@0,,,,,
 -34.998895,-8.274170,Pedagio - 0 kmh@0,,,,,
--50.119861,-22.331097,Pedagio - 0 kmh@0,,,,,
+-50.119861,-22.331097,Pedagio - 0 kmh@0,,,,,40
 -47.460301,-22.555772,Pedagio - 0 kmh@0,,,,,
 -52.501063,-24.197777,Pedagio - 0 kmh@0,,,,,
 -43.951287,-20.273050,Pedagio - 0 kmh@0,,,,,
--50.120004,-22.330815,Pedagio - 0 kmh@0,,,,,
+-50.120004,-22.330815,Pedagio - 0 kmh@0,,,,,40
 -53.278639,-25.021606,Pedagio - 0 kmh@0,,,,,
 -52.107470,-23.636480,Pedagio - 0 kmh@0,,,,,
 -47.192932,-22.514659,Pedagio - 0 kmh@0,,,,,
@@ -20115,7 +20115,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -45.748195,-22.653503,Pedagio - 0 kmh@0,,,,,
 -55.331264,-11.339161,Pedagio - 0 kmh@0,,,,,
 -45.748311,-22.653524,Pedagio - 0 kmh@0,,,,,
--47.620522,-22.373984,Pedagio - 0 kmh@0,,,,,
+-47.620522,-22.373984,Pedagio - 0 kmh@0,,,,,40
 -46.487642,-22.278439,Pedagio - 0 kmh@0,,,,,
 -55.731044,-10.451905,Pedagio - 0 kmh@0,,,,,
 -46.487666,-22.278358,Pedagio - 0 kmh@0,,,,,
@@ -20139,7 +20139,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.775545,-20.352533,Pedagio - 0 kmh@0,,,,,
 -50.719634,-18.897779,Pedagio - 0 kmh@0,,,,,
 -47.867561,-20.313692,Pedagio - 0 kmh@0,,,,,
--48.725494,-22.318400,Pedagio - 0 kmh@0,,,,,
+-48.725494,-22.318400,Pedagio - 0 kmh@0,,,,,40
 -47.867589,-20.313607,Pedagio - 0 kmh@0,,,,,
 -50.719597,-18.897674,Pedagio - 0 kmh@0,,,,,
 -48.569590,-25.867169,Pedagio - 0 kmh@0,,,,,
@@ -20155,7 +20155,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -56.103331,-11.638123,Pedagio - 0 kmh@0,,,,,
 -49.754390,-29.243692,Pedagio - 0 kmh@0,,,,,
 -56.461295,-12.825447,Pedagio - 0 kmh@0,,,,,
--47.902516,-22.263671,Pedagio - 0 kmh@0,,,,,
+-47.902516,-22.263671,Pedagio - 0 kmh@0,,,,,40
 -56.461204,-12.825392,Pedagio - 0 kmh@0,,,,,
 -49.754572,-29.243744,Pedagio - 0 kmh@0,,,,,
 -51.256404,-19.546771,Pedagio - 0 kmh@0,,,,,
@@ -20163,7 +20163,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -51.256643,-19.546890,Pedagio - 0 kmh@0,,,,,
 -49.472870,-28.897766,Pedagio - 0 kmh@0,,,,,
 -51.118096,-19.851520,Pedagio - 0 kmh@0,,,,,
--48.243734,-22.255842,Pedagio - 0 kmh@0,,,,,
+-48.243734,-22.255842,Pedagio - 0 kmh@0,,,,,40
 -51.118287,-19.851431,Pedagio - 0 kmh@0,,,,,
 -49.473165,-28.897619,Pedagio - 0 kmh@0,,,,,
 -51.324361,-20.215426,Pedagio - 0 kmh@0,,,,,
@@ -20178,7 +20178,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -46.144971,-23.855198,Pedagio - 0 kmh@0,,,,,
 -42.134236,-19.467705,Pedagio - 0 kmh@0,,,,,
 -51.480512,-18.111373,Pedagio - 0 kmh@0,,,,,
--47.714915,-22.606417,Pedagio - 0 kmh@0,,,,,
+-47.714915,-22.606417,Pedagio - 0 kmh@0,,,,,40
 -47.390036,-22.249734,Pedagio - 0 kmh@0,,,,,
 -43.104971,-11.089783,Pedagio - 0 kmh@0,,,,,
 -51.480597,-18.111451,Pedagio - 0 kmh@0,,,,,
@@ -20204,16 +20204,16 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -50.224286,-18.912320,Pedagio - 0 kmh@0,,,,,
 -52.043783,-19.032596,Pedagio - 0 kmh@0,,,,,
 -47.882347,-22.176466,Pedagio - 0 kmh@0,,,,,
--47.714643,-22.606439,Pedagio - 0 kmh@0,,,,,
+-47.714643,-22.606439,Pedagio - 0 kmh@0,,,,,40
 -50.224248,-18.912428,Pedagio - 0 kmh@0,,,,,
 -54.329795,-23.865154,Pedagio - 0 kmh@0,,,,,
 -46.914159,-23.787612,Pedagio - 0 kmh@0,,,,,
 -54.329953,-23.865227,Pedagio - 0 kmh@0,,,,,
--50.779927,-22.902430,Pedagio - 0 kmh@0,,,,,
+-50.779927,-22.902430,Pedagio - 0 kmh@0,,,,,40
 -46.463337,-23.716975,Pedagio - 0 kmh@0,,,,,
 -49.239635,-22.167242,Pedagio - 0 kmh@0,,,,,
--48.764208,-22.897567,Pedagio - 0 kmh@0,,,,,
--50.779817,-22.902633,Pedagio - 0 kmh@0,,,,,
+-48.764208,-22.897567,Pedagio - 0 kmh@0,,,,,40
+-50.779817,-22.902633,Pedagio - 0 kmh@0,,,,,40
 -44.371254,-18.959856,Pedagio - 0 kmh@0,,,,,
 -46.592681,-23.764068,Pedagio - 0 kmh@0,,,,,
 -44.371132,-18.959778,Pedagio - 0 kmh@0,,,,,
@@ -20222,7 +20222,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.285800,-22.947829,Pedagio - 0 kmh@0,,,,,
 -46.611109,-23.681704,Pedagio - 0 kmh@0,,,,,
 -40.478485,-20.519265,Pedagio - 0 kmh@0,,,,,
--47.807848,-22.128882,Pedagio - 0 kmh@0,,,,,
+-47.807848,-22.128882,Pedagio - 0 kmh@0,,,,,40
 -40.478677,-20.519283,Pedagio - 0 kmh@0,,,,,
 -52.107413,-23.636531,Pedagio - 0 kmh@0,,,,,
 -40.396688,-20.032626,Pedagio - 0 kmh@0,,,,,
@@ -20260,7 +20260,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -46.462175,-22.355183,Pedagio - 0 kmh@0,,,,,
 -47.459317,-21.957894,Pedagio - 0 kmh@0,,,,,
 -46.462147,-22.355214,Pedagio - 0 kmh@0,,,,,
--46.813737,-23.517980,Pedagio - 0 kmh@0,,,,,
+-46.813737,-23.517980,Pedagio - 0 kmh@0,,,,,60
 -49.840599,-23.643633,Pedagio - 0 kmh@0,,,,,
 -46.841415,-21.948299,Pedagio - 0 kmh@0,,,,,
 -49.840558,-23.643675,Pedagio - 0 kmh@0,,,,,
@@ -20279,59 +20279,59 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.278816,-23.509422,Pedagio - 0 kmh@0,,,,,
 -47.193315,-21.807949,Pedagio - 0 kmh@0,,,,,
 -46.823224,-23.508114,Pedagio - 0 kmh@0,,,,,
--48.261529,-21.752912,Pedagio - 0 kmh@0,,,,,
+-48.261529,-21.752912,Pedagio - 0 kmh@0,,,,,40
 -51.739218,-23.505604,Pedagio - 0 kmh@0,,,,,
 -46.946672,-21.705895,Pedagio - 0 kmh@0,,,,,
 -47.967944,-23.470872,Pedagio - 0 kmh@0,,,,,
 -48.247536,-21.667196,Pedagio - 0 kmh@0,,,,,
 -46.368911,-23.466389,Pedagio - 0 kmh@0,,,,,
--47.608844,-21.658392,Pedagio - 0 kmh@0,,,,,
+-47.608844,-21.658392,Pedagio - 0 kmh@0,,,,,40
 -46.368789,-23.465987,Pedagio - 0 kmh@0,,,,,
 -47.047755,-21.640821,Pedagio - 0 kmh@0,,,,,
 -46.785285,-23.456199,Pedagio - 0 kmh@0,,,,,
 -49.852805,-21.621957,Pedagio - 0 kmh@0,,,,,
 -46.786256,-23.452283,Pedagio - 0 kmh@0,,,,,
--47.948626,-21.571815,Pedagio - 0 kmh@0,,,,,
+-47.948626,-21.571815,Pedagio - 0 kmh@0,,,,,40
 -46.782739,-23.448011,Pedagio - 0 kmh@0,,,,,
--48.332781,-21.557626,Pedagio - 0 kmh@0,,,,,
+-48.332781,-21.557626,Pedagio - 0 kmh@0,,,,,40
 -46.758282,-23.439494,Pedagio - 0 kmh@0,,,,,
 -41.331781,-21.552658,Pedagio - 0 kmh@0,,,,,
 -47.938032,-23.434796,Pedagio - 0 kmh@0,,,,,
 -45.240142,-21.545759,Pedagio - 0 kmh@0,,,,,
 -46.760229,-23.427001,Pedagio - 0 kmh@0,,,,,
--48.787028,-21.543509,Pedagio - 0 kmh@0,,,,,
+-48.787028,-21.543509,Pedagio - 0 kmh@0,,,,,80
 -46.798903,-23.418227,Pedagio - 0 kmh@0,,,,,
 -50.195059,-21.415856,Pedagio - 0 kmh@0,,,,,
 -46.737475,-23.416810,Pedagio - 0 kmh@0,,,,,
--47.664105,-21.414335,Pedagio - 0 kmh@0,,,,,
+-47.664105,-21.414335,Pedagio - 0 kmh@0,,,,,40
 -46.360969,-23.413348,Pedagio - 0 kmh@0,,,,,
--48.731576,-21.383234,Pedagio - 0 kmh@0,,,,,
+-48.731576,-21.383234,Pedagio - 0 kmh@0,,,,,40
 -47.342005,-23.411348,Pedagio - 0 kmh@0,,,,,
--48.556594,-21.249401,Pedagio - 0 kmh@0,,,,,
+-48.556594,-21.249401,Pedagio - 0 kmh@0,,,,,40
 -47.301580,-23.406485,Pedagio - 0 kmh@0,,,,,
--48.233774,-21.229474,Pedagio - 0 kmh@0,,,,,
+-48.233774,-21.229474,Pedagio - 0 kmh@0,,,,,90
 -47.004034,-23.403740,Pedagio - 0 kmh@0,,,,,
 -50.732290,-21.210107,Pedagio - 0 kmh@0,,,,,
 -46.153836,-23.384313,Pedagio - 0 kmh@0,,,,,
--47.914447,-21.167188,Pedagio - 0 kmh@0,,,,,
+-47.914447,-21.167188,Pedagio - 0 kmh@0,,,,,40
 -51.399268,-23.360835,Pedagio - 0 kmh@0,,,,,
--47.914465,-21.166837,Pedagio - 0 kmh@0,,,,,
+-47.914465,-21.166837,Pedagio - 0 kmh@0,,,,,40
 -46.813250,-23.347188,Pedagio - 0 kmh@0,,,,,
--48.389828,-21.126349,Pedagio - 0 kmh@0,,,,,
+-48.389828,-21.126349,Pedagio - 0 kmh@0,,,,,40
 -46.150205,-23.338915,Pedagio - 0 kmh@0,,,,,
--49.105169,-21.068205,Pedagio - 0 kmh@0,,,,,
+-49.105169,-21.068205,Pedagio - 0 kmh@0,,,,,40
 -46.577383,-23.330279,Pedagio - 0 kmh@0,,,,,
--48.708625,-21.065469,Pedagio - 0 kmh@0,,,,,
+-48.708625,-21.065469,Pedagio - 0 kmh@0,,,,,40
 -46.823289,-23.322909,Pedagio - 0 kmh@0,,,,,
--48.176876,-21.009315,Pedagio - 0 kmh@0,,,,,
+-48.176876,-21.009315,Pedagio - 0 kmh@0,,,,,40
 -47.643797,-23.313788,Pedagio - 0 kmh@0,,,,,
 -44.966830,-21.000172,Pedagio - 0 kmh@0,,,,,
 -46.025318,-23.302384,Pedagio - 0 kmh@0,,,,,
--47.633385,-20.943044,Pedagio - 0 kmh@0,,,,,
+-47.633385,-20.943044,Pedagio - 0 kmh@0,,,,,40
 -46.025791,-23.302050,Pedagio - 0 kmh@0,,,,,
--47.633734,-20.942906,Pedagio - 0 kmh@0,,,,,
+-47.633734,-20.942906,Pedagio - 0 kmh@0,,,,,40
 -46.007617,-23.296300,Pedagio - 0 kmh@0,,,,,
--47.895332,-20.850914,Pedagio - 0 kmh@0,,,,,
+-47.895332,-20.850914,Pedagio - 0 kmh@0,,,,,40
 -52.127795,-23.292198,Pedagio - 0 kmh@0,,,,,
 -46.878038,-20.842817,Pedagio - 0 kmh@0,,,,,
 -45.860751,-23.283323,Pedagio - 0 kmh@0,,,,,
@@ -20341,9 +20341,9 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.085943,-23.246080,Pedagio - 0 kmh@0,,,,,
 -46.402000,-20.723383,Pedagio - 0 kmh@0,,,,,
 -47.042553,-23.235378,Pedagio - 0 kmh@0,,,,,
--47.506028,-20.714182,Pedagio - 0 kmh@0,,,,,
+-47.506028,-20.714182,Pedagio - 0 kmh@0,,,,,40
 -47.562683,-23.227423,Pedagio - 0 kmh@0,,,,,
--48.536758,-20.688580,Pedagio - 0 kmh@0,,,,,
+-48.536758,-20.688580,Pedagio - 0 kmh@0,,,,,40
 -46.181499,-23.198505,Pedagio - 0 kmh@0,,,,,
 -44.701218,-20.591949,Pedagio - 0 kmh@0,,,,,
 -45.697891,-23.155977,Pedagio - 0 kmh@0,,,,,
@@ -20353,7 +20353,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -48.514861,-23.082486,Pedagio - 0 kmh@0,,,,,
 -45.598255,-20.487286,Pedagio - 0 kmh@0,,,,,
 -47.154728,-23.063258,Pedagio - 0 kmh@0,,,,,
--47.813417,-20.380215,Pedagio - 0 kmh@0,,,,,
+-47.813417,-20.380215,Pedagio - 0 kmh@0,,,,,40
 -47.154930,-23.063078,Pedagio - 0 kmh@0,,,,,
 -44.423721,-20.268396,Pedagio - 0 kmh@0,,,,,
 -47.044841,-23.058094,Pedagio - 0 kmh@0,,,,,
@@ -20367,7 +20367,7 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.147108,-23.055024,Pedagio - 0 kmh@0,,,,,
 -46.579517,-23.325270,Pedagio - 0 kmh@0,,,,,
 -50.193720,-23.037303,Pedagio - 0 kmh@0,,,,,
--48.556677,-21.249503,Pedagio - 0 kmh@0,,,,,
+-48.556677,-21.249503,Pedagio - 0 kmh@0,,,,,40
 -47.018738,-23.020322,Pedagio - 0 kmh@0,,,,,
 -47.326440,-24.157775,Pedagio - 0 kmh@0,,,,,
 -47.023080,-23.012968,Pedagio - 0 kmh@0,,,,,
@@ -20385,9 +20385,9 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -45.360954,-22.930140,Pedagio - 0 kmh@0,,,,,
 -47.459666,-21.958009,Pedagio - 0 kmh@0,,,,,
 -50.817280,-22.915539,Pedagio - 0 kmh@0,,,,,
--47.664376,-21.414522,Pedagio - 0 kmh@0,,,,,
+-47.664376,-21.414522,Pedagio - 0 kmh@0,,,,,40
 -50.817173,-22.915620,Pedagio - 0 kmh@0,,,,,
--47.895697,-20.850882,Pedagio - 0 kmh@0,,,,,
+-47.895697,-20.850882,Pedagio - 0 kmh@0,,,,,40
 -47.708838,-22.910312,Pedagio - 0 kmh@0,,,,,
 -46.007359,-23.296625,Pedagio - 0 kmh@0,,,,,
 -46.424531,-22.908821,Pedagio - 0 kmh@0,,,,,
@@ -20395,19 +20395,19 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -43.308769,-22.907530,Pedagio - 0 kmh@0,,,,,
 -47.042723,-23.235218,Pedagio - 0 kmh@0,,,,,
 -43.308998,-22.907124,Pedagio - 0 kmh@0,,,,,
--48.708636,-21.065332,Pedagio - 0 kmh@0,,,,,
+-48.708636,-21.065332,Pedagio - 0 kmh@0,,,,,40
 -43.115718,-22.877922,Pedagio - 0 kmh@0,,,,,
 -47.518955,-22.654384,Pedagio - 0 kmh@0,,,,,
 -49.144554,-22.875208,Pedagio - 0 kmh@0,,,,,
--48.176624,-21.009231,Pedagio - 0 kmh@0,,,,,
+-48.176624,-21.009231,Pedagio - 0 kmh@0,,,,,40
 -47.300662,-22.857788,Pedagio - 0 kmh@0,,,,,
--47.948862,-21.571644,Pedagio - 0 kmh@0,,,,,
+-47.948862,-21.571644,Pedagio - 0 kmh@0,,,,,40
 -47.300531,-22.857253,Pedagio - 0 kmh@0,,,,,
--47.506184,-20.714025,Pedagio - 0 kmh@0,,,,,
+-47.506184,-20.714025,Pedagio - 0 kmh@0,,,,,40
 -48.516769,-22.838090,Pedagio - 0 kmh@0,,,,,
 -46.361087,-23.412994,Pedagio - 0 kmh@0,,,,,
 -42.464556,-22.800685,Pedagio - 0 kmh@0,,,,,
--48.233924,-21.229316,Pedagio - 0 kmh@0,,,,,
+-48.233924,-21.229316,Pedagio - 0 kmh@0,,,,,90
 -42.945431,-22.775300,Pedagio - 0 kmh@0,,,,,
 -46.605882,-23.718036,Pedagio - 0 kmh@0,,,,,
 -47.021734,-22.771148,Pedagio - 0 kmh@0,,,,,
@@ -20439,9 +20439,9 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -40.204327,-14.056038,Pedagio - 0 kmh@0,,,,,
 -52.715091,-29.680628,Pedagio - 0 kmh@0,,,,,
 -41.280506,-21.158450,Pedagio - 0 kmh@0,,,,,
--47.808167,-22.129060,Pedagio - 0 kmh@0,,,,,
+-47.808167,-22.129060,Pedagio - 0 kmh@0,,,,,40
 -41.280593,-21.158280,Pedagio - 0 kmh@0,,,,,
--48.261843,-21.753191,Pedagio - 0 kmh@0,,,,,
+-48.261843,-21.753191,Pedagio - 0 kmh@0,,,,,40
 -49.245744,-18.268486,Pedagio - 0 kmh@0,,,,,
 -52.318154,-31.625304,Pedagio - 0 kmh@0,,,,,
 -49.246019,-18.268560,Pedagio - 0 kmh@0,,,,,
@@ -20513,49 +20513,49 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -47.579048,-19.023780,Pedagio - 0 kmh@0,,,,,
 -55.660033,-11.668205,Pedagio - 0 kmh@0,,,,,
 -48.077604,-19.859510,Pedagio - 0 kmh@0,,,,,
--50.955308,-21.959217,Pedagio - 0 kmh@0,,,,,
+-50.955308,-21.959217,Pedagio - 0 kmh@0,,,,,40
 -48.077703,-19.859419,Pedagio - 0 kmh@0,,,,,
--50.955152,-21.959410,Pedagio - 0 kmh@0,,,,,
+-50.955152,-21.959410,Pedagio - 0 kmh@0,,,,,40
 -42.143788,-19.991633,Pedagio - 0 kmh@0,,,,,
--51.237090,-22.143294,Pedagio - 0 kmh@0,,,,,
+-51.237090,-22.143294,Pedagio - 0 kmh@0,,,,,40
 -42.143881,-19.991630,Pedagio - 0 kmh@0,,,,,
--51.237007,-22.143604,Pedagio - 0 kmh@0,,,,,
+-51.237007,-22.143604,Pedagio - 0 kmh@0,,,,,40
 -43.804837,-22.820643,Pedagio - 0 kmh@0,,,,,
--49.286202,-22.345586,Pedagio - 0 kmh@0,,,,,
+-49.286202,-22.345586,Pedagio - 0 kmh@0,,,,,40
 -43.805026,-22.820566,Pedagio - 0 kmh@0,,,,,
--49.286365,-22.345720,Pedagio - 0 kmh@0,,,,,
+-49.286365,-22.345720,Pedagio - 0 kmh@0,,,,,40
 -45.360217,-21.246326,Pedagio - 0 kmh@0,,,,,
--49.742539,-22.213692,Pedagio - 0 kmh@0,,,,,
+-49.742539,-22.213692,Pedagio - 0 kmh@0,,,,,40
 -45.360220,-21.246430,Pedagio - 0 kmh@0,,,,,
--49.742447,-22.213965,Pedagio - 0 kmh@0,,,,,
+-49.742447,-22.213965,Pedagio - 0 kmh@0,,,,,40
 -45.569651,-21.147211,Pedagio - 0 kmh@0,,,,,
--50.112222,-22.141078,Pedagio - 0 kmh@0,,,,,
+-50.112222,-22.141078,Pedagio - 0 kmh@0,,,,,40
 -45.569558,-21.147169,Pedagio - 0 kmh@0,,,,,
--50.112314,-22.141260,Pedagio - 0 kmh@0,,,,,
+-50.112314,-22.141260,Pedagio - 0 kmh@0,,,,,40
 -46.950295,-21.254258,Pedagio - 0 kmh@0,,,,,
--50.721161,-21.841931,Pedagio - 0 kmh@0,,,,,
+-50.721161,-21.841931,Pedagio - 0 kmh@0,,,,,40
 -46.950474,-21.254229,Pedagio - 0 kmh@0,,,,,
--50.721301,-21.842092,Pedagio - 0 kmh@0,,,,,
+-50.721301,-21.842092,Pedagio - 0 kmh@0,,,,,40
 -45.391869,-21.632407,Pedagio - 0 kmh@0,,,,,
--50.982072,-21.733686,Pedagio - 0 kmh@0,,,,,
+-50.982072,-21.733686,Pedagio - 0 kmh@0,,,,,40
 -45.392039,-21.632555,Pedagio - 0 kmh@0,,,,,
--50.982246,-21.733915,Pedagio - 0 kmh@0,,,,,
+-50.982246,-21.733915,Pedagio - 0 kmh@0,,,,,40
 -51.311672,-21.545749,Pedagio - 0 kmh@0,,,,,
 -51.311760,-21.545969,Pedagio - 0 kmh@0,,,,,
--51.712978,-21.361240,Pedagio - 0 kmh@0,,,,,
--47.807150,-22.648061,Pedagio - 0 kmh@0,,,,,
--47.807247,-22.648397,Pedagio - 0 kmh@0,,,,,
--48.261661,-22.405001,Pedagio - 0 kmh@0,,,,,
--48.261672,-22.405150,Pedagio - 0 kmh@0,,,,,
--49.312570,-22.495353,Pedagio - 0 kmh@0,,,,,
--49.312741,-22.495442,Pedagio - 0 kmh@0,,,,,
+-51.712978,-21.361240,Pedagio - 0 kmh@0,,,,,40
+-47.807150,-22.648061,Pedagio - 0 kmh@0,,,,,40
+-47.807247,-22.648397,Pedagio - 0 kmh@0,,,,,40
+-48.261661,-22.405001,Pedagio - 0 kmh@0,,,,,40
+-48.261672,-22.405150,Pedagio - 0 kmh@0,,,,,40
+-49.312570,-22.495353,Pedagio - 0 kmh@0,,,,,40
+-49.312741,-22.495442,Pedagio - 0 kmh@0,,,,,40
 -50.517133,-22.572230,Pedagio - 0 kmh@0,,,,,
 -50.517321,-22.572409,Pedagio - 0 kmh@0,,,,,
--51.020896,-22.218554,Pedagio - 0 kmh@0,,,,,
--51.021017,-22.218722,Pedagio - 0 kmh@0,,,,,
--51.713068,-21.361383,Pedagio - 0 kmh@0,,,,,
--48.061637,-22.564692,Pedagio - 0 kmh@0,,,,,
--48.061632,-22.564840,Pedagio - 0 kmh@0,,,,,
+-51.020896,-22.218554,Pedagio - 0 kmh@0,,,,,40
+-51.021017,-22.218722,Pedagio - 0 kmh@0,,,,,40
+-51.713068,-21.361383,Pedagio - 0 kmh@0,,,,,40
+-48.061637,-22.564692,Pedagio - 0 kmh@0,,,,,40
+-48.061632,-22.564840,Pedagio - 0 kmh@0,,,,,40
 -53.589074,-29.724064,Pedagio - 0 kmh@0,,,,,
 -53.067602,-29.748799,Pedagio - 0 kmh@0,,,,,
 -55.324872,-10.805028,Pedagio - 0 kmh@0,,,,,
@@ -20577,8 +20577,8 @@ longitude,latitude,desc,dir1,dir2,dir_src,status,truck_limit_off
 -52.645407,-28.494819,Pedagio - 0 kmh@0,,,,,
 -52.645550,-28.494823,Pedagio - 0 kmh@0,,,,,
 -52.022518,-21.848134,Pedagio - 0 kmh@0,,,,,
--48.564032,-22.408389,Pedagio - 0 kmh@0,,,,,
--48.564275,-22.408406,Pedagio - 0 kmh@0,,,,,
+-48.564032,-22.408389,Pedagio - 0 kmh@0,,,,,40
+-48.564275,-22.408406,Pedagio - 0 kmh@0,,,,,40
 -113.920837,50.890954,Pedagio - 40 kmh@40,,,,,
 -45.433985,-23.822936,Lombada -  kmh@,,,,,
 -60.617122,2.113057,Lombada -  kmh@,,,,,
