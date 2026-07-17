@@ -290,6 +290,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   Timer? _arrivalTimer;
   double _arrivalProgress = 0.0; // 0→1 ao longo da contagem
   bool _ttsActive = false;
+  // Solta o _ttsActive quando o engine não avisa que terminou (perda de foco de
+  // áudio, engine engolindo a utterance). Sem isto, _ttsActive fica preso em true
+  // e o gate do _speak cala a navegação INTEIRA pelo resto da viagem.
+  Timer? _ttsWatchdog;
+  // Falas descartadas por colisão (outra já tocando). Sai no nav_end: hoje esse
+  // descarte é invisível em campo, então "a voz sumiu" nunca vira causa raiz.
+  int _ttsDropped = 0;
   bool _speedAlertActive = false;
   DateTime? _lastSpeedAlertAt;
   final Set<String> _actionedRestrictions = {};
@@ -531,6 +538,7 @@ class _NavigationScreenState extends State<NavigationScreen>
           : null,
       'remainingRouteM': _remainingDistanceM().round(),
       'speedKmh': _speedKmh.round(),
+      'ttsDropped': _ttsDropped, // falas comidas por colisão nesta viagem
     });
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
@@ -540,6 +548,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _arrivalTimer?.cancel();
     _posSub?.cancel();
     _radarPassLogger.endTrip(); // fecho pelo X manual: drena o que sobrou na fila
+    _ttsWatchdog?.cancel();
     _tts.stop();
     _ttsActive = false;
     _themeController.removeListener(_onThemeChanged);
@@ -637,6 +646,15 @@ class _NavigationScreenState extends State<NavigationScreen>
           if (mounted) _ttsActive = false;
         }));
     _tts.setCancelHandler(() => _ttsActive = false);
+    // speak.onError NÃO chama completion nem cancel (tabela de dispatch do
+    // flutter_tts 4.2.0). Sem este handler o _ttsActive fica preso em true e o
+    // gate do _speak cala a navegação inteira — manobra, radar, restrição,
+    // chegada — pelo resto da viagem, sem deixar rastro.
+    _tts.setErrorHandler((msg) {
+      _ttsActive = false;
+      _ttsWatchdog?.cancel();
+      FieldLog.event('tts_error', {'msg': msg.toString()});
+    });
   }
 
   Future<void> _startForegroundService() async {
@@ -765,9 +783,29 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (_audioLevel == AudioLevel.silencioso) return;
     if (_resumedAt != null &&
         DateTime.now().difference(_resumedAt!).inMilliseconds < 4000) { return; }
-    if (_ttsActive) return;
+    if (_ttsActive) {
+      _ttsDropped++; // descarte silencioso: só medimos, comportamento intacto
+      return;
+    }
     _ttsActive = true;
-    _tts.speak(text);
+    // ponytail: teto de sanidade, não constante calibrada. A fala mais longa do
+    // app (manobra com nome de via) mede ~10s; 15s cobre folgado. Se estourar, o
+    // engine não avisou que terminou — soltar é sempre melhor que emudecer.
+    _ttsWatchdog?.cancel();
+    _ttsWatchdog = Timer(const Duration(seconds: 15), () {
+      if (!_ttsActive) return;
+      _ttsActive = false;
+      FieldLog.event('tts_watchdog', {'chars': text.length});
+    });
+    // O Future do speak() era descartado: uma PlatformException (engine ausente,
+    // pt-BR indisponível, foco de áudio negado) virava erro async não tratado e
+    // deixava o _ttsActive preso em true.
+    _tts.speak(text).catchError((Object e, StackTrace st) {
+      _ttsActive = false;
+      _ttsWatchdog?.cancel();
+      FieldLog.error('tts_speak', e, st);
+      return null;
+    });
   }
 
   // Entra no estado "chegando": ancora a posição, fala uma vez e arma a contagem.
