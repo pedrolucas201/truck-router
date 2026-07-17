@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../../models/bridge_restriction.dart';
 import '../../models/route_result.dart';
+import '../../models/weather_alert.dart';
 import '../../providers/truck_profile_provider.dart';
 
 class ResultCard extends StatelessWidget {
   final RouteResult result;
+  final List<WeatherAlert> weatherAlerts;
   final DateTime? departureTime;
   final VoidCallback onStartNavigation;
   final VoidCallback onOpenExternal;
@@ -17,6 +19,7 @@ class ResultCard extends StatelessWidget {
   const ResultCard({
     super.key,
     required this.result,
+    this.weatherAlerts = const [],
     required this.departureTime,
     required this.onStartNavigation,
     required this.onOpenExternal,
@@ -59,6 +62,7 @@ class ResultCard extends StatelessWidget {
             blocked: result.restrictionsBlocked,
             onBlockedTap: onBlockedTap,
           ),
+        if (weatherAlerts.isNotEmpty) WeatherBanner(alerts: weatherAlerts),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
           child: Row(
@@ -208,6 +212,56 @@ class RestrictionsBanner extends StatelessWidget {
       child: hasBlocked
           ? GestureDetector(onTap: onBlockedTap, child: banner)
           : banner,
+    );
+  }
+}
+
+/// Aviso de clima severo na rota (fatia A) — resumo glanceável no card de
+/// preview, antes de sair. Só aparece quando há célula severa.
+class WeatherBanner extends StatelessWidget {
+  final List<WeatherAlert> alerts;
+  const WeatherBanner({super.key, required this.alerts});
+
+  static IconData _iconFor(String kind) => switch (kind) {
+        'rain' => Icons.umbrella,
+        'wind' => Icons.air,
+        'fog' => Icons.foggy,
+        _ => Icons.cloud_outlined,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    // Ordena por hora de passagem: o primeiro é o que vem antes na viagem.
+    final sorted = [...alerts]..sort((a, b) => a.time.compareTo(b.time));
+    final first = sorted.first;
+    final message = sorted.length == 1
+        ? '${first.label} na rota · ~${first.timeLabel}'
+        : '${sorted.length} avisos de clima na rota · a partir de ~${first.timeLabel}';
+
+    final color = Colors.amber.shade800;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.amber.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.amber.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(_iconFor(first.kind), color: color, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                    fontSize: 12, color: color, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

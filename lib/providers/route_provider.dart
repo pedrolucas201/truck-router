@@ -4,11 +4,13 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/bridge_restriction.dart';
 import '../models/route_result.dart';
 import '../models/truck_profile.dart';
+import '../models/weather_alert.dart';
 import '../repositories/restriction_repository.dart';
 import '../services/field_log.dart';
 import '../services/here_routing_service.dart';
 import '../services/overpass_service.dart';
 import '../services/tomtom_routing_service.dart';
+import '../services/weather_service.dart';
 
 enum RouteStatus { idle, loading, success, error }
 
@@ -19,10 +21,14 @@ class RouteProvider extends ChangeNotifier {
   RouteStatus _status = RouteStatus.idle;
   RouteResult? _result;
   String? _errorMessage;
+  List<WeatherAlert> _weatherAlerts = const [];
 
   RouteStatus get status => _status;
   RouteResult? get result => _result;
   String? get errorMessage => _errorMessage;
+  // Células de clima severo na rota. Chegam DEPOIS da rota (busca async), então a
+  // UI pode renderizar a rota primeiro e os avisos aparecem quando prontos.
+  List<WeatherAlert> get weatherAlerts => _weatherAlerts;
 
   Future<void> calculate({
     required LatLng origin,
@@ -35,6 +41,7 @@ class RouteProvider extends ChangeNotifier {
     _status = RouteStatus.loading;
     _result = null;
     _errorMessage = null;
+    _weatherAlerts = const [];
     notifyListeners();
 
     try {
@@ -156,6 +163,9 @@ class RouteProvider extends ChangeNotifier {
 
       _result = result;
       _status = RouteStatus.success;
+      // Clima na rota: fire-and-forget. Não bloqueia o success — a rota já vai
+      // pra tela; os avisos entram quando o backend responde (ou nunca, em falha).
+      _fetchWeather(result, departureTime ?? DateTime.now());
     } catch (e, st) {
       // Captura-mãe do cálculo. É a queixa mais provável ("não calculou a rota");
       // sem isto o motorista vê o erro na tela e nós não temos nada. Coords no
@@ -184,6 +194,21 @@ class RouteProvider extends ChangeNotifier {
     _status = RouteStatus.idle;
     _result = null;
     _errorMessage = null;
+    _weatherAlerts = const [];
+    notifyListeners();
+  }
+
+  // Busca o clima da rota e publica os avisos. Guarda de corrida: se a rota mudou
+  // enquanto buscava (novo cálculo/clear), descarta — senão avisos de uma rota
+  // antiga apareceriam sobre a nova.
+  Future<void> _fetchWeather(RouteResult forRoute, DateTime departure) async {
+    final alerts = await WeatherService.forecastAlongRoute(
+      polyline: forRoute.polylinePoints,
+      departure: departure,
+      durationSeconds: forRoute.durationSeconds,
+    );
+    if (alerts.isEmpty || !identical(_result, forRoute)) return;
+    _weatherAlerts = alerts;
     notifyListeners();
   }
 

@@ -1309,6 +1309,17 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       ));
     }
 
+    // Clima na rota (fatia A): ícone no ponto severo, na hora projetada. Igual ao
+    // Waze na forma (marcador + rótulo), mas previsão, não report de outro motorista.
+    for (final a in routeProvider.weatherAlerts) {
+      markers.add(Marker(
+        markerId: MarkerId('wx_${a.position.latitude}_${a.position.longitude}'),
+        position: a.position,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+        infoWindow: InfoWindow(title: a.label, snippet: 'Na rota · ~${a.timeLabel}'),
+      ));
+    }
+
     // N4 (2ª iteração): se o app só existe nesta tela porque o sistema abriu
     // via deep link (WhatsApp etc.) e o usuário não chegou a calcular rota,
     // back deve encerrar o app de fato — não só desempilhar/minimizar — para
@@ -1783,6 +1794,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                 ? const SizedBox.shrink()
                 : ResultCard(
                     result: routeProvider.result!,
+                    weatherAlerts: routeProvider.weatherAlerts,
                     departureTime: _departureTime,
                     onStartNavigation: _startNavigation,
                     onOpenExternal: _launchNavigation,

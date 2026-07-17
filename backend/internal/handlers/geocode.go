@@ -33,6 +33,14 @@ func HereRevgeocode(w http.ResponseWriter, r *http.Request) {
 	forward(w, "https://revgeocode.search.hereapi.com/v1/revgeocode", q)
 }
 
+// HereWeather — proxy do Destination Weather v3. Client manda products= e
+// location=lat,lng; a chave entra server-side. Habilitação confirmada no plano
+// (teste direto 200 em 2026-07-17). weather.hereapi.com usa apiKey (camelCase).
+func HereWeather(w http.ResponseWriter, r *http.Request) {
+	q := appendKey(r.URL.RawQuery, "apiKey", os.Getenv("HERE_API_KEY"))
+	forward(w, "https://weather.hereapi.com/v3/report", q)
+}
+
 func TomTomGeocode(w http.ResponseWriter, r *http.Request) {
 	q := appendKey(r.URL.RawQuery, "key", os.Getenv("TOMTOM_API_KEY"))
 	forward(w, "https://api.tomtom.com/search/2/structuredGeocode.json", q)

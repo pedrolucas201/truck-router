@@ -51,6 +51,10 @@ func main() {
 		r.Get("/here/discover", handlers.HereDiscover)
 		r.Get("/here/lookup", handlers.HereLookup)
 		r.Get("/here/revgeocode", handlers.HereRevgeocode)
+		r.Get("/here/weather", handlers.HereWeather)
+
+		// Clima na rota: digere o fan-out e devolve só células severas.
+		r.Post("/weather/route", handlers.WeatherRoute)
 
 		// TomTom geocoding proxy
 		r.Get("/tomtom/geocode", handlers.TomTomGeocode)
