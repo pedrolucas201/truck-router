@@ -235,18 +235,18 @@ class WeatherBanner extends StatelessWidget {
     final sorted = [...alerts]..sort((a, b) => a.time.compareTo(b.time));
     final first = sorted.first;
     final message = sorted.length == 1
-        ? '${first.label} na rota · ~${first.timeLabel}'
-        : '${sorted.length} avisos de clima na rota · a partir de ~${first.timeLabel}';
+        ? '${first.label} na rota, por volta das ${first.timeLabel}'
+        : '${sorted.length} avisos de clima na rota, a partir das ${first.timeLabel}';
 
-    final color = Colors.amber.shade800;
+    final color = Colors.deepOrange.shade700;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.amber.shade50,
+          color: Colors.deepOrange.shade50,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.amber.shade200),
+          border: Border.all(color: Colors.deepOrange.shade200),
         ),
         child: Row(
           children: [

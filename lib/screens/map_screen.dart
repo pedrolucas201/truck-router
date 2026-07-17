@@ -1315,8 +1315,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       markers.add(Marker(
         markerId: MarkerId('wx_${a.position.latitude}_${a.position.longitude}'),
         position: a.position,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
-        infoWindow: InfoWindow(title: a.label, snippet: 'Na rota · ~${a.timeLabel}'),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        infoWindow: InfoWindow(title: a.label, snippet: 'Na rota, por volta das ${a.timeLabel}'),
       ));
     }
 
