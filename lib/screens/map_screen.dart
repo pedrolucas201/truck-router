@@ -575,6 +575,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       _destinationLabel = label;
       _destinationKey   = ValueKey('dest_map_${DateTime.now().millisecondsSinceEpoch}');
     });
+    // Salva no histórico de destino pra reaparecer no input depois.
+    PlacesService.record('destination', label, dest);
     if (_origin == null) {
       await _useCurrentLocation(); // seta a origem (e limpa a rota anterior)
     }
@@ -1364,7 +1366,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         if (!didPop) SystemNavigator.pop();
       },
       child: Scaffold(
-      body: Column(
+      // Tocar em qualquer área fora dos campos (inclusive sobre as sugestões que
+      // cobrem a tela com o teclado aberto) tira o foco. HitTestBehavior.translucent
+      // deixa os botões/itens receberem o toque normalmente.
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: Column(
         children: [
           // Mapa ocupa todo o espaço disponível — estrutura do Stack nunca muda
           Expanded(
@@ -1386,6 +1394,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     final bounds = await _mapController?.getVisibleRegion();
                     if (bounds != null) _refreshPoliceAlerts(bounds);
                   },
+                  // Tocar no mapa tira o foco dos campos (fecha teclado +
+                  // sugestões) — "tocar fora fecha".
+                  onTap: (_) => FocusManager.instance.primaryFocus?.unfocus(),
                   // Segurar o dedo no mapa (como no próprio Google Maps) solta um
                   // pin e oferece rota até ali. Desligado no modo de marcação (o
                   // toque lá é pra posicionar restrição).
@@ -1417,6 +1428,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                               child: AddressSearchField(
                                 key: _originKey,
                                 hint: 'Local de partida',
+                                historyRole: 'origin',
                                 initialValue: _originLabel,
                                 indicatorColor: Colors.red.shade400,
                                 onSelected: (record) {
@@ -1524,6 +1536,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                         AddressSearchField(
                           key: _destinationKey,
                           hint: 'Local de destino',
+                          historyRole: 'destination',
                           initialValue: _destinationLabel,
                           indicatorColor: Colors.teal.shade600,
                           biasLocation: _origin,
@@ -1547,6 +1560,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     child: AddressSearchField(
                                       key: _waypointKeys[i],
                                       hint: 'Parada ${i + 1}',
+                                      historyRole: 'destination',
                                       initialValue: _waypointLabels[i],
                                       indicatorColor: Colors.orange.shade600,
                                       biasLocation: _origin,
@@ -1859,6 +1873,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   ),
           ),
         ],
+      ),
       ),
       ),
     );

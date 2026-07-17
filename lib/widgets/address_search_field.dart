@@ -8,6 +8,9 @@ class AddressSearchField extends StatefulWidget {
   final String? initialValue;
   final Color? indicatorColor;
   final LatLng? biasLocation;
+  // Separa o histórico por campo (ex: 'origin' vs 'destination') — partida e
+  // destino têm memórias diferentes.
+  final String historyRole;
   final ValueChanged<(String label, LatLng position)> onSelected;
 
   const AddressSearchField({
@@ -16,6 +19,7 @@ class AddressSearchField extends StatefulWidget {
     this.initialValue,
     this.indicatorColor,
     this.biasLocation,
+    this.historyRole = 'destination',
     required this.onSelected,
   });
 
@@ -42,7 +46,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
     _focusNode.addListener(() {
       if (mounted) setState(() => _focused = _focusNode.hasFocus);
     });
-    PlacesService.all().then((p) {
+    PlacesService.all(widget.historyRole).then((p) {
       if (mounted) setState(() => _places = p);
     });
   }
@@ -66,7 +70,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
 
   // Grava o lugar escolhido na memória local e reflete no estado do campo.
   void _remember(String label, LatLng pos) {
-    PlacesService.record(label, pos);
+    PlacesService.record(widget.historyRole, label, pos);
     _places = [
       (label, pos),
       ..._places.where((p) => p.$1.toLowerCase() != label.toLowerCase()),
