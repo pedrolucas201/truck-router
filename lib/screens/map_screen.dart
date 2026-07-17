@@ -550,6 +550,37 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
   }
 
+  // Segurar o dedo no mapa → abre o cartão NA HORA (busca o endereço em segundo
+  // plano; o botão já funciona sem esperar).
+  void _promptRouteTo(LatLng dest) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) => _RouteHereSheet(
+        dest: dest,
+        onConfirm: (label) {
+          Navigator.pop(sheetCtx);
+          _routeTo(dest, label);
+        },
+      ),
+    );
+  }
+
+  // Seta o destino, garante a origem (localização atual) e calcula.
+  Future<void> _routeTo(LatLng dest, String label) async {
+    setState(() {
+      _destination      = dest;
+      _destinationLabel = label;
+      _destinationKey   = ValueKey('dest_map_${DateTime.now().millisecondsSinceEpoch}');
+    });
+    if (_origin == null) {
+      await _useCurrentLocation(); // seta a origem (e limpa a rota anterior)
+    }
+    if (_origin != null && _destination != null) _calculate();
+  }
+
   Future<void> _pickDepartureTime() async {
     final now = DateTime.now();
     final date = await showDatePicker(
@@ -1355,6 +1386,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     final bounds = await _mapController?.getVisibleRegion();
                     if (bounds != null) _refreshPoliceAlerts(bounds);
                   },
+                  // Segurar o dedo no mapa (como no próprio Google Maps) solta um
+                  // pin e oferece rota até ali. Desligado no modo de marcação (o
+                  // toque lá é pra posicionar restrição).
+                  onLongPress: _markingMode ? null : _promptRouteTo,
                   polylines: polylines,
                   markers: markers,
                   trafficEnabled: false,
@@ -1825,6 +1860,82 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           ),
         ],
       ),
+      ),
+    );
+  }
+}
+
+/// Cartão "Traçar rota até aqui" (long-press no mapa). Abre na hora com
+/// "Buscando endereço…" e preenche o endereço quando o reverso responde — o
+/// botão já funciona sem esperar (rotear não depende do rótulo).
+class _RouteHereSheet extends StatefulWidget {
+  final LatLng dest;
+  final void Function(String label) onConfirm;
+  const _RouteHereSheet({required this.dest, required this.onConfirm});
+
+  @override
+  State<_RouteHereSheet> createState() => _RouteHereSheetState();
+}
+
+class _RouteHereSheetState extends State<_RouteHereSheet> {
+  String? _label; // null = ainda buscando
+
+  @override
+  void initState() {
+    super.initState();
+    HereGeocodingService.reverseGeocode(widget.dest).then((l) {
+      if (mounted) setState(() => _label = l);
+    }).catchError((_) {
+      if (mounted) setState(() => _label = 'Ponto no mapa');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loading = _label == null;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.place, color: Colors.red),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: loading
+                      ? Row(
+                          children: const [
+                            SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2)),
+                            SizedBox(width: 10),
+                            Text('Buscando endereço…', style: TextStyle(fontSize: 15)),
+                          ],
+                        )
+                      : Text(
+                          _label!,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.local_shipping),
+                label: const Text('Traçar rota até aqui'),
+                onPressed: () => widget.onConfirm(_label ?? 'Ponto no mapa'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
