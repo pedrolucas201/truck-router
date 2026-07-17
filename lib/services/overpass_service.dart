@@ -10,6 +10,16 @@ class OverpassService {
   static const _endpoint = 'https://overpass-api.de/api/interpreter';
   static const _corridorM = 80.0;
 
+  // A Overpass BLOQUEIA o User-Agent padrão do Dart ('Dart/3.x (dart:io)') no
+  // Apache, antes de rodar a query: devolve 406 em ~0.6s (a query real leva
+  // 1.5-3.5s). Sem este header, TODA consulta de restrição física do app voltava
+  // vazia — ou seja, o segundo cinto de segurança (o que pega o que a HERE não
+  // sabe) nunca chegou a existir em produção. Medido em 2026-07-17: mesmo bbox,
+  // mesma query, só trocando o UA → 406 vs 200 com 47 restrições reais.
+  // A política de uso da Overpass pede um agente que identifique a aplicação.
+  static const _userAgent =
+      'truck-router/1.0 (+https://github.com/pedrolucas201/truck-router)';
+
   /// Consulta o Overpass (OSM) por restrições físicas de vias (maxheight,
   /// maxweight, maxwidth) no corredor da rota. Retorna lista vazia em caso
   /// de falha — nunca propaga exceção.
@@ -24,7 +34,10 @@ class OverpassService {
       final response = await http
           .post(
             Uri.parse(_endpoint),
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            headers: const {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'User-Agent': _userAgent,
+            },
             body: 'data=${Uri.encodeQueryComponent(query)}',
           )
           .timeout(const Duration(seconds: 15));
