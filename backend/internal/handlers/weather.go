@@ -33,6 +33,10 @@ const (
 	wxFanoutMax = 8   // chamadas HERE simultâneas
 	wxMaxPoints = 64  // teto defensivo de pontos por request
 	wxMatchSlop = 90 * time.Minute
+	// Ponto que o caminhão alcança em <= isto usa OBSERVATION (condição real
+	// agora), não forecast — a previsão do HERE erra chuva convectiva local
+	// (medido: chuva real → forecast 0.03cm, observation 0.48cm).
+	wxNowcastHorizon = 45 * time.Minute
 )
 
 type wxPoint struct {
@@ -65,6 +69,14 @@ type hereWxResp struct {
 		HourlyForecasts []struct {
 			Forecasts []hereWxForecast `json:"forecasts"`
 		} `json:"hourlyForecasts"`
+	} `json:"places"`
+}
+
+// observation (condição atual) tem o MESMO conjunto de campos, só aninha em
+// places[].observations[] em vez de hourlyForecasts[].forecasts[].
+type hereObsResp struct {
+	Places []struct {
+		Observations []hereWxForecast `json:"observations"`
 	} `json:"places"`
 }
 
@@ -119,27 +131,51 @@ func WeatherRoute(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"alerts": alerts})
 }
 
-// forecastAt busca o clima do ponto no HERE, acha o forecast da hora projetada e
-// classifica. Falha (rede/parse/fora do horizonte) = sem alerta, silencioso —
-// clima é opcional, nunca derruba nada.
+// forecastAt escolhe a fonte pelo tempo de chegada ao ponto: perto no tempo
+// (<= wxNowcastHorizon) usa OBSERVATION (condição real agora — a previsão erra
+// chuva convectiva local); longe usa o forecast na hora projetada. Falha = sem
+// alerta, silencioso; clima é opcional, nunca derruba nada.
 func forecastAt(p wxPoint, key string) (wxAlert, bool) {
 	target, err := time.Parse(time.RFC3339, p.Time)
 	if err != nil {
 		return wxAlert{}, false
 	}
-	u := fmt.Sprintf(
+	if time.Until(target) <= wxNowcastHorizon {
+		if a, ok := observeAt(p, key); ok {
+			return a, true
+		}
+		// observation falhou → cai pro forecast (melhor algo que nada).
+	}
+	return forecastHourlyAt(p, target, key)
+}
+
+// observeAt classifica a condição ATUAL do ponto (products=observation).
+func observeAt(p wxPoint, key string) (wxAlert, bool) {
+	data, ok := fetchJSON(fmt.Sprintf(
+		"https://weather.hereapi.com/v3/report?products=observation&location=%f,%f&apiKey=%s",
+		p.Lat, p.Lng, url.QueryEscape(key)))
+	if !ok {
+		return wxAlert{}, false
+	}
+	var hw hereObsResp
+	if err := json.Unmarshal(data, &hw); err != nil ||
+		len(hw.Places) == 0 || len(hw.Places[0].Observations) == 0 {
+		return wxAlert{}, false
+	}
+	obs := hw.Places[0].Observations[0]
+	kind, label, hit := classifyForecast(obs)
+	if !hit {
+		return wxAlert{}, false
+	}
+	return wxAlert{Lat: p.Lat, Lng: p.Lng, Time: p.Time, Kind: kind, Label: label, Icon: obs.IconName}, true
+}
+
+// forecastHourlyAt classifica o forecast horário mais próximo da hora projetada.
+func forecastHourlyAt(p wxPoint, target time.Time, key string) (wxAlert, bool) {
+	data, ok := fetchJSON(fmt.Sprintf(
 		"https://weather.hereapi.com/v3/report?products=forecastHourly&location=%f,%f&apiKey=%s",
-		p.Lat, p.Lng, url.QueryEscape(key))
-	resp, err := httpClient.Get(u)
-	if err != nil {
-		return wxAlert{}, false
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return wxAlert{}, false
-	}
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
+		p.Lat, p.Lng, url.QueryEscape(key)))
+	if !ok {
 		return wxAlert{}, false
 	}
 	var hw hereWxResp
@@ -147,7 +183,6 @@ func forecastAt(p wxPoint, key string) (wxAlert, bool) {
 		len(hw.Places) == 0 || len(hw.Places[0].HourlyForecasts) == 0 {
 		return wxAlert{}, false
 	}
-
 	best, ok := nearestForecast(hw.Places[0].HourlyForecasts[0].Forecasts, target)
 	if !ok {
 		return wxAlert{}, false
@@ -157,6 +192,23 @@ func forecastAt(p wxPoint, key string) (wxAlert, bool) {
 		return wxAlert{}, false
 	}
 	return wxAlert{Lat: p.Lat, Lng: p.Lng, Time: best.Time, Kind: kind, Label: label, Icon: best.IconName}, true
+}
+
+// fetchJSON faz GET e devolve o corpo se 200. Qualquer erro = (nil, false).
+func fetchJSON(u string) ([]byte, bool) {
+	resp, err := httpClient.Get(u)
+	if err != nil {
+		return nil, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, false
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, false
+	}
+	return data, true
 }
 
 // nearestForecast acha o forecast horário mais próximo do horário alvo; recusa se
