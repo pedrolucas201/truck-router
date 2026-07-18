@@ -38,6 +38,8 @@ import '../data/map_styles.dart';
 import '../data/pois.dart';
 import '../models/poi.dart';
 import '../models/route_event.dart';
+import '../models/weather_alert.dart';
+import '../widgets/map/marker_icons.dart';
 import '../providers/theme_controller.dart';
 import '../widgets/add_restriction_sheet.dart';
 import '../widgets/add_radar_sheet.dart';
@@ -147,6 +149,8 @@ class NavigationScreen extends StatefulWidget {
   final String destinationLabel;
   final List<LatLng> waypoints;
   final List<RadarPoint> initialRadares;
+  // Células de clima severo na rota (snapshot do cálculo, como initialRadares).
+  final List<WeatherAlert> initialWeatherAlerts;
   // Avisa o mapa quando um radar é removido aqui (voto "não existe"), pra ele
   // podar a lista em cache e o radar não reaparecer ao reabrir a navegação.
   final void Function(RadarPoint)? onRadarRemoved;
@@ -159,6 +163,7 @@ class NavigationScreen extends StatefulWidget {
     required this.destinationLabel,
     this.waypoints = const [],
     this.initialRadares = const [],
+    this.initialWeatherAlerts = const [],
     this.onRadarRemoved,
   });
 
@@ -176,6 +181,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   late RouteResult _result;
   List<RadarPoint> _radares = [];
   List<RadarPoint> _visibleRadares = [];
+  List<WeatherAlert> _weatherAlerts = const [];
 
   LatLng? _currentPos;
   double _bearing = 0;
@@ -243,6 +249,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Seta do puck rasterizada em ícone de mapa (mesmo desenho do NavPuck), usada
   // como marker que anda/gira no olhar-ao-redor. null até _loadPuckIcon terminar.
   BitmapDescriptor? _puckIcon;
+  BitmapDescriptor? _weatherIcon; // ícone de clima do mapa (um só, cacheado)
 
   final List<UserRestriction> _userRestrictions = [];
   final _restrictionIconCache = <String, BitmapDescriptor>{};
@@ -465,6 +472,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     });
     _radarPassLogger = RadarPassLogger(flush: FirestoreRadarService.logRadarPasses);
     _radares        = List.of(widget.initialRadares);
+    _weatherAlerts  = List.of(widget.initialWeatherAlerts);
     _visibleRadares = List.of(widget.initialRadares);
     _radarIconsFuture = Future.wait(_radares.map(_radarIcon));
     _hasTimeRestrictionAlert = widget.result.hasTimeRestriction;
@@ -477,6 +485,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     FirestoreRadarService.localOverrideKeys()
         .then((k) { if (mounted) _curatedKeys.addAll(k); });
     _loadPuckIcon();
+    _loadWeatherIcon();
     _loadUserRestrictions();
     _startForegroundService();
     _initTts();
@@ -728,6 +737,14 @@ class _NavigationScreenState extends State<NavigationScreen>
         _zoom = _zoomForLevel(_zoomLevel);
       });
     }
+  }
+
+  // Ícone de clima do mapa (⛈️ laranja, mesmo glifo da barra), UM só cacheado em
+  // _weatherIcon — não é lista indexada, então imune ao RangeError do reroute.
+  // Reusa o builder de POI existente.
+  Future<void> _loadWeatherIcon() async {
+    final icon = await buildPoiIcon(Colors.deepOrange.shade600, Icons.thunderstorm);
+    if (mounted) setState(() => _weatherIcon = icon);
   }
 
   // Rasteriza a seta do NavPuck num ícone de mapa, pra usar como marker que anda
@@ -2473,6 +2490,26 @@ class _NavigationScreenState extends State<NavigationScreen>
       candidates.add(RouteEvent(type: RouteEventType.restriction, distanceM: bestRestrDist));
     }
 
+    // Clima severo à frente (Fatia B, visual). Célula amostrada da própria
+    // polyline, então corredor generoso. Sem voz — só entra na barra de eventos.
+    double bestWeatherDist = double.infinity;
+    WeatherAlert? nearestWeather;
+    for (final a in _weatherAlerts) {
+      if (!isAhead(a.position.latitude, a.position.longitude, 500)) continue;
+      final d = distFrom(a.position.latitude, a.position.longitude);
+      if (d < bestWeatherDist) {
+        bestWeatherDist = d;
+        nearestWeather = a;
+      }
+    }
+    if (nearestWeather != null) {
+      candidates.add(RouteEvent(
+        type: RouteEventType.weather,
+        distanceM: bestWeatherDist,
+        label: nearestWeather.shortLabel, // "Chuva"/"Vento"/"Neblina" da HERE
+      ));
+    }
+
     double bestPoliceDist = double.infinity;
     for (final a in _policeAhead) {
       if (!isAhead(a.lat, a.lng, 200)) continue;
@@ -2856,6 +2893,18 @@ class _NavigationScreenState extends State<NavigationScreen>
                             onTap: () => _onRadarTap(radar),
                           ));
                         }
+                      }
+                      // Clima na rota (Fatia B): marcador simples, SEM lista
+                      // indexada de ícones → imune ao RangeError do reroute.
+                      for (final a in _weatherAlerts) {
+                        markers.add(Marker(
+                          markerId: MarkerId('wx_${a.position.latitude}_${a.position.longitude}'),
+                          position: a.position,
+                          icon: _weatherIcon ??
+                              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+                          anchor: const Offset(0.5, 0.5),
+                          infoWindow: InfoWindow(title: a.label),
+                        ));
                       }
                       for (final r in _userRestrictions) {
                         final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}';

@@ -81,6 +81,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   final _waypointKeys      = <Key>[];
   int   _waypointKeySeq    = 0;
   final _poiIconCache      = <String, BitmapDescriptor>{};
+  BitmapDescriptor? _weatherIcon; // ⛈️ do marcador de clima (um só, cacheado)
   List<RadarPoint>         _nearbyRadares = [];
   List<UserRestriction>    _userRestrictions = [];
   List<PoliceAlert>        _policeAlerts = [];
@@ -107,6 +108,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadPoiIcons();
+    // Ícone de clima (mesmo ⛈️ da nav), cacheado; reusa o builder de POI.
+    buildPoiIcon(Colors.deepOrange.shade600, Icons.thunderstorm)
+        .then((d) { if (mounted) setState(() => _weatherIcon = d); });
     _loadUserRestrictions();
     _loadTruckTip();
     _seedPlaces();
@@ -767,6 +771,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         destinationLabel: _destinationLabel ?? '',
         waypoints:        _waypointPositions.whereType<LatLng>().toList(),
         initialRadares:   _nearbyRadares,
+        initialWeatherAlerts: context.read<RouteProvider>().weatherAlerts,
         // Radar removido dentro da nav sai também do cache do mapa — senão
         // reaparecia ao reabrir a navegação (a dispensa já foi pro Firestore).
         onRadarRemoved:   (r) {
@@ -1348,7 +1353,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       markers.add(Marker(
         markerId: MarkerId('wx_${a.position.latitude}_${a.position.longitude}'),
         position: a.position,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        icon: _weatherIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
         infoWindow: InfoWindow(title: a.label, snippet: 'Na rota, por volta das ${a.timeLabel}'),
       ));
     }

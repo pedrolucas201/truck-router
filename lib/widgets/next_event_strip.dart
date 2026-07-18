@@ -43,7 +43,7 @@ class NextEventStrip extends StatelessWidget {
           Icon(event.type.icon, size: near ? 20 : 15, color: Colors.white),
           const SizedBox(width: 8),
           Text(
-            event.type.label.toUpperCase(),
+            (event.label ?? event.type.label).toUpperCase(),
             style: TextStyle(
               color: Colors.white,
               fontSize: near ? 16 : 13,

@@ -11,6 +11,7 @@ extension RouteEventStyle on RouteEventType {
         RouteEventType.police      => Icons.local_police,
         RouteEventType.scale       => Icons.monitor_weight,
         RouteEventType.restArea    => Icons.local_hotel,
+        RouteEventType.weather     => Icons.thunderstorm,
       };
 
   Color get accentColor => switch (this) {
@@ -19,6 +20,7 @@ extension RouteEventStyle on RouteEventType {
         RouteEventType.police      => Colors.blue.shade600,
         RouteEventType.scale       => Colors.purple.shade600,
         RouteEventType.restArea    => Colors.green.shade600,
+        RouteEventType.weather     => Colors.deepOrange.shade600,
       };
 
   String get label => switch (this) {
@@ -27,5 +29,6 @@ extension RouteEventStyle on RouteEventType {
         RouteEventType.police      => 'Polícia',
         RouteEventType.scale       => 'Balança',
         RouteEventType.restArea    => 'Descanso',
+        RouteEventType.weather     => 'Clima',
       };
 }

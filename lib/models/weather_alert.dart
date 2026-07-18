@@ -30,6 +30,14 @@ class WeatherAlert {
         icon: j['icon'] as String? ?? '',
       );
 
+  /// Rótulo curto pra barra de eventos, pelo tipo real da HERE.
+  String get shortLabel => switch (kind) {
+        'rain' => 'Chuva',
+        'wind' => 'Vento',
+        'fog' => 'Neblina',
+        _ => 'Clima',
+      };
+
   /// "14:30" no fuso do aparelho.
   String get timeLabel =>
       '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
