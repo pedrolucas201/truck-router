@@ -8,7 +8,8 @@ import '../models/weather_alert.dart';
 import '../repositories/restriction_repository.dart';
 import '../services/field_log.dart';
 import '../services/here_routing_service.dart';
-import '../services/overpass_service.dart';
+import '../services/physical_restriction_service.dart';
+import '../services/radar_service.dart';
 import '../services/tomtom_routing_service.dart';
 import '../services/weather_service.dart';
 
@@ -91,24 +92,29 @@ class RouteProvider extends ChangeNotifier {
         avoidAreas:    manualAvoidAreas,
       );
 
-      // 2. Overpass + Firestore em paralelo — restrições físicas no corredor.
-      final overpassFuture =
-          OverpassService.queryAlongRoute(result.polylinePoints);
+      // 2. Asset offline (base) + backend (o que o asset não tem) em paralelo.
+      final assetFuture =
+          PhysicalRestrictionService.queryAlongRoute(result.polylinePoints);
       final firestoreFuture =
           _repo.fetchNearRoute(result.polylinePoints);
-      final overpassRestrictions = await overpassFuture;
+      final assetRestrictions = await assetFuture;
       final firestoreRestrictions = await firestoreFuture;
 
       final conflicts = [
-        ...overpassRestrictions,
+        ...assetRestrictions,
         ...firestoreRestrictions,
       ].where((r) => r.conflictsWith(truck)).toList();
 
-      // 3. Recalcula evitando Overpass + restrições manuais.
+      // 3. Recalcula evitando as restrições encontradas + as marcadas na mão.
       if (conflicts.isNotEmpty) {
+        // O cap vale só pro que cabe na URL da HERE. `conflicts` segue INTEIRO
+        // daqui pra baixo: o que não coube no avoid continua na rota e tem que
+        // cair em stillBlocked — senão um limite de API vira alerta suprimido.
+        final paraEvitar = capAvoidAreas(conflicts, result.polylinePoints,
+            reservado: manualAvoidAreas.length);
         final avoidAreas = [
           ...manualAvoidAreas,
-          ...conflicts.map((r) => r.toAvoidArea()),
+          ...paraEvitar.map((r) => r.toAvoidArea()),
         ];
         try {
           final rerouted = await HereRoutingService.calculateRoute(
@@ -210,6 +216,41 @@ class RouteProvider extends ChangeNotifier {
     if (alerts.isEmpty || !identical(_result, forRoute)) return;
     _weatherAlerts = alerts;
     notifyListeners();
+  }
+
+  /// Teto de áreas no `avoid[areas]` da HERE. Medido em 2026-07-22 contra o
+  /// backend real: 150 áreas passam (URL de 7.590 chars), 155 devolvem 431 no
+  /// nosso Cloud Run e 160+ devolvem 414 na HERE. O limite é o TAMANHO da URL
+  /// (~7,7 KB), não a contagem — por isso 100, com folga, e não colado no teto.
+  static const _maxAvoidAreas = 100;
+
+  /// Corta o excesso mantendo as restrições que o caminhão encontra PRIMEIRO.
+  /// As cortadas não somem para sempre: cada reroute refaz esta janela, então
+  /// entram conforme ele se aproxima.
+  @visibleForTesting
+  static List<BridgeRestriction> capAvoidAreas(
+    List<BridgeRestriction> conflicts,
+    List<LatLng> polyline, {
+    int reservado = 0,
+  }) {
+    final teto = _maxAvoidAreas - reservado;
+    if (teto <= 0) return const [];
+    if (conflicts.length <= teto) return conflicts;
+    if (polyline.isEmpty) return conflicts.take(teto).toList();
+
+    final start = polyline.first;
+    double dist(BridgeRestriction r) => RadarService.haversine(
+        start.latitude, start.longitude, r.lat, r.lng);
+    // Cópia: quem chama continua com a lista original e na ordem original — ela
+    // ainda é usada pra classificar avoided/blocked depois do reroute.
+    final porProximidade = [...conflicts];
+    // ponytail: ordena pela distância em linha reta até o início da rota, não pela
+    // posição ao longo dela — numa rota que faz volta a ordem sai imprecisa. Só
+    // pesa acima de 100 conflitos, e o reroute refaz a janela durante a viagem.
+    // Se um dia isso importar, o índice do segmento mais próximo é a versão exata.
+    porProximidade.sort((a, b) => dist(a).compareTo(dist(b)));
+    FieldLog.event('avoid_cap', {'total': conflicts.length, 'usados': teto});
+    return porProximidade.take(teto).toList();
   }
 
   // Retorna true se a restrição cai dentro de ~50m de qualquer ponto da polyline.
