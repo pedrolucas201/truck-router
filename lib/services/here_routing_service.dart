@@ -9,6 +9,21 @@ import '../models/truck_profile.dart';
 import 'flexible_polyline_decoder.dart';
 
 class HereRoutingService {
+  /// Teto da chamada de rota. Sem ele a navegação inteira congela pelo tempo que
+  /// a rede quiser: enquanto `_isRerouting` está de pé, o `_onPositionUpdate`
+  /// faz early-return e a seta para, a instrução some e o velocímetro trava.
+  ///
+  /// Campo 2026-07-22, sessão mrw3mjyd: um reroute levou `hereMs: 131734` — 2min11
+  /// de tela morta a 56 km/h, ~2 km dirigidos às cegas. Os reroutes saudáveis da
+  /// mesma viagem levaram 893ms, 1074ms, 1626ms e 1765ms, então 12s dá ~7x de
+  /// folga sobre o pior caso legítimo e ainda fica abaixo dos 20,8s que a FASE 1
+  /// já tinha classificado como inaceitável.
+  ///
+  /// Estourar é melhor que pendurar: o `_reroute` trata a exceção (loga) e o
+  /// `finally` destrava a tela; o motorista segue com a rota anterior e a próxima
+  /// tentativa vem sozinha. Ficar preso não tem saída nenhuma.
+  static const routeTimeout = Duration(seconds: 12);
+
   static Future<RouteResult> calculateRoute({
     required LatLng origin,
     required LatLng destination,
@@ -60,7 +75,9 @@ class HereRoutingService {
       parts.add('avoid[areas]=${avoidAreas.join('|')}');
     }
     final uri = Uri.parse('$backendUrl/route/here?${parts.join('&')}');
-    final response = await http.get(uri, headers: await AuthService.getHeaders());
+    final response =
+        await http.get(uri, headers: await AuthService.getHeaders())
+            .timeout(routeTimeout);
 
     if (response.statusCode != 200) {
       throw Exception('HERE API error ${response.statusCode}: ${response.body}');
