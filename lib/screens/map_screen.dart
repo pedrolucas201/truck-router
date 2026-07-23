@@ -1874,6 +1874,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                   setState(() => _panelCollapsed = false);
                                   _addWaypoint();
                                 },
+                                onSelect: (r) {
+                                  Navigator.pop(context);
+                                  _mapController?.animateCamera(
+                                    CameraUpdate.newLatLngZoom(r.position, 16),
+                                  );
+                                },
                               ),
                             ),
                   ),

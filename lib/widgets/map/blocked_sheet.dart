@@ -7,8 +7,16 @@ import '../../models/bridge_restriction.dart';
 class BlockedSheet extends StatelessWidget {
   final List<BridgeRestriction> blocked;
   final VoidCallback onAddWaypoint;
+  // Toque no card → fecha a sheet e leva a câmera ao ponto restrito, pro
+  // motorista ver ONDE é (separar restrição real da via de baixo / de um prédio).
+  final void Function(BridgeRestriction)? onSelect;
 
-  const BlockedSheet({super.key, required this.blocked, required this.onAddWaypoint});
+  const BlockedSheet({
+    super.key,
+    required this.blocked,
+    required this.onAddWaypoint,
+    this.onSelect,
+  });
 
   static IconData _iconFor(String type) => switch (type) {
         'maxheight' => Icons.height,
@@ -54,7 +62,12 @@ class BlockedSheet extends StatelessWidget {
           const SizedBox(height: 16),
           ...blocked.map((r) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Container(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: onSelect == null ? null : () => onSelect!(r),
+                  child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.red.shade50,
@@ -80,6 +93,21 @@ class BlockedSheet extends StatelessWidget {
                               style: const TextStyle(
                                   fontSize: 15, fontWeight: FontWeight.bold),
                             ),
+                            if (onSelect != null) ...[
+                              const SizedBox(height: 4),
+                              Row(children: [
+                                Icon(Icons.location_on,
+                                    size: 13, color: Colors.blue.shade700),
+                                const SizedBox(width: 3),
+                                Text('Ver no mapa',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue.shade700,
+                                        fontWeight: FontWeight.w600)),
+                                Icon(Icons.chevron_right,
+                                    size: 16, color: Colors.blue.shade700),
+                              ]),
+                            ],
                           ],
                         ),
                       ),
@@ -103,6 +131,8 @@ class BlockedSheet extends StatelessWidget {
                         ),
                     ],
                   ),
+                ),
+                ),
                 ),
               )),
           Container(

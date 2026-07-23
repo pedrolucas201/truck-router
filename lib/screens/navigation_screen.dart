@@ -3013,9 +3013,11 @@ class _NavigationScreenState extends State<NavigationScreen>
                       // Banner de restrição da HERE (não o de restrição crowd, que
                       // tem botões próprios) → toque leva a câmera ao ponto restrito.
                       child: GestureDetector(
-                        onTap: _nearbyBlockedRestriction == null
-                            ? _showRestrictionOnMap
-                            : null,
+                        // Toque leva a câmera ao ponto restrito (self-guard: se não
+                        // há ponto do asset, _showRestrictionOnMap não faz nada). Antes
+                        // isto só valia p/ restrição de horário — altura/peso (o caso
+                        // que mais precisa) ficava sem toque.
+                        onTap: _showRestrictionOnMap,
                         child: Container(
                         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                         decoration: BoxDecoration(
@@ -3053,6 +3055,27 @@ class _NavigationScreenState extends State<NavigationScreen>
                                 ),
                               ],
                             ),
+                            // Affordance: deixa claro que o banner é tocável. Só no
+                            // caso do asset (sem id) — a restrição crowd tem botões.
+                            if (_restrictionPoints.isNotEmpty &&
+                                _nearbyBlockedRestriction?.id == null) ...[
+                              const SizedBox(height: 6),
+                              const Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Icon(Icons.location_on,
+                                      size: 15, color: Color(0xFF4FC3F7)),
+                                  SizedBox(width: 4),
+                                  Text('Ver no mapa',
+                                      style: TextStyle(
+                                          color: Color(0xFF4FC3F7),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600)),
+                                  Icon(Icons.chevron_right,
+                                      size: 18, color: Color(0xFF4FC3F7)),
+                                ],
+                              ),
+                            ],
                             if (_nearbyBlockedRestriction?.id != null &&
                                 !_actionedRestrictions.contains(
                                     _nearbyBlockedRestriction!.id)) ...[
