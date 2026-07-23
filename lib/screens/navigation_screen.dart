@@ -169,6 +169,43 @@ class NavigationScreen extends StatefulWidget {
 
   @override
   State<NavigationScreen> createState() => _NavigationScreenState();
+
+  /// Escolhe o radar que ocupa o slot de alerta entre os do corredor da rota.
+  ///
+  /// Regra: o MAIS PRÓXIMO dentro de [_radarAlertM], com UMA ressalva — um radar
+  /// que a gente tem CERTEZA que fiscaliza o sentido oposto (classifyRadarDirection
+  /// == opposite: fonte oficial + unidirecional + heading confiável + >=145°) só é
+  /// escolhido se NÃO houver outro radar no raio. Sem isso, um radar da contramão
+  /// coladinho (ex.: 31m) ocupava a vaga e mascarava o radar do SEU sentido logo
+  /// atrás (ex.: 200m) — alarme atrasado do radar que pode multar.
+  ///
+  /// Conservador de propósito: só desprioriza o que é comprovadamente oposto.
+  /// `unknown` (sem dado de direção, heading ruim, zona morta angular) conta como
+  /// não-oposto e mantém prioridade — então pra radar sem direção, que é a
+  /// maioria, o resultado é idêntico ao "mais próximo puro" de antes. E o oposto
+  /// NUNCA some: se ele for o único no raio, ainda ganha o slot.
+  @visibleForTesting
+  static RadarPoint? pickUpcomingRadar(
+    List<RadarPoint> visibleRadares,
+    LatLng pos,
+    double heading,
+    double? headingAccuracy,
+  ) {
+    RadarPoint? closest;      double closestD = double.infinity;
+    RadarPoint? closestKeep;  double closestKeepD = double.infinity;
+    for (final r in visibleRadares) {
+      final d = RadarService.haversine(pos.latitude, pos.longitude, r.lat, r.lng);
+      if (d >= _NavigationScreenState._radarAlertM) continue;
+      if (d < closestD) { closest = r; closestD = d; }
+      final opposite = classifyRadarDirection(
+            dir1: r.dir1, dir2: r.dir2, dirSrc: r.dirSrc,
+            userHeading: heading, headingAccuracy: headingAccuracy,
+          ) ==
+          RadarDirMatch.opposite;
+      if (!opposite && d < closestKeepD) { closestKeep = r; closestKeepD = d; }
+    }
+    return closestKeep ?? closest; // oposto só ganha se for o único no raio
+  }
 }
 
 class _NavigationScreenState extends State<NavigationScreen>
@@ -1390,16 +1427,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     ).toList();
 
     // 6. Radar à frente — restrito ao corredor da rota (sem falso positivo em paralelas)
-    RadarPoint? upcoming;
-    for (final r in visibleRadares) {
-      final d = RadarService.haversine(latLng.latitude, latLng.longitude, r.lat, r.lng);
-      if (d < _radarAlertM) {
-        if (upcoming == null ||
-            d < RadarService.haversine(latLng.latitude, latLng.longitude, upcoming.lat, upcoming.lng)) {
-          upcoming = r;
-        }
-      }
-    }
+    final upcoming = NavigationScreen.pickUpcomingRadar(
+      visibleRadares, latLng, pos.heading, pos.headingAccuracy);
 
     // 7. Restrição bloqueada à frente
     final userBlocked = _userRestrictions
