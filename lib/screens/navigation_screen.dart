@@ -230,6 +230,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   // course). Ver o deadlock do field 2026-07-13 no _reroute.
   bool _headingReliable = false;
   double _rawSpeedKmh = 0; // velocidade física do GPS (só p/ telemetria do gate)
+  double _gpsAccuracyM = -1; // raio de precisão do GPS em m (só telemetria; -1 = sem amostra)
   // Telemetria do veredito "parado": o velocímetro mostrou 0 com o caminhão andando
   // (vídeo do drive 2026-07-13, 18:33:13 → tela 0 km/h, GPS 18 km/h). Duas suspeitas:
   // (a) movingByRoute mente — o snap não avança na rota; (b) o recálculo congela a
@@ -556,6 +557,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         'moving': _movingByRoute,         // avançando AO LONGO da rota?
         'netM': _netAdvanceM.round(),     // quanto o snap andou em ~2,5s (limiar: 7m)
         'offM': _offRouteDistM.round(),   // distância da linha da rota
+        'accM': _gpsAccuracyM.round(),    // raio de precisão do GPS (hipótese pista paralela: offM alto + accM alto = GPS ruim)
         'rerot': _isRerouting,            // a amostra caiu DENTRO de um recálculo?
         'remM': _remainingDistanceM().round(),
       });
@@ -1451,6 +1453,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       _bearing                    = pos.heading;
       _headingReliable            = headingReliable;
       _rawSpeedKmh                = pos.speed * 3.6;
+      _gpsAccuracyM               = pos.accuracy;
       _speedKmh                   = effSpeedMps * 3.6 < 2.5 ? 0.0 : (effSpeedMps * 3.6).clamp(0.0, 300.0);
       _closestPolylineIdx         = bestIdx;
       _maneuverIndex              = nextIdx;
