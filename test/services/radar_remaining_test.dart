@@ -38,5 +38,17 @@ void main() {
       expect(near(2), isTrue);  // ~100m restante → reroute cede (freio)
       expect(near(3), isTrue);  // no fim → cede
     });
+
+    // Gate do atalho de chegada por linha reta (falso "chegou" a 1.7 km, campo Beto
+    // 24/07): reta curta ao pino SÓ vira chegada se a rota restante < 400m. Passando
+    // perto com rota longa não pode armar chegada.
+    test('gate de chegada em linha reta bate com o teto de 400m', () {
+      const cap = 400.0; // = _arrivalStraightMaxRouteM
+      final pts = line(20); // ~1.9 km, simula os 1.7 km restantes do campo
+      bool routeEnded(int idx) =>
+          RadarService.remainingAlongRoute(pts, idx, cap) < cap;
+      expect(routeEnded(0), isFalse);  // ~1.9 km restante → passando perto, NÃO chega
+      expect(routeEnded(16), isTrue);  // ~300m restante → no lote, pode chegar
+    });
   });
 }

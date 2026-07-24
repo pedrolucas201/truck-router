@@ -474,6 +474,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   // chegada, não desvio — o reroute cede (senão manda "voltar" pro destino que o
   // caminhão está passando). P0 Gilberto 2026-07-12.
   static const _arrivalZoneM       = 150.0;
+  // Atalho de chegada por linha reta (pino dentro da propriedade) só vale se a ROTA
+  // restante também estiver abaixo disso. Senão "reta curta + rota longa" (passando
+  // perto do destino, do outro lado / rota dá a volta) vira falso "Você chegou" —
+  // campo Beto 24/07, 1.7 km restantes. Teto físico: acima daqui, a rota ainda leva
+  // o caminhão a um lugar. Se um lote grande não armar chegada, subir; se colar cedo
+  // num destino contornável, virar razão (rota < reta*K). ponytail: constante primeiro.
+  static const _arrivalStraightMaxRouteM = 400.0;
   static const _radarAlertM         = 400.0;
   static const _restrictionAlertM   = 300.0;
   static const _radarLookAheadM     = 1500.0;
@@ -1241,17 +1248,22 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (d < bestDist) { bestDist = d; bestIdx = end - 1; bestSnap = pts[end - 1]; }
     }
 
-    // 2. Arrival detection: velocidade < 10 km/h E (linha reta ao destino < 80m OU
-    // distância restante na polilinha < 50m). A checagem em linha reta cobre o caso
-    // em que a HERE roteia o pino para dentro da propriedade — o caminhão já está na
-    // "porta" mas o fim da polilinha fica lá dentro. O fallback de polilinha cobre
-    // casos onde o snap do GPS diverge do pino de destino.
+    // 2. Arrival detection: velocidade < 10 km/h E (linha reta ao destino < 80m E
+    // rota restante < _arrivalStraightMaxRouteM  OU  distância na polilinha < 50m).
+    // A checagem em linha reta cobre o pino roteado para dentro da propriedade — o
+    // caminhão está na "porta" mas o fim da polilinha fica lá dentro; ali a rota
+    // restante também é curta. O gate de rota mata o falso "chegou" quando o caminhão
+    // só PASSA perto do destino (do outro lado / rota dá a volta): reta curta mas
+    // ainda faltam ~1.7 km de rota (campo Beto 24/07). Fallback de polilinha cobre o
+    // snap do GPS divergindo do pino.
     if (!_arrived && !_arriving && pos.speed * 3.6 < 10) {
       final straightToDestM = RadarService.haversine(
         latLng.latitude, latLng.longitude,
         widget.destination.latitude, widget.destination.longitude,
       );
-      if (straightToDestM < 80) {
+      if (straightToDestM < 80 &&
+          RadarService.remainingAlongRoute(pts, bestIdx, _arrivalStraightMaxRouteM)
+              < _arrivalStraightMaxRouteM) {
         _beginArrival(latLng);
         return;
       }
@@ -1349,6 +1361,12 @@ class _NavigationScreenState extends State<NavigationScreen>
           // vieram com hdgDelta<=20 (alinhado!). Confirmar antes de mexer no gate.
           'netM': netAdvanceM.round(),
           'rawKmh': (pos.speed * 3.6).round(),
+          // Posição + índice do snap no INÍCIO do episódio: pra sobrepor no mapa e
+          // decidir paralela vs trevo vs saída real (sem isso a supressão auto-anulante
+          // é indistinguível de desvio legítimo). Precisão cheia — não arredondar.
+          'curLat': latLng.latitude,
+          'curLng': latLng.longitude,
+          'bestIdx': bestIdx,
         });
       }
       _offRouteCount++;
