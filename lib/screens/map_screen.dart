@@ -11,7 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../utils/geo_uri_parser.dart';
 import '../utils/geo_bounds.dart';
-import '../data/pois.dart';
+import '../services/scale_service.dart';
 import '../models/bridge_restriction.dart';
 import '../models/poi.dart';
 import '../models/radar_point.dart';
@@ -318,6 +318,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _loadPoiIcons() async {
+    // As balanças vêm do asset e o builder de marcadores é síncrono, então elas
+    // precisam estar em memória antes do primeiro setState — carregar junto com
+    // os ícones aproveita o mesmo rebuild em vez de provocar outro.
+    await ScaleService.load();
     for (final compatible in [true, false]) {
       for (final category in PoiCategory.values) {
         final color = compatible ? poiCompatibleColor(category) : Colors.grey.shade500;
@@ -1299,7 +1303,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       }
     }
 
-    for (final poi in kHardcodedPois) {
+    for (final poi in ScaleService.all) {
       final compatible = poi.isCompatibleWith(truckProvider.profile);
       final cacheKey = '${poi.category.name}_$compatible';
       markers.add(Marker(

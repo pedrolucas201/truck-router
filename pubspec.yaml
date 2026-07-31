@@ -73,6 +73,7 @@ flutter:
 
   assets:
     - assets/maparadar.csv
+    - assets/balancas.csv
     - assets/restricoes.csv
     - assets/loader/truck_bau.svg
     - assets/loader/truck_carreta.svg

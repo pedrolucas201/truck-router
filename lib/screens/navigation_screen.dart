@@ -35,7 +35,7 @@ import '../utils/geo_bounds.dart';
 import '../utils/maneuver_phrase.dart';
 import '../services/restriction_service.dart';
 import '../data/map_styles.dart';
-import '../data/pois.dart';
+import '../services/scale_service.dart';
 import '../models/poi.dart';
 import '../models/route_event.dart';
 import '../models/weather_alert.dart';
@@ -2449,9 +2449,10 @@ class _NavigationScreenState extends State<NavigationScreen>
     for (var i = 0; i < pts.length; i += 5) { sampled.add(pts[i]); }
     if (sampled.last != pts.last) { sampled.add(pts.last); }
 
-    final filtered = kHardcodedPois.where((poi) {
-      if (poi.category != PoiCategory.scale &&
-          poi.category != PoiCategory.restArea) { return false; }
+    // Balanças oficiais do DNIT (asset). Eram 3 pontos inventados até 31/07 —
+    // e balança que não avisa é multa, não susto.
+    final pois = await ScaleService.load();
+    final filtered = pois.where((poi) {
       final lat = poi.position.latitude;
       final lng = poi.position.longitude;
       if (lat < minLat - buf || lat > maxLat + buf ||
