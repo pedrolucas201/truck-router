@@ -30,6 +30,12 @@ class HereGeocodingService {
     if (query.trim().isEmpty) return [];
     if (_isCep(query)) return _cepSearch(query);
 
+    // Endereço de rodovia por km (ex: "Fernão Dias km 936"): a HERE lê o "936"
+    // como número de casa e devolve um ponto ~2km errado (field 01/07). A Google
+    // acerta quando tem o marco indexado — dispara JUNTO com a HERE, não depois:
+    // em série ela atrasava cada tecla digitada.
+    final googleKm = _isRodoviaKm(query) ? _googleGeocode(query) : null;
+
     // _safe isola cada fonte: sem isto, um jsonDecode que lança (backend devolveu
     // HTML/erro em vez de JSON) mata a busca INTEIRA via Future.wait, sem sinal.
     final hereResults = await Future.wait([
@@ -46,14 +52,11 @@ class HereGeocodingService {
       }
     }
 
-    // Endereço de rodovia por km (ex: "Fernão Dias km 936"): a HERE lê o "936"
-    // como cruzamento e devolve um ponto ~2km errado (field 01/07). A Google
-    // acerta esse formato — coloca o resultado dela no topo das sugestões.
-    if (_isRodoviaKm(query)) {
-      final g = await _googleGeocode(query);
-      if (g != null && seenKeys.add(g.title.toLowerCase().trim())) {
-        merged.insert(0, g);
-      }
+    // Já está rodando desde antes do Future.wait; aqui só se colhe o resultado.
+    // Só vira sugestão se achou o MARCO — ver [acceptsKmResult].
+    final g = await googleKm;
+    if (g != null && seenKeys.add(g.title.toLowerCase().trim())) {
+      merged.insert(0, g);
     }
 
     // Fallback: Nominatim (OpenStreetMap) quando HERE não encontra nada.
@@ -81,32 +84,70 @@ class HereGeocodingService {
   }
 
   // Rodovia por km: "km 936", "km936", "KM 936+700". A HERE erra esse formato.
-  static final _rodoviaKmRe = RegExp(r'\bkm\s*\d', caseSensitive: false);
-  static bool _isRodoviaKm(String q) => _rodoviaKmRe.hasMatch(q);
+  static final _kmRe = RegExp(r'\bkm\s*(\d+)', caseSensitive: false);
+  static bool _isRodoviaKm(String q) => _kmRe.hasMatch(q);
 
-  // Google Geocoding — melhor em endereço de rodovia por km. Chamada direta (a
-  // key é restrita ao app, então só autoriza do APK). Reusa o mesmo padrão do
-  // passo 3 do _cepSearch. Rejeita APPROXIMATE (só achou cidade, não o ponto).
+  /// A Google só serve aqui quando achou o MARCO, não a rodovia.
+  ///
+  /// Medido em 18 consultas reais (2026-07-31): 10 de 12 rodovias devolvem
+  /// `GEOMETRIC_CENTER`, que é o centro do trecho da via — "BR-116 km 210,
+  /// Jacareí" cai em -18.67/-41.98, **Minas Gerais, ~600 km fora**. O guard
+  /// antigo só barrava `APPROXIMATE`, então esse ponto iria pro topo da lista.
+  ///
+  /// E `ROOFTOP` sozinho também não basta: "Imigrantes km 28" veio ROOFTOP
+  /// apontando pra "Av. Sapopemba, 25720a" — casou com outro endereço. Por isso
+  /// o segundo teste: o endereço devolvido tem que citar o mesmo km pedido.
+  static bool acceptsKmResult(String query, String locationType, String formatted) {
+    if (locationType != 'ROOFTOP') return false;
+    final want = _kmRe.firstMatch(query)?.group(1);
+    return want != null && want == _kmRe.firstMatch(formatted)?.group(1);
+  }
+
+  // Google Geocoding para endereço de rodovia por km.
+  //
+  // ponytail: esta chamada NUNCA funcionou. A `googleMapsApiKey` é a chave
+  // "Android SDK", restrita ao pacote — e o Geocoding é web service, que só
+  // autoriza via X-Android-Package/X-Android-Cert, headers que apenas o SDK
+  // nativo assina. O `http` do Dart não manda nenhum dos dois: 403 em 100% das
+  // chamadas entre 07/07 e 31/07 (172 requests, zero 200 — métricas do
+  // maps-route-495614), sempre em silêncio. Teto conhecido: só volta a viver
+  // quando passar pelo proxy do backend com chave sem restrição de app, igual
+  // HERE/TomTom. Até lá o `geocode_google_km` abaixo é o que prova o estado.
   static Future<GeocodingSuggestion?> _googleGeocode(String query) async {
     try {
       final resp = await http.get(Uri.https(
         'maps.googleapis.com', '/maps/api/geocode/json',
         {'address': query, 'components': 'country:BR', 'language': 'pt-BR', 'key': googleMapsApiKey},
       ));
-      if (resp.statusCode != 200) return null;
-      final body = jsonDecode(resp.body) as Map<String, dynamic>;
-      if (body['status'] != 'OK') return null;
+      if (resp.statusCode != 200) {
+        FieldLog.event('geocode_google_km', {'http': resp.statusCode});
+        return null;
+      }
+      final body   = jsonDecode(resp.body) as Map<String, dynamic>;
+      final status = body['status'] as String? ?? '';
+      if (status != 'OK') {
+        FieldLog.event('geocode_google_km', {'status': status});
+        return null;
+      }
       final results = (body['results'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
       if (results.isEmpty) return null;
-      final geom    = results.first['geometry'] as Map<String, dynamic>?;
-      final locType = geom?['location_type'] as String? ?? '';
-      final loc     = geom?['location'] as Map<String, dynamic>?;
-      if (locType == 'APPROXIMATE' || loc == null) return null;
+      final first     = results.first;
+      final geom      = first['geometry'] as Map<String, dynamic>?;
+      final locType   = geom?['location_type'] as String? ?? '';
+      final loc       = geom?['location'] as Map<String, dynamic>?;
+      final formatted = first['formatted_address'] as String? ?? '';
+      final ok        = loc != null && acceptsKmResult(query, locType, formatted);
+      // Enquanto o transporte estiver quebrado este ramo é inalcançável (só sai
+      // o `status` acima). Depois do proxy, é ele que mede em campo a cobertura
+      // real da Google — na amostra de 18 consultas de 31/07 foram 4 aceitas.
+      FieldLog.event('geocode_google_km', {'lt': locType, 'ok': ok});
+      if (!ok) return null;
       return GeocodingSuggestion.place(
-        title: results.first['formatted_address'] as String? ?? query,
+        title: formatted.isEmpty ? query : formatted,
         pos:   LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
       );
-    } catch (_) {
+    } catch (e, st) {
+      FieldLog.error('geocode_google_km', e, st);
       return null;
     }
   }
@@ -327,6 +368,10 @@ class HereGeocodingService {
 
           // Passo 3: Google Geocoding — melhor cobertura de ruas no Brasil, incluindo cidades do interior.
           // Valida location_type != APPROXIMATE (approx = só achou cidade/região, não a rua).
+          // ATENÇÃO: mesma chave restrita ao app do _googleGeocode, então este passo
+          // também vem tomando 403 desde sempre. Aqui o guard de APPROXIMATE está
+          // certo (é endereço de RUA — GEOMETRIC_CENTER é o centro da rua, legítimo);
+          // o que faltava era o log. Passo 4 (TomTom) é quem vinha salvando o CEP.
           if (logradouro.isNotEmpty && cidade.isNotEmpty) {
             try {
               final address = [logradouro, if (bairro.isNotEmpty) bairro, cidade, uf, 'Brasil']
@@ -335,10 +380,13 @@ class HereGeocodingService {
                 'maps.googleapis.com', '/maps/api/geocode/json',
                 {'address': address, 'components': 'country:BR', 'language': 'pt-BR', 'key': googleMapsApiKey},
               ));
-              if (resp.statusCode == 200) {
+              if (resp.statusCode != 200) {
+                FieldLog.event('geocode_cep_google', {'http': resp.statusCode});
+              } else {
                 final body    = jsonDecode(resp.body) as Map<String, dynamic>;
                 final status  = body['status'] as String? ?? '';
                 final results = (body['results'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+                if (status != 'OK') FieldLog.event('geocode_cep_google', {'status': status});
                 if (status == 'OK' && results.isNotEmpty) {
                   final first       = results.first;
                   final locType     = (first['geometry'] as Map<String, dynamic>?)?['location_type'] as String? ?? '';
@@ -352,7 +400,9 @@ class HereGeocodingService {
                   }
                 }
               }
-            } catch (_) {}
+            } catch (e, st) {
+              FieldLog.error('geocode_cep_google', e, st);
+            }
           }
 
           // Passo 4: TomTom structured geocoding — dados proprietários, melhor cobertura que OSM no interior.
