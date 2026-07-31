@@ -30,11 +30,16 @@ class HereGeocodingService {
     if (query.trim().isEmpty) return [];
     if (_isCep(query)) return _cepSearch(query);
 
-    // Endereço de rodovia por km (ex: "Fernão Dias km 936"): a HERE lê o "936"
-    // como número de casa e devolve um ponto ~2km errado (field 01/07). A Google
-    // acerta quando tem o marco indexado — dispara JUNTO com a HERE, não depois:
-    // em série ela atrasava cada tecla digitada.
-    final googleKm = _isRodoviaKm(query) ? _googleGeocode(query) : null;
+    // Endereço de rodovia por km (ex: "Fernão Dias km 936"). A HERE lê o "936"
+    // como número de casa: medido contra os radares do PNCV, ela erra 4 km na
+    // mediana — 158 km quando o motorista não cita o município. Duas fontes, e
+    // ambas disparam JUNTO com a HERE (em série atrasavam cada tecla digitada):
+    //  1. /geocode/marco — marcos do SNV/DNIT no backend, mediana ~400 m;
+    //  2. a Google, que só acerta onde indexou o marco (~22%, concedidas de SP —
+    //     justamente o que o SNV não tem, por serem estaduais).
+    final isKm     = _isRodoviaKm(query);
+    final marcoKm  = isKm ? _safe('marco_km', () => _marcoKm(query, bias)) : null;
+    final googleKm = isKm ? _googleGeocode(query) : null;
 
     // _safe isola cada fonte: sem isto, um jsonDecode que lança (backend devolveu
     // HTML/erro em vez de JSON) mata a busca INTEIRA via Future.wait, sem sinal.
@@ -52,11 +57,18 @@ class HereGeocodingService {
       }
     }
 
-    // Já está rodando desde antes do Future.wait; aqui só se colhe o resultado.
+    // Já estão rodando desde antes do Future.wait; aqui só se colhe o resultado.
     // Só vira sugestão se achou o MARCO — ver [acceptsKmResult].
     final g = await googleKm;
     if (g != null && seenKeys.add(g.title.toLowerCase().trim())) {
       merged.insert(0, g);
+    }
+    // O marco entra por último pra ficar em PRIMEIRO: dado oficial contra palpite
+    // de endereço. Pode vir mais de um — a quilometragem reinicia a cada estado e
+    // o motorista não digita a UF, então o backend devolve os dois mais prováveis
+    // rotulados com o estado e quem escolhe é ele. Reversed preserva a ordem.
+    for (final s in (await marcoKm ?? const <GeocodingSuggestion>[]).reversed) {
+      if (seenKeys.add(s.title.toLowerCase().trim())) merged.insert(0, s);
     }
 
     // Fallback: Nominatim (OpenStreetMap) quando HERE não encontra nada.
@@ -86,6 +98,30 @@ class HereGeocodingService {
   // Rodovia por km: "km 936", "km936", "KM 936+700". A HERE erra esse formato.
   static final _kmRe = RegExp(r'\bkm\s*(\d+)', caseSensitive: false);
   static bool _isRodoviaKm(String q) => _kmRe.hasMatch(q);
+
+  /// Marco quilométrico das federais, resolvido no backend a partir do SNV/DNIT.
+  ///
+  /// O parse do texto (número da BR, apelidos como "Fernão Dias", sufixo "+700")
+  /// e o desempate entre estados moram lá de propósito: assim apelido novo e
+  /// versão nova do SNV entram sem release, e os 3,5 MB do dado ficam fora do APK.
+  static Future<List<GeocodingSuggestion>> _marcoKm(String query, LatLng? bias) async {
+    final resp = await http.get(
+        Uri.parse('$backendUrl/geocode/marco').replace(queryParameters: {
+          'q': query,
+          if (bias != null) 'at': '${bias.latitude},${bias.longitude}',
+        }),
+        headers: await AuthService.getHeaders());
+    if (resp.statusCode != 200) return [];
+    final items = jsonDecode(resp.body)['items'] as List<dynamic>? ?? [];
+    return [
+      for (final i in items.cast<Map<String, dynamic>>())
+        if (i['lat'] is num && i['lng'] is num)
+          GeocodingSuggestion.place(
+            title: i['title'] as String? ?? query,
+            pos: LatLng((i['lat'] as num).toDouble(), (i['lng'] as num).toDouble()),
+          )
+    ];
+  }
 
   /// A Google só serve aqui quando achou o MARCO, não a rodovia.
   ///

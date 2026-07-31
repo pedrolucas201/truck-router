@@ -56,6 +56,11 @@ func main() {
 		// Clima na rota: digere o fan-out e devolve só células severas.
 		r.Post("/weather/route", handlers.WeatherRoute)
 
+		// Marco quilométrico ("Fernão Dias km 936"): nenhuma fonte de geocoding
+		// entende esse formato — a HERE erra 4 km na mediana (158 km se o motorista
+		// não citar o município), contra ~400 m daqui. Dado do SNV/DNIT embutido.
+		r.Get("/geocode/marco", handlers.GeocodeMarco)
+
 		// TomTom geocoding proxy
 		r.Get("/tomtom/geocode", handlers.TomTomGeocode)
 
