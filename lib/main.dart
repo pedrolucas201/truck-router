@@ -45,7 +45,21 @@ void main() async {
     // Sign-in anônimo já no startup: garante auth pra todo caminho de navegação
     // (o Histórico não passa por geocoding/routing, que faziam o login lazy) —
     // senão os writes de telemetria (field_logs) tomam permission-denied mudo.
-    unawaited(AuthService.ensureSignedIn());
+    // Abrir o app tem que deixar rastro. Sem isto, "o motorista instalou o
+    // release?" só era respondível quando alguém DIRIGIA — os field_logs
+    // nasciam no nav_start —, e a v2.4.41 passou 7 dias sem resposta por causa
+    // disso (31/07: zero sessões, mas o app foi aberto em 25/07 e traçou rota
+    // em 29/07, invisível na telemetria).
+    //
+    // Encadeado no sign-in, NÃO em paralelo: a regra do field_logs exige
+    // request.auth != null, então um write disparado antes do login anônimo
+    // tomaria permission-denied mudo — a linha nasceria morta.
+    unawaited(AuthService.ensureSignedIn().then((_) {
+      final uid = AuthService.currentUid;
+      // uid identifica a INSTALAÇÃO (anônimo, estável): sem ele, dois motoristas
+      // na mesma versão são indistinguíveis e a pergunta "quem" fica em aberto.
+      FieldLog.event('app_start', {'uid': uid == null ? 'none' : uid.substring(0, 6)});
+    }));
 
     final prefs = await SharedPreferences.getInstance();
     final onboardingDone = prefs.getBool('onboarding_done') ?? false;

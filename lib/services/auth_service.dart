@@ -34,6 +34,11 @@ class AuthService {
     return FirebaseAuth.instance.currentUser!.uid;
   }
 
+  /// Uid que já está em memória, ou null se o sign-in não completou. Síncrono e
+  /// sem lançar de propósito: serve pra telemetria, que não pode esperar login
+  /// nem derrubar o caminho de quem a chama.
+  static String? get currentUid => FirebaseAuth.instance.currentUser?.uid;
+
   static Future<Map<String, String>> getHeaders() async {
     await _ensureUser();
     final token = await FirebaseAuth.instance.currentUser!.getIdToken();
