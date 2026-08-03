@@ -59,6 +59,12 @@ class RouteResult {
   // montado do `details` do notice da HERE — o `title` vem inútil ("Violated
   // vehicle restriction." em inglês genérico). Null = cai no texto genérico.
   final String? restrictionLabel;
+  // O trecho proibido alcança o DESTINO (não é restrição de passagem): o
+  // caminhão não consegue encostar no ponto pedido. Quando true, o
+  // `restrictionLabel` é específico e nomeia a distância — pode ir pra voz.
+  // Nos demais casos o label é de dimensão ("altura máx 3,5 m") e a voz mantém
+  // a frase genérica: abreviação de unidade em TTS é loteria.
+  final bool destinationBlocked;
   // Pontos no mapa das restrições violadas (cada uma com seu LatLng + rótulo).
   final List<RestrictionPoint> restrictionPoints;
   final RouteResult? dirtRoadAlternative;
@@ -75,6 +81,7 @@ class RouteResult {
     this.usedTomTomData       = false,
     this.hasTimeRestriction   = false,
     this.restrictionLabel     ,
+    this.destinationBlocked   = false,
     this.restrictionPoints    = const [],
     this.dirtRoadAlternative  ,
     this.speedLimits          = const [],
@@ -91,6 +98,7 @@ class RouteResult {
     bool? usedTomTomData,
     bool? hasTimeRestriction,
     String? restrictionLabel,
+    bool? destinationBlocked,
     List<RestrictionPoint>? restrictionPoints,
     RouteResult? dirtRoadAlternative,
     List<SpeedLimitSpan>? speedLimits,
@@ -105,6 +113,7 @@ class RouteResult {
     usedTomTomData:      usedTomTomData      ?? this.usedTomTomData,
     hasTimeRestriction:  hasTimeRestriction  ?? this.hasTimeRestriction,
     restrictionLabel:    restrictionLabel    ?? this.restrictionLabel,
+    destinationBlocked:  destinationBlocked  ?? this.destinationBlocked,
     restrictionPoints:   restrictionPoints   ?? this.restrictionPoints,
     dirtRoadAlternative: dirtRoadAlternative ?? this.dirtRoadAlternative,
     speedLimits:         speedLimits         ?? this.speedLimits,

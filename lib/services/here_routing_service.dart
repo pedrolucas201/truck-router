@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config.dart';
@@ -7,6 +8,11 @@ import '../models/route_maneuver.dart';
 import '../models/route_result.dart';
 import '../models/truck_profile.dart';
 import 'flexible_polyline_decoder.dart';
+import 'radar_service.dart';
+
+/// Um span da rota + se ele cai em trecho com restrição violada. Só existe pro
+/// invariante do destino inalcançável (ver [HereRoutingService.destinationBlockedLabel]).
+typedef SpanViolation = ({int offset, bool violated, bool blocksMode});
 
 class HereRoutingService {
   /// Teto da chamada de rota. Sem ele a navegação inteira congela pelo tempo que
@@ -111,6 +117,9 @@ class HereRoutingService {
     final trafficSpans = <TrafficSpan>[];
     final restrictionPoints = <RestrictionPoint>[];
     final seenRestriction = <String>{}; // dedup por posição+rótulo
+    // TODOS os spans em ordem (não só o 1º de cada notice): o invariante do
+    // destino precisa saber se o ÚLTIMO deles está restrito.
+    final spanFlags = <SpanViolation>[];
 
     for (final s in sections) {
       final section      = s as Map<String, dynamic>;
@@ -163,12 +172,18 @@ class HereRoutingService {
         // Restrição de caminhão neste trecho → ponto no mapa. O span traz os
         // índices dos notices da seção; o 1º span que cita um notice = onde o
         // trecho restrito começa.
+        var spanViolated = false;
+        var spanBlocksMode = false;
         for (final ni in (span['notices'] as List?)?.cast<num>() ?? const []) {
           final i = ni.toInt();
           if (i < 0 || i >= secNotices.length) continue;
-          if (!seenIdxInSection.add(i)) continue;
           final n = secNotices[i];
           if (n['code'] != 'violatedVehicleRestriction') continue;
+          spanViolated = true;
+          if (_blocksTransportMode(n)) spanBlocksMode = true;
+          // dedup DEPOIS das flags: o 1º span marca o pin, mas todo span
+          // restrito conta pro bloco final do invariante.
+          if (!seenIdxInSection.add(i)) continue;
           final pos = offset < allPoints.length ? allPoints[offset] : allPoints.last;
           final label = _labelForNotice(n) ?? 'Restrição para caminhões nesta via';
           final key = '${pos.latitude},${pos.longitude}|$label';
@@ -176,6 +191,8 @@ class HereRoutingService {
             restrictionPoints.add(RestrictionPoint(pos, label));
           }
         }
+        spanFlags.add(
+            (offset: offset, violated: spanViolated, blocksMode: spanBlocksMode));
 
         // Trânsito: razão trafficSpeed/baseSpeed. Guarda TODOS os spans (inclusive
         // free) — o free serve de fronteira p/ o render saber onde o trecho lento
@@ -189,18 +206,79 @@ class HereRoutingService {
       }
     }
 
+    // ── Destino inalcançável ────────────────────────────────────────────────
+    // INVARIANTE: se o trecho restrito alcança o ÚLTIMO span, o problema não é
+    // de passagem — é que o DESTINO não é atingível com este veículo.
+    //
+    // A HERE devolve a rota assim de propósito: quando a restrição cai em cima
+    // do waypoint, ela viola o acesso pra conseguir entregar ("violating
+    // restrictions can't be avoided when restrictions apply on a waypoint") e
+    // sinaliza pelo notice. Nós líamos o notice e dizíamos "restrição NESTA
+    // VIA" — aviso de trecho pra um problema de destino. Isso não é neutro:
+    // ensina o motorista a ignorar o alerta, porque ele olha a rodovia, não vê
+    // restrição nenhuma e conclui que o app erra (campo 03/08: os últimos 225 m
+    // até um destino no centro de Taubaté são ruas proibidas a caminhão; a rota
+    // vira pedido de retorno + volta pela cidade, e a HERE fica oscilando entre
+    // alternativas igualmente impossíveis dentro da tolerância dela).
+    //
+    // Por que o último span e não "últimos N metros": limiar fixo erra dos dois
+    // lados — perde a proibição que começa antes de N e alcança o destino, e
+    // pega a que termina antes dele (onde o rótulo de trecho já está certo).
+    final blockedLabel = destinationBlockedLabel(spanFlags, allPoints);
+
     return RouteResult(
       polylinePoints:    allPoints,
       distanceMeters:    totalDistance,
       durationSeconds:   totalDuration,
       maneuvers:         allManeuvers,
       hasTimeRestriction: hasTimeRestriction,
-      restrictionLabel:   restrictionLabel,
+      restrictionLabel:   blockedLabel ?? restrictionLabel,
+      destinationBlocked: blockedLabel != null,
       restrictionPoints:  restrictionPoints,
       speedLimits:        speedLimits,
       trafficSpans:       trafficSpans,
     );
   }
+
+  /// Rótulo do destino inalcançável, ou null quando a rota termina em via
+  /// liberada (aí vale o rótulo de trecho de sempre).
+  @visibleForTesting
+  static String? destinationBlockedLabel(
+      List<SpanViolation> spans, List<LatLng> points) {
+    if (spans.isEmpty || points.length < 2 || !spans.last.violated) return null;
+    // Anda pra trás enquanto o trecho seguir restrito: o começo do BLOCO FINAL é
+    // onde a proibição começa. Usar o 1º span restrito da rota inteira mentiria
+    // quando o mesmo notice também aparece solto lá atrás.
+    var i = spans.length - 1;
+    var blocksMode = spans[i].blocksMode;
+    while (i > 0 && spans[i - 1].violated) {
+      i--;
+      if (spans[i].blocksMode) blocksMode = true;
+    }
+    // ponytail: só acesso proibido ganha texto próprio — é o caso medido em
+    // campo. Restrição de dimensão no fim mantém o rótulo de dimensão, que já
+    // diz o que o motorista precisa (altura/peso máx) sem eu inventar frase.
+    if (!blocksMode) return null;
+    final startIdx = spans[i].offset.clamp(0, points.length - 1);
+    final m = RadarService.remainingAlongRoute(points, startIdx, double.infinity);
+    if (m <= 0) return null;
+    return 'Últimos ${_fmtMeters(m)} proibidos para caminhão';
+  }
+
+  // 225 m → "230 metros"; 1240 m → "1,2 quilômetros". Arredonda porque a
+  // polyline não tem precisão de metro e "227" fingiria que tem.
+  //
+  // Unidade por EXTENSO porque este texto vai pro banner E pra voz: o app já
+  // fala "Em 200 metros" (navigation_screen:1690) e abreviação em TTS é
+  // loteria de engine ("m" vira "eme"). Um texto só evita ter que manter duas
+  // versões da mesma frase em sincronia.
+  static String _fmtMeters(double m) => m >= 1000
+      ? '${(m / 1000).toStringAsFixed(1).replaceAll('.', ',')} quilômetros'
+      : '${(m / 10).round() * 10} metros';
+
+  static bool _blocksTransportMode(Map<String, dynamic> n) =>
+      ((n['details'] as List?)?.cast<Map<String, dynamic>>() ?? const [])
+          .any((d) => d['type'] == 'violatedTransportMode');
 
   // Monta o texto do banner a partir do `details` do notice (o `title` da HERE
   // vem "Violated vehicle restriction." em inglês genérico — inútil). Dimensão
