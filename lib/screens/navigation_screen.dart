@@ -108,6 +108,22 @@ bool cameraMoveIsGesture({
 bool headingIsReliable(double rawSpeedMps, double headingDeg) =>
     rawSpeedMps * 3.6 >= kRerouteCourseMinKmh && headingDeg >= 0;
 
+/// Frase falada do alerta de restrição da rota.
+///
+/// Destino inalcançável fala o texto específico ("Últimos 230 metros proibidos
+/// para caminhão"). Dizer "restrição NESTA VIA" quando o problema é o DESTINO
+/// faz o motorista olhar a rodovia, não ver restrição nenhuma e concluir que o
+/// app erra — aí ele passa a ignorar o alerta que um dia vai ser multa.
+///
+/// ponytail: os outros rótulos seguem na frase genérica — trazem unidade
+/// abreviada ("altura máx 3,5 m") e TTS lê abreviação de forma imprevisível.
+String restrictionSpeech(RouteResult r) {
+  final label = r.restrictionLabel;
+  return r.destinationBlocked && label != null
+      ? label
+      : 'Restrição para caminhões nesta via';
+}
+
 // Metros por pixel na projeção do Google Maps (Web Mercator) no zoom/latitude
 // dados. É o que converte um erro de TELA em erro de MUNDO.
 double metersPerPixel(double zoom, double lat) =>
@@ -401,8 +417,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   String? _lastRestrictionAlertKey;
   String? _lastRadarAlertKey;
   DateTime? _resumedAt;
-  bool _hasTimeRestrictionAlert  = false;
-  bool _timeRestrictionAlertSpoken = false;
+  // Última frase de restrição ANUNCIADA (null = nada pendente). É texto e não
+  // bool de propósito: com bool, uma rota nova que troca o MOTIVO da restrição
+  // (dimensão → destino inalcançável) mantinha `hasTimeRestriction` true, o
+  // flag já estava marcado e a frase nova — mais grave e mais específica —
+  // nunca saía. Dedup por conteúdo é o padrão que _lastRadarAlertKey e
+  // _lastRestrictionAlertKey já usam neste arquivo.
+  String? _lastTimeRestrictionSpoken;
   bool _timeBannerVisible = false; // banner genérico de horário: some após alguns segundos
   Timer? _timeBannerTimer;
   String? _restrictionLabel; // tipo/limite da restrição (do details da HERE), p/ o banner
@@ -520,7 +541,6 @@ class _NavigationScreenState extends State<NavigationScreen>
     _weatherAlerts  = List.of(widget.initialWeatherAlerts);
     _visibleRadares = List.of(widget.initialRadares);
     _radarIconsFuture = Future.wait(_radares.map(_radarIcon));
-    _hasTimeRestrictionAlert = widget.result.hasTimeRestriction;
     _restrictionLabel        = widget.result.restrictionLabel;
     _restrictionPoints       = widget.result.restrictionPoints;
     WidgetsBinding.instance.addObserver(this);
@@ -1083,6 +1103,23 @@ class _NavigationScreenState extends State<NavigationScreen>
   // toda só comia tela, às vezes por cima da seta. Aparece ~8s e some; a voz
   // ("Atenção! Restrição...") já dá o aviso. O banner de restrição FÍSICA
   // (com local + botões) é outro e continua por proximidade.
+  // Anuncia a restrição da rota — no 1º fix e a cada rota nova. Só fala quando o
+  // TEXTO muda: repetir a mesma frase a cada reroute é o storm que o Gilberto já
+  // reclamou, e não repetir NUNCA esconde uma restrição diferente que apareceu.
+  // Rota sem restrição limpa o estado, então se ela voltar depois é anunciada de
+  // novo (o motorista precisa ouvir na rota em que está, não na anterior).
+  void _announceRestriction(RouteResult r) {
+    if (!r.hasTimeRestriction) {
+      _lastTimeRestrictionSpoken = null;
+      return;
+    }
+    final phrase = restrictionSpeech(r);
+    if (phrase == _lastTimeRestrictionSpoken) return;
+    _lastTimeRestrictionSpoken = phrase;
+    _speak('Atenção! $phrase');
+    _flashTimeBanner();
+  }
+
   void _flashTimeBanner() {
     _timeBannerTimer?.cancel();
     setState(() => _timeBannerVisible = true);
@@ -1179,11 +1216,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (!mounted) return;
     final firstFix = !_hasFirstFix;
     _hasFirstFix = true;
-    if (firstFix && _hasTimeRestrictionAlert && !_timeRestrictionAlertSpoken) {
-      _timeRestrictionAlertSpoken = true;
-      _speak('Atenção! Restrição para caminhões nesta via');
-      _flashTimeBanner();
-    }
+    if (firstFix) _announceRestriction(_result);
     if (firstFix) _refreshPoliceTimeline();
     final latLng = LatLng(pos.latitude, pos.longitude);
 
@@ -1860,7 +1893,6 @@ class _NavigationScreenState extends State<NavigationScreen>
         _overlaysSplitIdx        = null; // invalida cache de overlays: geometria mudou
         _maneuverIndex           = 0;
         _distToNextManeuver      = double.infinity;
-        _hasTimeRestrictionAlert = newResult.hasTimeRestriction;
         _restrictionLabel        = newResult.restrictionLabel;
         _restrictionPoints       = newResult.restrictionPoints;
         _announced.clear();
@@ -1905,13 +1937,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         'points':   newResult.polylinePoints.length,
         'distM':    newResult.distanceMeters.round(),
       });
-      if (newResult.hasTimeRestriction && !_timeRestrictionAlertSpoken) {
-        _timeRestrictionAlertSpoken = true;
-        _speak('Atenção! Restrição para caminhões nesta via');
-        _flashTimeBanner();
-      } else if (!newResult.hasTimeRestriction) {
-        _timeRestrictionAlertSpoken = false;
-      }
+      _announceRestriction(newResult);
       _loadRoutePois();
       _refreshPoliceTimeline();
       // Só anuncia num desvio REAL (urgent = saiu do corredor). O refresh
