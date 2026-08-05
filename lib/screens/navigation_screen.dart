@@ -108,6 +108,57 @@ bool cameraMoveIsGesture({
 bool headingIsReliable(double rawSpeedMps, double headingDeg) =>
     rawSpeedMps * 3.6 >= kRerouteCourseMinKmh && headingDeg >= 0;
 
+/// Puro/testável: seno do ângulo de divergência, medido por GEOMETRIA.
+///
+/// Quanto a separação da rota cresceu POR METRO PERCORRIDO na mesma janela.
+/// Trigonometria pura: andando θ graus fora da rota, o afastamento cresce
+/// `sin(θ)` por metro andado. Retorna -1 quando não deu pra medir (não andou o
+/// bastante na janela — sem deslocamento não existe ângulo).
+///
+/// POR QUE dividir pelo avanço: `_offGrowM` (12 m em 2,5 s) é limiar em METROS
+/// numa janela de TEMPO — ou seja, um teste de TAXA disfarçado (12/2,5 = 4,8 m/s
+/// de afastamento). Isso faz o gate depender da VELOCIDADE, não da geometria: o
+/// desvio real do Gilberto (2026-08-03) saiu a 34-42° e cresceu 9-11 m na janela
+/// — passou 15 vezes por baixo do limiar de 12 e o app levou 148 m / 14 s pra
+/// reagir. O MESMO desvio, com o mesmo ângulo, dispararia numa velocidade maior.
+/// Dividindo pelo avanço a velocidade cancela e sobra só o ângulo. Mesma família
+/// do free-look (metros fixos × offset em pixels) e das duas velocidades do
+/// reroute storm: a cura é o invariante, não recalibrar a constante.
+///
+/// POR QUE não usar o heading do GPS pra isso: ele é ruidoso justo quando mais
+/// importa (baixa velocidade) — no field_log tem episódio de pista paralela com
+/// `hdgDelta` batendo 135° e 141° enquanto a separação mal crescia. Dois
+/// deslocamentos medidos não têm esse ruído.
+double divergenceSine(double growthM, double advanceM) =>
+    advanceM < kMinAdvanceForAngleM ? -1 : growthM / advanceM;
+
+/// Piso de deslocamento pra que a razão acima signifique alguma coisa. Abaixo
+/// disso o denominador é pequeno demais e o ruído de GPS vira "ângulo".
+const double kMinAdvanceForAngleM = 7.0;
+
+/// 0,34 = sin(20°). Abaixo disso é mudança de faixa/curva de via dividida; acima
+/// é via se abrindo (saída/rampa/rua errada). Dimensionless: NÃO depende de km/h.
+const double kDivergeSine = 0.34;
+
+/// Por quanto tempo a divergência precisa se sustentar SEM cair pra valer como
+/// desvio. É aqui que pista paralela se separa de saída real: a paralela SATURA
+/// (o afastamento lateral tem teto = largura da via) e a razão decai; a saída
+/// real segura enquanto a via se abre.
+const int kDivergeSustainMs = 5000;
+
+/// Puro/testável: acumulador do "divergindo desde". Devolve o instante em que a
+/// divergência começou, ou null se agora não está divergindo.
+///
+/// Qualquer amostra abaixo do limiar ZERA — é o que faz a pista paralela nunca
+/// completar a janela. `measurable` falso (parado / avanço curto) também zera:
+/// "não sei" não pode acumular tempo de desvio.
+int? divergeSince(int? prevSinceMs, int nowMs, double sine, bool measurable) =>
+    (measurable && sine >= kDivergeSine) ? (prevSinceMs ?? nowMs) : null;
+
+/// Puro/testável: a divergência já se sustentou o bastante pra virar reroute?
+bool divergeSustained(int? sinceMs, int nowMs) =>
+    sinceMs != null && (nowMs - sinceMs) >= kDivergeSustainMs;
+
 /// Frase falada do alerta de restrição da rota.
 ///
 /// Destino inalcançável fala o texto específico ("Últimos 230 metros proibidos
@@ -295,6 +346,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   // "parado" pelo avanço líquido ao longo da rota — imune ao jitter de velocidade.
   final List<(int, LatLng)> _snapHistory = [];
   final List<(int, double)> _offDistHistory = []; // (ms, bestDist) p/ trend de afastamento
+  // Desde quando a divergência geométrica está acima de _divergeSine SEM cair.
+  // null = não está divergindo agora. Qualquer amostra abaixo do limiar zera —
+  // é o que faz a pista paralela (que satura) nunca completar a janela.
+  int? _divergeSinceMs;
 
   // Cache de ícones para radares
   final _iconCache = <String, BitmapDescriptor>{};
@@ -469,6 +524,28 @@ class _NavigationScreenState extends State<NavigationScreen>
   // ponytail: se pegar curva legítima (só dispara já >25m fora, então improvável),
   // subir; se deixar passar saída rasa, baixar.
   static const _divergeDeg             = 45.0;
+  // 2º caminho pra "saiu de verdade", por GEOMETRIA (ver divergenceSine no topo).
+  // Existe porque o par (_divergeDeg && _offGrowM) falhou JUNTO nos dois desvios
+  // reais que o field_log tem, cada um por um motivo diferente:
+  //   Gilberto 03/08 : growM 9-11 (< 12) E hdgDelta 34-42 (< 45) → 15 supressões,
+  //                    148 m e 14 s até reagir; só o teto de 150 m salvou.
+  //   ms97cgai       : growM 27-29 (2,4x ACIMA do limiar!) mas hdgDelta 34-35 →
+  //                    o `&&` engoliu mesmo com o afastamento gritando.
+  // Saída de rampa/trevo diverge RASO (34-42° nos dois) e o ângulo ainda DIMINUI
+  // conforme o caminhão se alinha com a rampa. 45° é ângulo de via transversal,
+  // quase nenhuma saída real chega lá. 0,34 = sin(20°): abaixo de 20° é mudança
+  // de faixa/curva; acima é via se abrindo. Dimensionless — não depende de km/h.
+  // Mora no topo do arquivo (kDivergeSine) junto da função pura que o usa —
+  // mesma razão de kRerouteCourseMinKmh: fonte única e testável sem widget.
+  // ...e sustentado. É AQUI que mora a diferença entre pista paralela e saída:
+  // paralela SATURA (o afastamento lateral tem teto = largura da via, então a
+  // razão decai pra ~0), saída real segura a razão enquanto a via se abre. No
+  // field_log a paralela decai (growM 8,7,6,5,3,2,2,1,0) e o desvio real fica
+  // cravado (11,10,10,10,...,9,9,9 por 14 s). Exigir 5 s contínuos mata transiente
+  // de GPS e o caso saturante; o desvio do Gilberto passaria a reagir em ~5 s /
+  // ~105 m em vez de 14 s / 148 m.
+  // ponytail: knob de campo — se aparecer reroute espúrio em pista dupla, subir;
+  // se ainda demorar pra pegar saída real, baixar. (kDivergeSustainMs, no topo.)
   // Carência pós-reroute: depois que a rota nova cai, origem/GPS ainda estão
   // defasados e o caminhão pode aparecer fora do corredor por 1-2s — o que
   // re-disparava 2-3 reroutes encadeados (field 2026-06-29, ~20s "atualizando").
@@ -1372,7 +1449,15 @@ class _NavigationScreenState extends State<NavigationScreen>
     // esse fantasma. Seguindo a rota o rumo acompanha o segmento (delta baixo) e a
     // distância não sobe — nada dispara.
     final diverging = headingReliable && headingDelta > _divergeDeg;
-    final leavingRoute = diverging && distGrowing;
+    // 2º caminho, GEOMÉTRICO e sustentado (ver _divergeSine / _divergeSustainMs).
+    // OR, não AND: os dois desvios reais do field_log foram engolidos pelo `&&`
+    // acima — um por baixo do ângulo, outro por baixo do crescimento. Cada branch
+    // sozinho deixa passar um deles. OR só ACRESCENTA poder de disparo: nada que
+    // rerotava antes deixa de rerotar.
+    final divSine = divergenceSine(distGrowthM, netAdvanceM);
+    _divergeSinceMs = divergeSince(_divergeSinceMs, nowMs, divSine, windowReady);
+    final sustainedDiverge = divergeSustained(_divergeSinceMs, nowMs);
+    final leavingRoute = (diverging && distGrowing) || sustainedDiverge;
     // Só quem saiu de verdade ganha o portão curto (~25m/~3-5s em vez de 70m/~8s).
     final offRouteGate = leavingRoute ? _offRouteNearM : _offRouteThresholdM;
 
@@ -1435,6 +1520,14 @@ class _NavigationScreenState extends State<NavigationScreen>
             'idxDelta': bestIdx - _offRouteStartIdx,
             'hdgDelta': headingDelta.round(),
             'growM': distGrowthM.round(),
+            // O limiar geométrico (0,34) é o único número aqui que eu NÃO pude
+            // validar contra o histórico: netM não era logado no suppressed, e
+            // sem ele não dá pra reconstruir o ângulo dos episódios antigos.
+            // Estes 3 campos são o que fecha esse buraco no próximo drive —
+            // paralela deve ficar bem abaixo de 0,34, saída real bem acima.
+            'sinDiv': (divSine * 100).round(),   // x100: inteiro é mais barato
+            'netM': netAdvanceM.round(),
+            'sustMs': _divergeSinceMs == null ? 0 : nowMs - _divergeSinceMs!,
           });
           _offRouteCount = _offRouteCountLimit - 1; // re-arma sem martelar
         }
@@ -1908,6 +2001,13 @@ class _NavigationScreenState extends State<NavigationScreen>
       // GPS/âncora alcançam (anti-encadeamento, field 2026-06-29).
       _rerouteGraceUntil = DateTime.now().add(
           const Duration(milliseconds: _rerouteGraceMs));
+      // Rota nova = outra referência: o histórico de afastamento foi medido
+      // contra a linha ANTIGA e o salto de bestDist na troca vira "divergência"
+      // que não existe. Sem zerar, o timer sustentado atravessaria a carência e
+      // dispararia um 2º reroute assim que ela expirasse (o encadeamento que a
+      // carência foi criada pra matar).
+      _offDistHistory.clear();
+      _divergeSinceMs = null;
       // Pós-reroute: não re-anunciar (storm "Em 500 metros") manobra que já
       // estamos em cima. Semeia os tiers já ultrapassados no instante do
       // recálculo — só fala quando o caminhão chegar MAIS perto. (maneuvers em
