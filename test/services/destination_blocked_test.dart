@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:truck_router/models/route_result.dart';
 import 'package:truck_router/services/here_routing_service.dart';
 import 'package:truck_router/services/radar_service.dart';
 
@@ -112,6 +113,55 @@ void main() {
         _span(0, violated: true, mode: true),
       ], pts);
       expect(label, 'Últimos 220 metros proibidos para caminhão');
+    });
+  });
+
+  // A 2ª tentativa (destination;radius=300) devolve uma rota LIMPA — zero
+  // notice. Se o aviso não for enxertado nela, o efeito líquido do "fix" é a
+  // rota parar ~200 m antes do pino SEM o motorista saber por quê: ele encosta,
+  // não vê destino nenhum e conclui que o app errou. Estes testes são o que
+  // impede essa regressão silenciosa.
+  group('graftBlockedWarning — a rota relaxada não pode perder o aviso', () {
+    final bloqueada = RouteResult(
+      polylinePoints: _linha(21),
+      distanceMeters: 29718,
+      durationSeconds: 2000,
+      hasTimeRestriction: true,
+      restrictionLabel: 'Últimos 230 metros proibidos para caminhão',
+      destinationBlocked: true,
+      restrictionPoints: const [
+        RestrictionPoint(LatLng(-23.026, -45.628), 'Via proibida'),
+      ],
+    );
+    // Como a HERE devolve com raio: mais curta e sem nenhum sinal de restrição.
+    final limpa = RouteResult(
+      polylinePoints: _linha(18),
+      distanceMeters: 29087,
+      durationSeconds: 1900,
+    );
+    final r = HereRoutingService.graftBlockedWarning(
+        relaxed: limpa, blocked: bloqueada);
+
+    test('a GEOMETRIA é a da rota limpa (senão o fix não mudou nada)', () {
+      expect(r.polylinePoints, limpa.polylinePoints);
+      expect(r.distanceMeters, 29087);
+      expect(r.distanceMeters, lessThan(bloqueada.distanceMeters));
+    });
+
+    test('hasTimeRestriction sobrevive — sem ele a voz nunca sai', () {
+      // _announceRestriction faz early-return em !hasTimeRestriction.
+      expect(r.hasTimeRestriction, isTrue);
+    });
+
+    test('a frase falada continua nomeando os metros proibidos', () {
+      expect(r.destinationBlocked, isTrue);
+      expect(r.restrictionLabel, 'Últimos 230 metros proibidos para caminhão');
+    });
+
+    test('os pontos do mapa sobrevivem — "Ver no mapa" continua funcionando', () {
+      // São coordenadas do mundo, não índices da polilinha: valem na rota nova.
+      expect(r.restrictionPoints, bloqueada.restrictionPoints);
+      expect(r.restrictionPoints, isNotEmpty);
     });
   });
 }

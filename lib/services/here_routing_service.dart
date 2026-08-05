@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config.dart';
 import 'auth_service.dart';
+import 'field_log.dart';
 import '../models/route_maneuver.dart';
 import '../models/route_result.dart';
 import '../models/truck_profile.dart';
@@ -30,6 +31,21 @@ class HereRoutingService {
   /// tentativa vem sozinha. Ficar preso não tem saída nenhuma.
   static const routeTimeout = Duration(seconds: 12);
 
+  /// Raio da 2ª tentativa quando o destino é inalcançável de caminhão: deixa a
+  /// HERE encostar na borda LEGAL em vez de forçar entrada em via proibida.
+  ///
+  /// 300 m medido em bancada no caso real (centro de Taubaté, 03/08): a rota sai
+  /// LIMPA (zero notice), fica **629 m mais curta** (29.087 vs 29.718) e termina
+  /// a 194 m do pino. Sem ele a HERE entrega a melhor rota ILEGAL e passa a
+  /// oscilar entre alternativas igualmente impossíveis perto do fim — foi o storm
+  /// de 11 reroutes em 95 s do drive do Gilberto.
+  static const destinationRadiusM = 300;
+
+  /// Teto CURTO da 2ª tentativa. Ela é bônus: a rota da 1ª já está na mão, então
+  /// o que não pode é dobrar o congelamento de tela que o `routeTimeout` existe
+  /// pra limitar. Pior caso do par vira 12s + 6s em vez de 24s.
+  static const _radiusRetryTimeout = Duration(seconds: 6);
+
   static Future<RouteResult> calculateRoute({
     required LatLng origin,
     required LatLng destination,
@@ -39,6 +55,13 @@ class HereRoutingService {
     List<LatLng> waypoints   = const [],
     List<String> avoidAreas  = const [],
     bool avoidDirtRoad        = true,
+    // Só a 2ª tentativa preenche (ver destinationRadiusM). Null = pede o pino
+    // exato, que é o certo pro caso normal — raio SEMPRE degradaria a precisão
+    // de chegada de toda rota, inclusive as que alcançam o destino sem problema.
+    int? destinationRadius,
+    // Trava de recursão: a 2ª tentativa não tem direito a uma 3ª.
+    bool allowDestinationRetry = true,
+    Duration? timeout,
   }) async {
     // course = rumo de marcha (0-359, N=0). Informado, a HERE inicia a rota NESSE
     // sentido em vez de escolher a mais curta — evita o "dê meia-volta" no reroute.
@@ -48,7 +71,10 @@ class HereRoutingService {
     final params = <String, dynamic>{
       'transportMode':   'truck',
       'origin':          originParam,
-      'destination':     '${destination.latitude},${destination.longitude}',
+      'destination':     destinationRadius == null
+          ? '${destination.latitude},${destination.longitude}'
+          : '${destination.latitude},${destination.longitude}'
+              ';radius=$destinationRadius',
       'return':          'polyline,summary,actions',
       // spans é parâmetro PRÓPRIO — NÃO vai dentro de 'return' (isso dá E605001).
       // Com transportMode=truck a HERE já devolve o limite do CAMINHÃO por trecho.
@@ -83,7 +109,7 @@ class HereRoutingService {
     final uri = Uri.parse('$backendUrl/route/here?${parts.join('&')}');
     final response =
         await http.get(uri, headers: await AuthService.getHeaders())
-            .timeout(routeTimeout);
+            .timeout(timeout ?? routeTimeout);
 
     if (response.statusCode != 200) {
       throw Exception('HERE API error ${response.statusCode}: ${response.body}');
@@ -226,7 +252,7 @@ class HereRoutingService {
     // pega a que termina antes dele (onde o rótulo de trecho já está certo).
     final blockedLabel = destinationBlockedLabel(spanFlags, allPoints);
 
-    return RouteResult(
+    final result = RouteResult(
       polylinePoints:    allPoints,
       distanceMeters:    totalDistance,
       durationSeconds:   totalDuration,
@@ -238,7 +264,110 @@ class HereRoutingService {
       speedLimits:        speedLimits,
       trafficSpans:       trafficSpans,
     );
+
+    // O rótulo EXPLICA o problema mas não muda a rota — sozinho, o motorista
+    // segue rodando a rota ilegal (e ouvindo a HERE mandar dar meia-volta perto
+    // do fim). A 2ª tentativa é o que muda o que ele DIRIGE.
+    //
+    // `destinationBlocked` já é o gate certo: ele só fica true quando a violação
+    // é de ACESSO (blocksMode) E alcança o último span. Restrição de dimensão ou
+    // de trecho no meio do caminho não entra aqui — nessas o pino continua
+    // alcançável e relaxar o destino só perderia precisão de chegada à toa.
+    if (result.destinationBlocked && allowDestinationRetry) {
+      final relaxed = await _retryOutsideBlockedDestination(
+        blocked:       result,
+        origin:        origin,
+        destination:   destination,
+        truck:         truck,
+        departureTime: departureTime,
+        course:        course,
+        waypoints:     waypoints,
+        avoidAreas:    avoidAreas,
+        avoidDirtRoad: avoidDirtRoad,
+      );
+      if (relaxed != null) return relaxed;
+    }
+    return result;
   }
+
+  /// 2ª tentativa com raio no destino. Devolve null quando não vale a troca —
+  /// aí o chamador segue com [blocked], que ao menos encosta no pino.
+  static Future<RouteResult?> _retryOutsideBlockedDestination({
+    required RouteResult blocked,
+    required LatLng origin,
+    required LatLng destination,
+    required TruckProfile truck,
+    String? departureTime,
+    double? course,
+    required List<LatLng> waypoints,
+    required List<String> avoidAreas,
+    required bool avoidDirtRoad,
+  }) async {
+    try {
+      final relaxed = await calculateRoute(
+        origin:                origin,
+        destination:           destination,
+        truck:                 truck,
+        departureTime:         departureTime,
+        course:                course,
+        waypoints:             waypoints,
+        avoidAreas:            avoidAreas,
+        avoidDirtRoad:         avoidDirtRoad,
+        destinationRadius:     destinationRadiusM,
+        allowDestinationRetry: false,
+        timeout:               _radiusRetryTimeout,
+      );
+      // Continua presa? Não ganhamos nada — e a rota da 1ª pelo menos vai até o
+      // pino. Trocar por outra igualmente ilegal só embaralha.
+      if (relaxed.destinationBlocked) return null;
+
+      FieldLog.event('route_dest_radius', {
+        'distBeforeM': blocked.distanceMeters,
+        'distAfterM':  relaxed.distanceMeters,
+        // Negativo = a rota legal ficou MAIS LONGA. No caso medido veio -629
+        // (mais curta). Se o campo mostrar rota muito mais longa, é sinal de que
+        // a HERE ancorou num ponto ruim — aí o raio vira condicional por delta.
+        // ponytail: sem teto de piora por enquanto; o log é que decide o número.
+        'deltaM':      relaxed.distanceMeters - blocked.distanceMeters,
+      });
+
+      return graftBlockedWarning(relaxed: relaxed, blocked: blocked);
+    } catch (e) {
+      // A 2ª tentativa é BÔNUS: rede caída, timeout curto, resposta estranha —
+      // nada disso pode derrubar uma rota que já está pronta na mão.
+      FieldLog.event('route_dest_radius_fail', {'err': e.toString()});
+      return null;
+    }
+  }
+
+  /// Leva o aviso da rota bloqueada pra rota relaxada.
+  ///
+  /// ⚠️ AQUI mora a coerência da 2ª tentativa. A rota relaxada é LIMPA: zero
+  /// notice, então `hasTimeRestriction`, `restrictionLabel` e
+  /// `destinationBlocked` voltam vazios — e `_announceRestriction` faz
+  /// early-return em `!hasTimeRestriction`. Sem enxertar, o efeito líquido seria
+  /// o PIOR dos mundos: a rota para ~200 m antes do pino e o motorista não é
+  /// avisado do porquê. Ele encosta, não vê destino nenhum e conclui que o app
+  /// errou — que é exatamente o que o rótulo da v2.4.43 foi feito pra impedir.
+  ///
+  /// O aviso vem da 1ª tentativa porque é ela que MEDIU o trecho proibido; a
+  /// relaxada não chega a entrar nele, então não teria o que medir.
+  ///
+  /// Os `restrictionPoints` vão junto: são coordenadas do MUNDO (as ruas
+  /// proibidas), não índices da polilinha — seguem válidos na rota nova e mantêm
+  /// o "Ver no mapa" do banner funcionando (v2.4.40). Sem eles o toque no banner
+  /// não faria nada.
+  @visibleForTesting
+  static RouteResult graftBlockedWarning({
+    required RouteResult relaxed,
+    required RouteResult blocked,
+  }) =>
+      relaxed.copyWith(
+        hasTimeRestriction: true,
+        restrictionLabel:   blocked.restrictionLabel,
+        destinationBlocked: true,
+        restrictionPoints:  blocked.restrictionPoints,
+      );
 
   /// Rótulo do destino inalcançável, ou null quando a rota termina em via
   /// liberada (aí vale o rótulo de trecho de sempre).
