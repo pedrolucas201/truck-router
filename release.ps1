@@ -46,7 +46,12 @@ gcloud storage cp $apk $latest --project=maps-route-495614
 # descobrir por engenharia reversa nos field_logs (quais eventos o build emitia).
 if (-not $SkipDistribution) {
     if (-not $Notes) {
-        $Notes = git log -1 --pretty=%s
+        # O commit de bump e SEMPRE o ultimo antes do release, entao o fallback ingenuo
+        # (git log -1) mandava "chore: bump versao para X" como nota — o motorista abre a
+        # notificacao, le isso e nao tem motivo nenhum pra instalar. Pega o primeiro
+        # commit de verdade abaixo dele.
+        $Notes = git log -10 --pretty=%s | Where-Object { $_ -notmatch "^chore: bump" } | Select-Object -First 1
+        if (-not $Notes) { $Notes = git log -1 --pretty=%s }
     }
     Write-Host "Distribuindo para o grupo '$testerGroup'..." -ForegroundColor Cyan
     # Nao usa $ErrorActionPreference=Stop aqui: o APK ja esta no GCS, uma falha do
