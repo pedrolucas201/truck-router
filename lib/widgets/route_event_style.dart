@@ -12,6 +12,7 @@ extension RouteEventStyle on RouteEventType {
         RouteEventType.scale       => Icons.monitor_weight,
         RouteEventType.restArea    => Icons.local_hotel,
         RouteEventType.weather     => Icons.thunderstorm,
+        RouteEventType.dirtRoad    => Icons.terrain,
       };
 
   Color get accentColor => switch (this) {
@@ -21,6 +22,9 @@ extension RouteEventStyle on RouteEventType {
         RouteEventType.scale       => Colors.purple.shade600,
         RouteEventType.restArea    => Colors.green.shade600,
         RouteEventType.weather     => Colors.deepOrange.shade600,
+        // Marrom: não compete com o vermelho de radar/restrição (que é o que
+        // custa multa) nem com o laranja do clima. Terra é informação, não perigo.
+        RouteEventType.dirtRoad    => Colors.brown.shade600,
       };
 
   String get label => switch (this) {
@@ -30,5 +34,6 @@ extension RouteEventStyle on RouteEventType {
         RouteEventType.scale       => 'Balança',
         RouteEventType.restArea    => 'Descanso',
         RouteEventType.weather     => 'Clima',
+        RouteEventType.dirtRoad    => 'Terra',
       };
 }

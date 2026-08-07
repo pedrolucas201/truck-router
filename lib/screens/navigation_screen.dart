@@ -2687,6 +2687,27 @@ class _NavigationScreenState extends State<NavigationScreen>
       ));
     }
 
+    // Início de trecho de terra à frente. Lê de _result (não de um campo espelho)
+    // porque o reroute troca _result inteiro — assim o aviso segue a rota nova
+    // sozinho. Sem voz, igual ao clima: é informação, não perigo iminente.
+    // Corredor 150 m: o ponto vem da PRÓPRIA polyline, mas isAhead amostra de 5
+    // em 5 e em rodovia os pontos são esparsos.
+    double bestDirtDist = double.infinity;
+    for (final s in _result.dirtSegments) {
+      if (!isAhead(s.position.latitude, s.position.longitude, 150)) continue;
+      final d = distFrom(s.position.latitude, s.position.longitude);
+      if (d < bestDirtDist) bestDirtDist = d;
+    }
+    if (bestDirtDist != double.infinity) {
+      // Sem label próprio: o tipo já diz "Terra" e a faixa já mostra a distância
+      // até lá. A extensão do trecho ele viu no card antes de sair — dois números
+      // na mesma faixa é o oposto de glanceável.
+      candidates.add(RouteEvent(
+        type: RouteEventType.dirtRoad,
+        distanceM: bestDirtDist,
+      ));
+    }
+
     double bestPoliceDist = double.infinity;
     for (final a in _policeAhead) {
       if (!isAhead(a.lat, a.lng, 200)) continue;

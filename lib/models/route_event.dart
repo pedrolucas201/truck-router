@@ -1,4 +1,4 @@
-enum RouteEventType { radar, restriction, police, scale, restArea, weather }
+enum RouteEventType { radar, restriction, police, scale, restArea, weather, dirtRoad }
 
 class RouteEvent {
   final RouteEventType type;

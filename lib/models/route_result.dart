@@ -46,6 +46,24 @@ class RestrictionPoint {
   const RestrictionPoint(this.position, this.label);
 }
 
+/// Trecho contínuo de estrada de terra na rota ENTREGUE (`spans=streetAttributes`
+/// → `dirtRoad`). `position` = onde o trecho começa; `meters` = extensão.
+///
+/// Existe porque `avoid[features]=dirtRoad` NÃO é garantia: quando não há
+/// alternativa pavimentada a HERE ignora o pedido, devolve a rota pela terra
+/// **sem emitir notice nenhum**, e o app achava que tinha desviado. Medido
+/// 06/08 no ponto do Gilberto: rota idêntica com e sem o avoid, 3.541 m de
+/// terra, `notices: nenhum`. Ler o span é a única forma de saber — mesma lógica
+/// do `stillBlocked`, que já confere se o avoid[areas] realmente funcionou.
+///
+/// É informativo: nunca bloqueia nem desvia. Quando a terra é o único acesso,
+/// não há o que oferecer — só avisar.
+class DirtRoadSegment {
+  final LatLng position;
+  final int meters;
+  const DirtRoadSegment(this.position, this.meters);
+}
+
 class RouteResult {
   final List<LatLng> polylinePoints;
   final int distanceMeters;
@@ -70,6 +88,9 @@ class RouteResult {
   final RouteResult? dirtRoadAlternative;
   final List<SpeedLimitSpan> speedLimits;
   final List<TrafficSpan> trafficSpans;
+  // Trechos de terra na rota entregue. Vazio na rota TomTom: os offsets são da
+  // polyline HERE (mesmo motivo de speedLimits/trafficSpans não serem herdados).
+  final List<DirtRoadSegment> dirtSegments;
 
   const RouteResult({
     required this.polylinePoints,
@@ -86,6 +107,7 @@ class RouteResult {
     this.dirtRoadAlternative  ,
     this.speedLimits          = const [],
     this.trafficSpans         = const [],
+    this.dirtSegments         = const [],
   });
 
   RouteResult copyWith({
@@ -103,6 +125,7 @@ class RouteResult {
     RouteResult? dirtRoadAlternative,
     List<SpeedLimitSpan>? speedLimits,
     List<TrafficSpan>? trafficSpans,
+    List<DirtRoadSegment>? dirtSegments,
   }) => RouteResult(
     polylinePoints:      polylinePoints      ?? this.polylinePoints,
     distanceMeters:      distanceMeters      ?? this.distanceMeters,
@@ -118,7 +141,23 @@ class RouteResult {
     dirtRoadAlternative: dirtRoadAlternative ?? this.dirtRoadAlternative,
     speedLimits:         speedLimits         ?? this.speedLimits,
     trafficSpans:        trafficSpans        ?? this.trafficSpans,
+    dirtSegments:        dirtSegments        ?? this.dirtSegments,
   );
+
+  /// Total de estrada de terra na rota, em metros. 0 = rota toda pavimentada
+  /// (ou fonte sem o dado — ver `dirtSegments`).
+  int get dirtMeters {
+    var m = 0;
+    for (final s in dirtSegments) {
+      m += s.meters;
+    }
+    return m;
+  }
+
+  /// "900 m" / "3,5 km" — pronto pro usuário.
+  String get dirtText => dirtMeters >= 1000
+      ? '${(dirtMeters / 1000).toStringAsFixed(1).replaceAll('.', ',')} km'
+      : '$dirtMeters m';
 
   /// Limite de caminhão vigente em [polylineIdx]: o último span cujo offset
   /// já começou (offset <= idx). Null quando a rota não trouxe dados de limite.

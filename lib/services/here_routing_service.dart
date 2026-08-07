@@ -14,6 +14,8 @@ import 'radar_service.dart';
 /// Um span da rota + se ele cai em trecho com restrição violada. Só existe pro
 /// invariante do destino inalcançável (ver [HereRoutingService.destinationBlockedLabel]).
 typedef SpanViolation = ({int offset, bool violated, bool blocksMode});
+/// Um span da rota + se a HERE o marcou `dirtRoad` + seu comprimento.
+typedef DirtSpan = ({int offset, bool dirt, int meters});
 
 class HereRoutingService {
   /// Teto da chamada de rota. Sem ele a navegação inteira congela pelo tempo que
@@ -81,7 +83,11 @@ class HereRoutingService {
       // dynamicSpeedInfo (sem departureTime) traz baseSpeed vs trafficSpeed = trânsito.
       // notices: cada span referencia o notice por índice + traz o offset → dá pra
       // fixar a restrição de caminhão num ponto do mapa (report Gilberto 12/07).
-      'spans':           'speedLimit,dynamicSpeedInfo,notices',
+      // streetAttributes+length: `dirtRoad` marca trecho sem pavimento. Não dá
+      // pra confiar no avoid[features]=dirtRoad — sem alternativa a HERE devolve
+      // a terra do mesmo jeito e NÃO emite notice (medido 06/08). O span é o
+      // único sinal. `length` evita ter que medir a polyline pra dizer quantos m.
+      'spans':           'speedLimit,dynamicSpeedInfo,notices,streetAttributes,length',
       'lang':            'pt-BR',
       if (avoidDirtRoad) 'avoid[features]': 'dirtRoad',
       ...truck.toHereParams(),
@@ -143,6 +149,8 @@ class HereRoutingService {
     final trafficSpans = <TrafficSpan>[];
     final restrictionPoints = <RestrictionPoint>[];
     final seenRestriction = <String>{}; // dedup por posição+rótulo
+    // Terra: um flag por span, agrupado depois (mesmo esquema do spanFlags).
+    final dirtFlags = <DirtSpan>[];
     // TODOS os spans em ordem (não só o 1º de cada notice): o invariante do
     // destino precisa saber se o ÚLTIMO deles está restrito.
     final spanFlags = <SpanViolation>[];
@@ -195,6 +203,12 @@ class HereRoutingService {
           speedLimits.add(SpeedLimitSpan(offset, (speedMs * 3.6).round()));
         }
 
+        dirtFlags.add((
+          offset: offset,
+          dirt:   (span['streetAttributes'] as List?)?.contains('dirtRoad') ?? false,
+          meters: (span['length'] as num?)?.toInt() ?? 0,
+        ));
+
         // Restrição de caminhão neste trecho → ponto no mapa. O span traz os
         // índices dos notices da seção; o 1º span que cita um notice = onde o
         // trecho restrito começa.
@@ -232,6 +246,8 @@ class HereRoutingService {
       }
     }
 
+    final dirtSegments = groupDirtSpans(dirtFlags, allPoints);
+
     // ── Destino inalcançável ────────────────────────────────────────────────
     // INVARIANTE: se o trecho restrito alcança o ÚLTIMO span, o problema não é
     // de passagem — é que o DESTINO não é atingível com este veículo.
@@ -263,6 +279,7 @@ class HereRoutingService {
       restrictionPoints:  restrictionPoints,
       speedLimits:        speedLimits,
       trafficSpans:       trafficSpans,
+      dirtSegments:       dirtSegments,
     );
 
     // O rótulo EXPLICA o problema mas não muda a rota — sozinho, o motorista
@@ -368,6 +385,37 @@ class HereRoutingService {
         destinationBlocked: true,
         restrictionPoints:  blocked.restrictionPoints,
       );
+
+  /// Agrupa spans `dirtRoad` vizinhos num trecho só. Sem isto os 3,5 km de
+  /// estrada do caso do Gilberto virariam "4 trechos de terra" — a HERE quebra
+  /// o span a cada mudança de atributo (nome da via, ponte), não a cada mudança
+  /// de pavimento. O motorista atravessa UMA estrada.
+  ///
+  /// A posição é o INÍCIO do trecho: é lá que ele precisa ser avisado, não no
+  /// meio. Trecho ainda aberto no fim da lista é fechado — rota que TERMINA na
+  /// terra é o destino em estrada rural, o caso que mais precisa do aviso.
+  @visibleForTesting
+  static List<DirtRoadSegment> groupDirtSpans(
+      List<DirtSpan> spans, List<LatLng> points) {
+    if (points.isEmpty) return const [];
+    final out = <DirtRoadSegment>[];
+    var start  = -1;
+    var meters = 0;
+    LatLng at(int i) => i < points.length ? points[i] : points.last;
+
+    for (final s in spans) {
+      if (s.dirt) {
+        if (start < 0) start = s.offset;
+        meters += s.meters;
+      } else if (start >= 0) {
+        out.add(DirtRoadSegment(at(start), meters));
+        start  = -1;
+        meters = 0;
+      }
+    }
+    if (start >= 0) out.add(DirtRoadSegment(at(start), meters));
+    return out;
+  }
 
   /// Rótulo do destino inalcançável, ou null quando a rota termina em via
   /// liberada (aí vale o rótulo de trecho de sempre).

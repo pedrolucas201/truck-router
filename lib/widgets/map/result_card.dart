@@ -63,6 +63,7 @@ class ResultCard extends StatelessWidget {
             onBlockedTap: onBlockedTap,
           ),
         if (weatherAlerts.isNotEmpty) WeatherBanner(alerts: weatherAlerts),
+        if (result.dirtSegments.isNotEmpty) DirtRoadBanner(result: result),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
           child: Row(
@@ -251,6 +252,52 @@ class WeatherBanner extends StatelessWidget {
         child: Row(
           children: [
             Icon(_iconFor(first.kind), color: color, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                    fontSize: 12, color: color, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Aviso de estrada de terra na rota — mesma fatia do clima, antes de sair.
+///
+/// O app pede `avoid[features]=dirtRoad` em toda rota, mas quando não existe
+/// alternativa a HERE entrega a terra assim mesmo e não avisa por notice. Este
+/// banner é o que transforma esse silêncio em informação: o motorista decide se
+/// vai com a carga que está levando (report Gilberto 06/08 — rota real com
+/// 881 m de terra e nenhum aviso).
+class DirtRoadBanner extends StatelessWidget {
+  final RouteResult result;
+  const DirtRoadBanner({super.key, required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final n = result.dirtSegments.length;
+    final message = n == 1
+        ? '${result.dirtText} de estrada de terra na rota'
+        : '${result.dirtText} de estrada de terra na rota, em $n trechos';
+
+    final color = Colors.brown.shade700;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.brown.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.brown.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.terrain, color: color, size: 16),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
