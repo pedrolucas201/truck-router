@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/here_geocoding_service.dart';
@@ -51,12 +52,27 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
     });
   }
 
-  Future<void> _search(String query) async {
+  // Sem debounce cada TECLA disparava as 3 fontes de geocoding em paralelo:
+  // digitar "rua guaianases, 1448" custava ~54 chamadas pra um endereço só.
+  // Também é o que segura o Nominatim dentro da política de 1 req/s dele — o
+  // debounce só dispara na PAUSA, então digitação contínua não gera chamada
+  // nenhuma. Ver HereGeocodingService.houseNumberOf.
+  Timer? _debounce;
+
+  void _onChanged(String query) {
+    _debounce?.cancel();
+    // Limpar campo e marca de confirmado é imediato: esperar 400 ms deixaria o
+    // check verde aceso sobre um texto que ele já apagou.
     setState(() => _confirmed = false);
     if (query.length < 3) {
       setState(() => _suggestions = []);
       return;
     }
+    _debounce = Timer(const Duration(milliseconds: 400), () => _search(query));
+  }
+
+  Future<void> _search(String query) async {
+    if (!mounted) return;
     setState(() => _loading = true);
     final results = await HereGeocodingService.search(
         query, bias: widget.biasLocation);
@@ -112,6 +128,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
   }
 
   Future<void> _submitFirst() async {
+    _debounce?.cancel(); // ele já decidiu; busca atrasada só sobrescreveria a lista
     if (_suggestions.isNotEmpty) {
       await _select(_suggestions.first);
       return;
@@ -129,6 +146,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -193,7 +211,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
                         color: Color(0xFF00897B), size: 18)
                     : null,
           ),
-          onChanged: _search,
+          onChanged: _onChanged,
           onSubmitted: (_) => _submitFirst(),
         ),
         _buildDropdown(context),
