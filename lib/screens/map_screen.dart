@@ -582,19 +582,26 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   /// erro é o de hoje (centro errado num mapa de 50 km) com o botão de GPS ao
   /// lado. Se isso aparecer em campo, aí refina — com guard de câmera intocada.
   Future<void> _primeInitialCamera() async {
-    final perm = await Geolocator.checkPermission();
-    if (perm != LocationPermission.always &&
-        perm != LocationPermission.whileInUse) {
-      return;
+    // try/catch porque isto roda solto a partir do initState: sem ele, um device
+    // sem Play Services (ou com serviço de localização capado) joga exceção
+    // assíncrona sem dono. Falhar aqui só significa abrir o mapa como antes.
+    try {
+      final perm = await Geolocator.checkPermission();
+      if (perm != LocationPermission.always &&
+          perm != LocationPermission.whileInUse) {
+        return;
+      }
+      final last = await Geolocator.getLastKnownPosition();
+      if (!mounted) return;
+      setState(() {
+        _myLocationOn = true;
+        if (last != null) _startCenter = LatLng(last.latitude, last.longitude);
+      });
+      final s = _startCenter;
+      if (s != null) _mapController?.animateCamera(CameraUpdate.newLatLng(s));
+    } catch (e, st) {
+      FieldLog.error('map_initial_camera', e, st);
     }
-    final last = await Geolocator.getLastKnownPosition();
-    if (!mounted) return;
-    setState(() {
-      _myLocationOn = true;
-      if (last != null) _startCenter = LatLng(last.latitude, last.longitude);
-    });
-    final s = _startCenter;
-    if (s != null) _mapController?.animateCamera(CameraUpdate.newLatLng(s));
   }
 
   // Segurar o dedo no mapa → abre o cartão NA HORA (busca o endereço em segundo

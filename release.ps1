@@ -52,6 +52,10 @@ if (-not $SkipDistribution) {
         # commit de verdade abaixo dele.
         $Notes = git log -10 --pretty=%s | Where-Object { $_ -notmatch "^chore: bump" } | Select-Object -First 1
         if (-not $Notes) { $Notes = git log -1 --pretty=%s }
+        # Tira o prefixo Conventional ("fix(busca): ", "feat(terra): "). Ele existe
+        # pro historico do git, nao pro motorista — na v2.4.45 a nota saiu com
+        # "feat(terra):" na frente e teve que ser corrigida a mao pela API depois.
+        $Notes = $Notes -replace '^[a-z]+(\([^)]+\))?!?:\s*', ''
     }
     Write-Host "Distribuindo para o grupo '$testerGroup'..." -ForegroundColor Cyan
     # Nao usa $ErrorActionPreference=Stop aqui: o APK ja esta no GCS, uma falha do
