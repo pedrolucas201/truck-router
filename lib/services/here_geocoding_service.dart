@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config.dart';
@@ -41,6 +42,18 @@ class HereGeocodingService {
     final marcoKm  = isKm ? _safe('marco_km', () => _marcoKm(query, bias)) : null;
     final googleKm = isKm ? _googleGeocode(query) : null;
 
+    // Endereço com número de casa: o OSM entra como fonte extra — ver houseNumberOf.
+    // Dispara JUNTO com as da HERE (mesmo lote, sem await aqui) e não numa segunda
+    // rodada: resultado que chega atrasado mexe a lista embaixo do dedo do motorista
+    // e ele toca no item errado.
+    // ponytail: o Nominatim pede no máximo 1 req/s. Com o debounce do campo e UM
+    // motorista isso não chega perto; se escalar de usuário, trocar pelo `qq=`
+    // estruturado da HERE, que já foi medido e resolve o mesmo caso.
+    final houseNum = houseNumberOf(query);
+    final osmNum   = houseNum == null
+        ? null
+        : _safe('nominatim_num', () => _nominatimSearch(query, bias: bias));
+
     // _safe isola cada fonte: sem isto, um jsonDecode que lança (backend devolveu
     // HTML/erro em vez de JSON) mata a busca INTEIRA via Future.wait, sem sinal.
     final hereResults = await Future.wait([
@@ -71,6 +84,21 @@ class HereGeocodingService {
       if (seenKeys.add(s.title.toLowerCase().trim())) merged.insert(0, s);
     }
 
+    // Pediu número e nenhuma sugestão da HERE trouxe ESSE número → o resultado do
+    // OSM que trouxer entra em primeiro: é o mais específico e é o que ele quer.
+    // Só ADICIONA, nunca substitui: a cobertura do OSM no Brasil é irregular (acerta
+    // o centro de São Paulo, falha em cidade pequena — justo onde a HERE acerta,
+    // como no Tupã deste mesmo caso). As duas fontes se completam.
+    if (houseNum != null &&
+        !merged.any((s) => labelHasHouseNumber(s.title, houseNum))) {
+      for (final s in (await osmNum!).reversed) {
+        if (labelHasHouseNumber(s.title, houseNum) &&
+            seenKeys.add(s.title.toLowerCase().trim())) {
+          merged.insert(0, s);
+        }
+      }
+    }
+
     // Fallback: Nominatim (OpenStreetMap) quando HERE não encontra nada.
     // Chamado só neste caso para respeitar o limite de 1 req/s do serviço gratuito.
     if (merged.isEmpty) {
@@ -98,6 +126,43 @@ class HereGeocodingService {
   // Rodovia por km: "km 936", "km936", "KM 936+700". A HERE erra esse formato.
   static final _kmRe = RegExp(r'\bkm\s*(\d+)', caseSensitive: false);
   static bool _isRodoviaKm(String q) => _kmRe.hasMatch(q);
+
+  // ── Número de casa ───────────────────────────────────────────────────────────
+  // Reportado pelo Gilberto em 2026-08-10: "rua guaianases, 1448" devolve o 1448
+  // de TUPÃ (600 km longe) e São Paulo só aparece como rua, sem número. Medido na
+  // chave real: a HERE TEM o ponto exato de SP, mas os números estão cadastrados
+  // sob outro nome da mesma rua ("Rua dos Guaianazes", com Z), então o texto livre
+  // nunca chega neles — nem com a cidade digitada junto, nem com `at` na posição
+  // dele. Só a busca estruturada com `city` explícita acha, e o motorista não
+  // digita a cidade. O OSM acerta esse caso sem cidade nenhuma.
+  // Consequência medida: a sugestão de rua que sobrava fica a 975 m do número.
+
+  /// Número de casa da busca, ou null.
+  ///
+  /// Reconhece as duas formas que o motorista escreve: depois de vírgula
+  /// ("Rua X, 1448") ou fechando a busca ("Av Paulista 1000"). "Rua 25 de Março"
+  /// não casa em nenhuma das duas — é o que separa nome de rua com número de
+  /// número de casa de verdade.
+  static final _houseNumRe = RegExp(r',\s*(\d{1,6})(?![\d-])|(\d{1,6})\s*$');
+  @visibleForTesting
+  static String? houseNumberOf(String q) {
+    final s = q.trim();
+    if (_isCep(s) || _isRodoviaKm(s)) return null; // ambos já têm dono
+    final ms = _houseNumRe.allMatches(s).toList();
+    if (ms.isEmpty) return null;
+    return ms.last.group(1) ?? ms.last.group(2);
+  }
+
+  /// A sugestão já traz esse número de casa?
+  ///
+  /// Compara no formato de rótulo das duas fontes ("Rua X, 1448, Bairro, ...").
+  /// O `(?![\d-])` evita casar 1448 dentro de "14480" ou de um CEP.
+  /// NUNCA comparar nome de rua: em São Paulo o número mora sob "Rua dos
+  /// Guaianazes" e a busca é "Rua Guaianases" — um guard por nome reprovaria
+  /// exatamente o caso que isto conserta.
+  @visibleForTesting
+  static bool labelHasHouseNumber(String label, String num) =>
+      RegExp(',\\s*$num(?![\\d-])').hasMatch(label);
 
   /// Marco quilométrico das federais, resolvido no backend a partir do SNV/DNIT.
   ///
@@ -315,8 +380,24 @@ class HereGeocodingService {
               ?? '') as String;
       final state   = (address?['state'] ?? '') as String;
 
+      // Endereço com número: rotular igual a HERE ("Rua X, 1448, Bairro, Cidade - UF").
+      // Sem isto o resultado de casa cai no fallback do display_name e sai como
+      // "1448, Rua Guaianases, Campos Elísios" — começa pelo número e perde a
+      // cidade, que é justamente o que o motorista usa pra saber se é a rua certa.
+      final houseNum = address?['house_number'] as String?;
+      final road     = address?['road'] as String?;
+      final district = (address?['suburb'] ?? address?['city_district']) as String?;
+      // ISO3166-2-lvl4 vem como "BR-SP"; o campo `state` traz "São Paulo" por extenso.
+      final uf = (address?['ISO3166-2-lvl4'] as String?)?.split('-').last ?? state;
+
       final String title;
-      if (name.isNotEmpty && city.isNotEmpty) {
+      if (houseNum != null && road != null) {
+        title = [
+          '$road, $houseNum',
+          if (district != null && district.isNotEmpty) district,
+          if (city.isNotEmpty) uf.isNotEmpty ? '$city - $uf' : city,
+        ].join(', ');
+      } else if (name.isNotEmpty && city.isNotEmpty) {
         title = state.isNotEmpty ? '$name, $city - $state' : '$name, $city';
       } else {
         // fallback: primeiros segmentos do display_name
