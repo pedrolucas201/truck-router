@@ -320,6 +320,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   Timer? _refreshTimer;
   Timer? _heartbeatTimer;
   DateTime? _lastRerouteAt;
+  LatLng? _lastRefreshPos; // onde estava no último refresh periódico (ver _periodicRefresh)
   int _offRouteCount = 0;
   int _offRouteStartIdx = 0; // bestIdx quando saiu do corredor (mede avanço p/ telemetria)
   DateTime? _offRouteSince; // instrumentação: quando o caminhão saiu do corredor
@@ -1894,6 +1895,24 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   Future<void> _periodicRefresh() async {
     if (_isRerouting || _paused || _currentPos == null) return;
+    // Parado não gasta rota. O refresh existe pra atualizar o que vem PELA FRENTE;
+    // com o caminhão parado não há frente nova. E ficar parado horas é o caso
+    // NORMAL aqui (pernoite, fila de balança, almoço, espera de carga), por isso a
+    // nav segue viva de propósito — o que não pode é custar dado/bateria à toa.
+    // Medido em campo: nav do Gilberto viva 9h46 na garagem gerou ~58 refreshes
+    // (sessão msi7wxbc-vdzvun, 06→07/08/2026).
+    // Distância, nunca velocidade: GPS parado dá 1-3 km/h de drift e um gate por
+    // velocidade nunca fecharia.
+    // ponytail: 100 m porque o accM chegou a 43 m com o caminhão parado nesse
+    // mesmo log; é knob, sobe se aparecer refresh espúrio.
+    final last = _lastRefreshPos;
+    if (last != null &&
+        RadarService.haversine(last.latitude, last.longitude,
+                _currentPos!.latitude, _currentPos!.longitude) <
+            100) {
+      return;
+    }
+    _lastRefreshPos = _currentPos;
     await _reroute();
   }
 
