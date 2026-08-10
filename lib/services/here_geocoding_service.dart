@@ -363,10 +363,17 @@ class HereGeocodingService {
           '${bias.longitude + 1},${bias.latitude - 1}',
       if (bias != null) 'bounded': '0',
     };
-    final response = await http.get(
-      Uri.https('nominatim.openstreetmap.org', '/search', params),
-      headers: {'User-Agent': 'TruckRouterApp/1.0 (devgomesss@gmail.com)'},
-    );
+    // Timeout curto porque isto está no caminho de DIGITAÇÃO: a busca inteira
+    // espera por ele antes de mostrar a lista, e o http.get do Dart não tem
+    // timeout padrão nenhum. Serviço gratuito e sem SLA não pode segurar a tela
+    // do motorista. Estourando, o _safe devolve [] e sobra o resultado da HERE,
+    // que é o comportamento de antes desta fonte existir.
+    final response = await http
+        .get(
+          Uri.https('nominatim.openstreetmap.org', '/search', params),
+          headers: {'User-Agent': 'TruckRouterApp/1.0 (devgomesss@gmail.com)'},
+        )
+        .timeout(const Duration(seconds: 3));
     if (response.statusCode != 200) return [];
 
     final items = jsonDecode(response.body) as List<dynamic>;
