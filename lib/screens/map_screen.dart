@@ -98,15 +98,22 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   static const _radarMinZoom = 14.0;
 
+  // Praça da Sé: só o ponto de partida de quem NUNCA deu permissão. Ver
+  // _primeInitialCamera. O zoom 11 (~50 km de largura) é o que o Gilberto pediu
+  // — a reclamação dele era só o centro, não o enquadramento.
   static const _initialPosition = CameraPosition(
     target: LatLng(-23.5505, -46.6333),
     zoom: 11,
   );
 
+  LatLng? _startCenter;        // onde abrir o mapa, se já dá pra saber
+  bool    _myLocationOn = false; // o "pontinho ali, nós" — só com permissão
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _primeInitialCamera();
     _loadPoiIcons();
     // Ícone de clima (mesmo ⛈️ da nav), cacheado; reusa o builder de POI.
     buildPoiIcon(Colors.deepOrange.shade600, Icons.thunderstorm)
@@ -556,6 +563,38 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         );
       }
     }
+  }
+
+  /// Abre o mapa onde o motorista está, e mostra o ponto azul dele.
+  ///
+  /// Pedido do Gilberto (07/08/2026): "quando abrir a tela, mostrar onde a gente
+  /// está, um pontinho ali, nós, no meio do mapa (...) que o centro seja onde a
+  /// gente está". Ele usa isso pra soltar o destino segurando o dedo no mapa
+  /// quando não sabe o endereço — com o mapa na Praça da Sé isso não serve.
+  ///
+  /// getLastKnownPosition é instantâneo, NÃO liga o GPS e NÃO abre diálogo: só
+  /// devolve o fix que o Android já tem. Sem permissão concedida nada acontece e
+  /// o mapa abre como antes — de propósito, pra não jogar um pedido de permissão
+  /// na cara de quem só quer olhar o mapa (negar aqui derrubaria a navegação junto).
+  ///
+  /// ponytail: sem refinar com um fix real depois. O último fix conhecido só
+  /// erra feio se o celular passou desligado uma viagem inteira, e mesmo aí o
+  /// erro é o de hoje (centro errado num mapa de 50 km) com o botão de GPS ao
+  /// lado. Se isso aparecer em campo, aí refina — com guard de câmera intocada.
+  Future<void> _primeInitialCamera() async {
+    final perm = await Geolocator.checkPermission();
+    if (perm != LocationPermission.always &&
+        perm != LocationPermission.whileInUse) {
+      return;
+    }
+    final last = await Geolocator.getLastKnownPosition();
+    if (!mounted) return;
+    setState(() {
+      _myLocationOn = true;
+      if (last != null) _startCenter = LatLng(last.latitude, last.longitude);
+    });
+    final s = _startCenter;
+    if (s != null) _mapController?.animateCamera(CameraUpdate.newLatLng(s));
   }
 
   // Segurar o dedo no mapa → abre o cartão NA HORA (busca o endereço em segundo
@@ -1392,7 +1431,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   initialCameraPosition: _initialPosition,
                   onMapCreated: (c) {
                     _mapController = c;
+                    // A posição pode ter chegado antes do mapa existir.
+                    final s = _startCenter;
+                    if (s != null) c.moveCamera(CameraUpdate.newLatLng(s));
                   },
+                  myLocationEnabled: _myLocationOn,
                   style: _themeController.isNight ? kNightMapStyle : null,
                   onCameraMove: (pos) {
                     if ((pos.zoom - _currentZoom).abs() > 0.3) {
