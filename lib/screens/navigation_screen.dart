@@ -2795,6 +2795,10 @@ class _NavigationScreenState extends State<NavigationScreen>
       builder: (_) => AddRadarSheet(position: pos),
     );
     if (radar == null || !mounted) { _recenter(); return; }
+    // Persiste ANTES de falar com a rede: sem auth, offline ou com a cota do
+    // Firestore estourada, o radar que ele marcou com a mão tem que sobreviver ao
+    // reroute e ao fechar do app. Sem isto ele existia só nesta sessão.
+    await FirestoreRadarService.addLocal(radar);
     String? id;
     try {
       final uid = await AuthService.getUid();
@@ -2802,11 +2806,14 @@ class _NavigationScreenState extends State<NavigationScreen>
         lat: radar.lat, lng: radar.lng, type: radar.type,
         speedKmh: radar.speedKmh, uid: uid,
       );
-    } catch (_) {/* sem auth: mostra local nesta sessão, sem id (não compartilha) */}
+    } catch (_) {/* sem auth: vale o local gravado acima, sem id (não compartilha) */}
     if (!mounted) return;
     // Mostra já localmente (com o id do doc, pra permitir remover depois).
     final local = RadarPoint(lat: radar.lat, lng: radar.lng, type: radar.type,
         speedKmh: radar.speedKmh, id: id, source: 'user');
+    // Regrava com o id (mesma chave, sobrescreve) pra o voto continuar possível
+    // depois de reabrir o app.
+    if (id != null) await FirestoreRadarService.addLocal(local);
     setState(() {
       _radares.add(local);
       _visibleRadares = List.of(_visibleRadares)..add(local);

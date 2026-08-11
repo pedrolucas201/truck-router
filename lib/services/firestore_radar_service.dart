@@ -49,16 +49,40 @@ class FirestoreRadarService {
   static const _overridesCol  = 'radar_overrides';
   static const _radarPassCol  = 'radar_pass';
   static const _localKey      = 'radar_overrides_local';
+  static const _localRadarKey = 'radar_crowd_local';
   // Cache em memória do set local persistente (carrega uma vez).
   static Map<String, RadarOverride>? _localCache;
+  static List<RadarPoint>? _localRadarCache;
 
   // ponytail: limiar de votos pra sumir global. 1 enquanto há ~1 usuário; subir
   // conforme a base cresce (3 vira razoável). Vale p/ reportedBy e p/ dismissals.
   static const _hideThreshold = 1;
 
+  /// Junta o crowd do Firestore com os radares deste device, sem duplicar.
+  /// Puro/testável: o remoto manda (traz id e votos), o local só ACRESCENTA o que
+  /// não veio. Chave de local (~1m) é a mesma do resto do arquivo.
+  static List<RadarPoint> mergeLocalCrowd(
+      List<RadarPoint> remoto, List<RadarPoint> locais, List<LatLng> points) {
+    if (locais.isEmpty) return remoto;
+    final vistos = remoto.map((r) => dismissalKey(r.lat, r.lng)).toSet();
+    final out = List.of(remoto);
+    for (final r in locais) {
+      // Proximidade ANTES do dedup: marcar como visto um radar que nem entrou
+      // deixaria o set mentindo pro resto do laço.
+      if (!RadarService.isNearRoute(r.lat, r.lng, points)) continue;
+      if (vistos.add(dismissalKey(r.lat, r.lng))) out.add(r);
+    }
+    return out;
+  }
+
   /// Radares crowd (adicionados) perto da rota, já filtrando os derrubados por voto.
+  /// Sempre uni os DESTE device (local-first): a cota diária de leitura do Spark
+  /// estoura e o Firestore devolve vazio — e radar que some é alerta que NÃO TOCA,
+  /// que é multa. Proteger o override (falso alarme) e deixar o radar adicionado
+  /// desprotegido era blindar o lado barato e deixar passar o caro.
   static Future<List<RadarPoint>> fetchNearRoute(List<LatLng> points) async {
     if (points.isEmpty) return [];
+    final locais = await _loadLocalRadars();
     final (:minLat, :maxLat, :minLng, :maxLng) = boundsOf(points);
     const pad = 0.05; // ~5 km
     try {
@@ -67,7 +91,7 @@ class FirestoreRadarService {
           .where('lat', isGreaterThanOrEqualTo: minLat - pad)
           .where('lat', isLessThanOrEqualTo: maxLat + pad)
           .get();
-      return snap.docs
+      final remoto = snap.docs
           .where((d) {
             final m = d.data();
             final lng = (m['lng'] as num).toDouble();
@@ -89,9 +113,12 @@ class FirestoreRadarService {
             );
           })
           .toList();
+      return mergeLocalCrowd(remoto, locais, points);
     } catch (e, st) {
       FieldLog.error('radar_fetch', e, st);
-      return [];
+      // NÃO é [] : é exatamente aqui que a cota estourada apagava o radar que o
+      // motorista marcou com a própria mão.
+      return mergeLocalCrowd(const [], locais, points);
     }
   }
 
@@ -248,6 +275,56 @@ class FirestoreRadarService {
       FieldLog.error('radar_overrides_fetch', e, st);
       return {};
     }
+  }
+
+  // ── Radares adicionados por ESTE device (local-first, igual ao override) ─────
+
+  static Future<List<RadarPoint>> _loadLocalRadars() async {
+    if (_localRadarCache != null) return _localRadarCache!;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_localRadarKey);
+    final out = <RadarPoint>[];
+    if (raw != null) {
+      try {
+        for (final e in jsonDecode(raw) as List) {
+          final m = e as Map<String, dynamic>;
+          out.add(RadarPoint(
+            lat: (m['lat'] as num).toDouble(),
+            lng: (m['lng'] as num).toDouble(),
+            type: m['type'] as String? ?? 'Radar',
+            speedKmh: (m['speedKmh'] as num?)?.toInt() ?? 0,
+            id: m['id'] as String?,
+            source: 'user',
+          ));
+        }
+      } catch (_) {/* JSON corrompido → começa limpo, igual _loadLocal */}
+    }
+    _localRadarCache = out;
+    return out;
+  }
+
+  /// Grava o radar marcado neste device. Sobrescreve pela chave de local, então
+  /// chamar de novo com o `id` do Firestore só completa o registro.
+  /// Chamado ANTES de tentar o Firestore: se o write remoto falhar (sem auth,
+  /// offline, cota), o radar tem que continuar existindo pro dono dele.
+  static Future<void> addLocal(RadarPoint r) async {
+    final atuais = await _loadLocalRadars();
+    final key = dismissalKey(r.lat, r.lng);
+    atuais.removeWhere((x) => dismissalKey(x.lat, x.lng) == key);
+    atuais.add(r);
+    _localRadarCache = atuais;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _localRadarKey,
+        jsonEncode(atuais
+            .map((x) => {
+                  'lat': x.lat,
+                  'lng': x.lng,
+                  'type': x.type,
+                  'speedKmh': x.speedKmh,
+                  if (x.id != null) 'id': x.id,
+                })
+            .toList()));
   }
 
   static Future<String?> add({
