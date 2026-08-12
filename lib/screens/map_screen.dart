@@ -182,24 +182,30 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _lastHandledUri = uriStr;
     _lastHandledAt  = now;
 
+    // Navegação (ou qualquer tela) aberta por cima do mapa: o motorista está
+    // dirigindo e não pode receber diálogo nem cálculo de rota por baixo do que
+    // está fazendo. O gate fica AQUI, no ponto por onde os três formatos de link
+    // passam — não em cada um deles.
+    final quiet = ModalRoute.of(context)?.isCurrent == false;
+
     final type = classifyMapsUri(uri);
     if (type == DeepLinkType.route) {
       final route = parseMapsUri(uri);
       if (route != null) {
-        _setDeepLinkRoute(route);
+        _setDeepLinkRoute(route, quiet: quiet);
         return;
       }
     } else if (type == DeepLinkType.destination) {
       // Pin de localização do WhatsApp (maps.google.com?q=lat,lng) — vira destino.
       final dest = parseMapsDestination(uri);
       if (dest != null) {
-        _handleGeoUri(dest);
+        _handleGeoUri(dest, quiet: quiet);
         return;
       }
     } else {
       final geo = parseGeoUri(uri);
       if (geo != null) {
-        _handleGeoUri(geo);
+        _handleGeoUri(geo, quiet: quiet);
         return;
       }
     }
@@ -221,7 +227,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _setDeepLinkRoute(MapsRoute route) {
+  void _setDeepLinkRoute(MapsRoute route, {bool quiet = false}) {
     setState(() {
       _destination      = route.destination;
       _destinationLabel = 'Destino compartilhado';
@@ -235,17 +241,27 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     context.read<RouteProvider>().clear();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(route.origin != null
-            ? 'Rota recebida — toque em Calcular para rotear'
-            : 'Destino recebido — toque em Calcular para rotear'),
+        content: Text(quiet
+            ? 'Rota recebida — vai estar no mapa quando você voltar'
+            : route.origin != null
+                ? 'Rota recebida — toque em Calcular para rotear'
+                : 'Destino recebido — toque em Calcular para rotear'),
         duration: const Duration(seconds: 4),
       ),
     );
-    if (_origin != null && _destination != null) _calculate();
+    if (!quiet && _origin != null && _destination != null) _calculate();
   }
 
-  void _handleGeoUri(GeoLocation geo) {
-    if (_destination != null) {
+  void _handleGeoUri(GeoLocation geo, {bool quiet = false}) {
+    final action = incomingLinkAction(
+      screenOnTop:    quiet,
+      hasDestination: _destination != null,
+    );
+    if (action == IncomingLinkAction.storeQuietly) {
+      _setDeepLinkDestination(geo, quiet: true);
+      return;
+    }
+    if (action == IncomingLinkAction.ask) {
       showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -271,7 +287,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _setDeepLinkDestination(GeoLocation geo) {
+  void _setDeepLinkDestination(GeoLocation geo, {bool quiet = false}) {
     setState(() {
       _destination      = geo.coords;
       _destinationLabel = geo.label ?? 'Localização compartilhada';
@@ -279,12 +295,16 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     });
     context.read<RouteProvider>().clear();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Destino recebido — toque em Calcular para rotear'),
-        duration: Duration(seconds: 4),
+      SnackBar(
+        content: Text(quiet
+            ? 'Localização recebida — vai estar no mapa quando você voltar'
+            : 'Destino recebido — toque em Calcular para rotear'),
+        duration: const Duration(seconds: 4),
       ),
     );
-    if (_origin != null) _calculate();
+    // Com tela por cima NÃO calcula: gastaria uma chamada da HERE que ninguém
+    // pediu e, se falhasse, jogaria SnackBar de erro por cima da navegação.
+    if (!quiet && _origin != null) _calculate();
   }
 
   @override

@@ -6,6 +6,31 @@ typedef MapsRoute = ({LatLng? origin, LatLng destination});
 
 enum DeepLinkType { route, destination, unknown }
 
+/// O que fazer com uma localização que chegou por link.
+///
+/// - [apply]       — não há destino e o mapa está na frente: aplica direto
+/// - [ask]         — já existe destino: pergunta antes de substituir
+/// - [storeQuietly] — há tela por cima (navegação): guarda calado e avisa
+enum IncomingLinkAction { apply, ask, storeQuietly }
+
+/// Decide o que fazer com um link recebido.
+///
+/// [screenOnTop] é o que muda tudo: se o motorista está com a navegação aberta,
+/// um diálogo do mapa aparece POR CIMA dela — e o "Usar" era mentira, porque a
+/// NavigationScreen recebe o destino no construtor e não muda de rota com isso.
+/// Ele confirmava uma troca que não acontecia e só descobria no fim da viagem.
+/// Com tela por cima ninguém pergunta nada e ninguém recalcula rota por baixo:
+/// guarda pro mapa e avisa. Decisão do Pedro em 12/08/2026 — trocar destino DE
+/// VERDADE no meio da viagem é outro item, não este.
+IncomingLinkAction incomingLinkAction({
+  required bool screenOnTop,
+  required bool hasDestination,
+}) {
+  if (screenOnTop)   return IncomingLinkAction.storeQuietly;
+  if (hasDestination) return IncomingLinkAction.ask;
+  return IncomingLinkAction.apply;
+}
+
 // Hosts do Google Maps que carregam coords em ?q= ou saddr/daddr. Shortlink
 // (maps.app.goo.gl) NÃO entra aqui: precisa resolver o redirect antes — cai no
 // fallback de captura até confirmarmos o formato real em device.

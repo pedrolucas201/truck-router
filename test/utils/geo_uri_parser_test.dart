@@ -2,6 +2,51 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:truck_router/utils/geo_uri_parser.dart';
 
 void main() {
+  group('incomingLinkAction — link chegando com o motorista dirigindo', () {
+    // A tabela inteira: 2 dimensões, 4 casos. O caso que originou isto é o
+    // terceiro — navegando COM destino, que antes abria um diálogo por cima da
+    // navegação e cujo "Usar" não trocava o destino da rota em curso.
+    test('mapa na frente e sem destino: aplica direto', () {
+      expect(
+        incomingLinkAction(screenOnTop: false, hasDestination: false),
+        IncomingLinkAction.apply,
+      );
+    });
+
+    test('mapa na frente e já com destino: pergunta antes de substituir', () {
+      expect(
+        incomingLinkAction(screenOnTop: false, hasDestination: true),
+        IncomingLinkAction.ask,
+      );
+    });
+
+    test('navegando com destino: guarda calado, NUNCA pergunta', () {
+      expect(
+        incomingLinkAction(screenOnTop: true, hasDestination: true),
+        IncomingLinkAction.storeQuietly,
+      );
+    });
+
+    test('navegando sem destino: guarda calado do mesmo jeito', () {
+      // Sem esta linha, "sem destino" cairia em apply e dispararia cálculo de
+      // rota por baixo da navegação.
+      expect(
+        incomingLinkAction(screenOnTop: true, hasDestination: false),
+        IncomingLinkAction.storeQuietly,
+      );
+    });
+
+    test('tela por cima manda mais que ter destino', () {
+      // O invariante em uma linha: dirigindo, nenhuma combinação pergunta nada.
+      for (final hasDest in [true, false]) {
+        expect(
+          incomingLinkAction(screenOnTop: true, hasDestination: hasDest),
+          isNot(IncomingLinkAction.ask),
+        );
+      }
+    });
+  });
+
   group('parseGeoUri — geo: scheme', () {
     test('parseia geo:lat,lng básico', () {
       final uri = Uri.parse('geo:-23.5505,-46.6333');
