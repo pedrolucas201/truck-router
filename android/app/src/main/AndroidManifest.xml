@@ -26,11 +26,30 @@
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false"/>
+        <!-- launchMode=singleTask é O QUE FAZ O BOTÃO VOLTAR DEVOLVER PRO WHATSAPP.
+             Relato do Gilberto em 12/08/2026 (4ª vez do mesmo bug): abrir uma
+             localização compartilhada prendia o WhatsApp — tocar no ícone dele
+             trazia o Truck Router. Causa: o WhatsApp faz startActivity SEM
+             FLAG_ACTIVITY_NEW_TASK, então com singleTop o Android empilha a
+             MainActivity DENTRO da task do WhatsApp. taskAffinity="" não protege
+             disso: affinity só é consultada quando há NEW_TASK ou launchMode
+             singleTask/singleInstance. singleTask garante que a activity é sempre
+             raiz da PRÓPRIA task, venha o intent de onde vier.
+
+             O taskAffinity="" saiu junto de propósito: com affinity nula o
+             singleTask não reencontra a task existente (a comparação em
+             findTaskLocked exige affinity não-nula dos dois lados) e cada link
+             abriria uma task nova. Custo assumido: perde-se a mitigação de task
+             hijacking (StrandHogg) que o template do Flutter traz — exige app
+             malicioso já instalado, e o app não guarda credencial (auth é anônima).
+
+             As 4 tentativas anteriores de corrigir isso foram todas em Dart
+             (dedup de URI, classifyMapsUri, PopScope) — nenhuma tocava a task,
+             que é onde o bug mora. NÃO voltar pra singleTop. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
-            android:taskAffinity=""
+            android:launchMode="singleTask"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
