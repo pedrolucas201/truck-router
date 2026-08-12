@@ -187,21 +187,26 @@ class RadarService {
     return r * 2 * atan2(sqrt(a), sqrt(1 - a));
   }
 
-  /// Ponto está dentro do corredor [corridorM] da [polyline]? Amostra a cada 5
-  /// vértices (perf) + checa o último. Compartilhado pelos services de crowd.
+  /// Ponto está dentro do corredor [corridorM] da [polyline]? Compartilhado pelos
+  /// services de crowd (radar adicionado e restrição marcada pelo usuário).
+  ///
+  /// Mede até o SEGMENTO, não até vértice amostrado. A versão antiga pulava de 5
+  /// em 5 vértices e a densidade da polyline da HERE varia demais pra isso: medido
+  /// em 273 km de rota real (2026-08-12), a mediana entre vértices vai de 31 m na
+  /// cidade a 73 m na Dutra, com um trecho de 2.611 m entre duas amostras. Dava
+  /// 52,9% da rota onde um radar EM CIMA dela não era encontrado — 60,1% na Dutra,
+  /// pior ponto a 1.054 m da amostra mais próxima. Radar que não é carregado é
+  /// alerta que não toca, que é multa.
+  ///
+  /// Amostrar de 1 em 1 também zerava NA AMOSTRA medida, mas continua refém da
+  /// densidade: seria constante calibrada, não invariante. Perpendicular ao
+  /// segmento é 0% por construção, em qualquer polyline.
+  ///
+  /// Custo: O(segmentos) por ponto, sobre os poucos itens que vieram da bbox do
+  /// Firestore. `filterNearRoute` (CSV, milhares de radares) segue com a
+  /// amostragem DE PROPÓSITO — lá o raio é 500 m, o descoberto medido é 1,5%, e
+  /// perpendicular custaria milhões de operações dentro do cálculo de rota.
   static bool isNearRoute(double lat, double lng, List<LatLng> polyline,
-      {double corridorM = 80.0}) {
-    for (var i = 0; i < polyline.length; i += 5) {
-      if (haversine(lat, lng, polyline[i].latitude, polyline[i].longitude) <= corridorM) {
-        return true;
-      }
-    }
-    if (polyline.isNotEmpty) {
-      final last = polyline.last;
-      if (haversine(lat, lng, last.latitude, last.longitude) <= corridorM) {
-        return true;
-      }
-    }
-    return false;
-  }
+          {double corridorM = 80.0}) =>
+      distanceToPath(lat, lng, polyline) <= corridorM;
 }
