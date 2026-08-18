@@ -450,12 +450,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   void _choosePaved() {
     _routeSelectionTimer?.cancel();
     _routeSelectionTimer = null;
+    FieldLog.event('dirt_choice', {'dirt': false});
     setState(() { _showDirtAlternative = false; _selectedRoute = null; });
   }
 
   void _chooseDirt() {
     _routeSelectionTimer?.cancel();
     _routeSelectionTimer = null;
+    FieldLog.event('dirt_choice', {'dirt': true});
     context.read<RouteProvider>().useDirtRoadRoute();
     setState(() { _showDirtAlternative = false; _selectedRoute = null; });
   }

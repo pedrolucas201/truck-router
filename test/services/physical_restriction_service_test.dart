@@ -116,4 +116,29 @@ void main() {
       expect(RouteProvider.capAvoidAreas(muitas(300), rota, reservado: 100), isEmpty);
     });
   });
+
+  group('offersDirtAlternative', () {
+    // Gate: economia ≥5min E ≥20%. Piso era 15min e fechava toda viagem curta
+    // (30min exigia 50% de economia). Regimes: <25min o piso manda, ≥25min os
+    // 20% mandam, viagem longa não muda em relação ao gate antigo.
+    test('viagem curta abre com 20% (impossível no gate de 15min)', () {
+      // 30min, economiza 8min (27%): antes fechado, agora abre.
+      expect(RouteProvider.offersDirtAlternative(1800, 1320), isTrue);
+      // 30min, economiza exatamente 6min (20%): borda abre.
+      expect(RouteProvider.offersDirtAlternative(1800, 1440), isTrue);
+    });
+
+    test('economia trivial não abre: piso de 5min segura viagem minúscula', () {
+      // 10min, economiza 4min (40% mas <5min).
+      expect(RouteProvider.offersDirtAlternative(600, 360), isFalse);
+      // 30min, economiza 5min (17%): passa no piso mas não nos 20%.
+      expect(RouteProvider.offersDirtAlternative(1800, 1500), isFalse);
+    });
+
+    test('viagem longa fica idêntica ao gate antigo', () {
+      // 3h: 30min (17%) segue fechado, 36min (20%) segue aberto.
+      expect(RouteProvider.offersDirtAlternative(10800, 9000), isFalse);
+      expect(RouteProvider.offersDirtAlternative(10800, 8640), isTrue);
+    });
+  });
 }

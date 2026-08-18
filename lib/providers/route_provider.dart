@@ -158,13 +158,18 @@ class RouteProvider extends ChangeNotifier {
         );
       }
 
-      // 5. Rota com terra: oferece escolha se economizar ≥15min E ≥20% do tempo.
+      // 5. Rota com terra: oferece escolha se economizar ≥5min E ≥20% do tempo.
       final dirtResult = await dirtRoadFuture;
-      if (dirtResult != null) {
-        final saving = result.durationSeconds - dirtResult.durationSeconds;
-        if (saving >= 15 * 60 && saving >= result.durationSeconds * 0.20) {
-          result = result.copyWith(dirtRoadAlternative: dirtResult);
-        }
+      if (dirtResult != null &&
+          offersDirtAlternative(
+              result.durationSeconds, dirtResult.durationSeconds)) {
+        // Cego total até aqui: nunca soubemos se este gate abriu em campo.
+        // 1x por cálculo de rota, fora do hot path.
+        FieldLog.event('dirt_offered', {
+          'savingS': result.durationSeconds - dirtResult.durationSeconds,
+          'durS': result.durationSeconds,
+        });
+        result = result.copyWith(dirtRoadAlternative: dirtResult);
       }
 
       _result = result;
@@ -216,6 +221,17 @@ class RouteProvider extends ChangeNotifier {
     if (alerts.isEmpty || !identical(_result, forRoute)) return;
     _weatherAlerts = alerts;
     notifyListeners();
+  }
+
+  /// Gate da alternativa por terra: economia ≥5min E ≥20% da rota pavimentada.
+  /// O piso era 15min e tornava viagem curta matematicamente impossível: abaixo
+  /// de 75min os 15min já são >20%, então uma viagem de 30min exigia economizar
+  /// 50%. Com 5min, os 20% mandam a partir de 25min de viagem; acima de 75min
+  /// nada muda (3h continua exigindo 36min).
+  @visibleForTesting
+  static bool offersDirtAlternative(int pavedSeconds, int dirtSeconds) {
+    final saving = pavedSeconds - dirtSeconds;
+    return saving >= 5 * 60 && saving >= pavedSeconds * 0.20;
   }
 
   /// Teto de áreas no `avoid[areas]` da HERE. Medido em 2026-07-22 contra o
