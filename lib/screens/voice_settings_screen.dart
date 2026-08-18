@@ -20,7 +20,6 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen> {
   List<Map<String, String>> _voices = const [];
   bool _loading = true;
   String? _selectedName; // null = voz padrão do aparelho
-  String _tone = 'normal';
 
   @override
   void initState() {
@@ -41,7 +40,6 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen> {
     setState(() {
       _voices = voices;
       _selectedName = saved.name;
-      _tone = saved.tone;
       _loading = false;
     });
   }
@@ -59,26 +57,19 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen> {
     } else {
       await _tts.clearVoice();
     }
-    await _tts.setPitch(VoiceSettings.tones[_tone] ?? 1.0);
     await _tts.stop();
     await _tts.speak(_sample);
   }
 
-  Future<void> _choose({String? name, String? tone}) async {
-    setState(() {
-      if (tone != null) _tone = tone;
-      // name só muda quando o toque foi numa voz (tone == null).
-      if (tone == null) _selectedName = name;
-    });
+  Future<void> _choose(String? name) async {
+    setState(() => _selectedName = name);
     final v = _voices.where((v) => v['name'] == _selectedName).firstOrNull;
-    await VoiceSettings.save(
-        name: v?['name'], locale: v?['locale'], tone: _tone);
+    await VoiceSettings.save(name: v?['name'], locale: v?['locale']);
     await _preview();
   }
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
       appBar: AppBar(title: const Text('Voz do guia')),
       body: _loading
@@ -93,37 +84,14 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen> {
                 _voiceTile(
                   label: 'Padrão do aparelho',
                   selected: _selectedName == null,
-                  onTap: () => _choose(name: null),
+                  onTap: () => _choose(null),
                 ),
                 for (final (i, v) in _voices.indexed)
                   _voiceTile(
                     label: 'Voz ${i + 1}',
                     selected: _selectedName == v['name'],
-                    onTap: () => _choose(name: v['name']),
+                    onTap: () => _choose(v['name']),
                   ),
-                const SizedBox(height: 24),
-                Text('Tom de voz',
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final (key, label) in const [
-                      ('normal', 'Normal'),
-                      ('et', 'E.T. 👽'),
-                      ('robo', 'Robô 🤖'),
-                    ])
-                      ChoiceChip(
-                        label: Text(label),
-                        selected: _tone == key,
-                        selectedColor: primary.withAlpha(40),
-                        onSelected: (_) => _choose(tone: key),
-                      ),
-                  ],
-                ),
               ],
             ),
     );

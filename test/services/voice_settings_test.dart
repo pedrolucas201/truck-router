@@ -58,9 +58,4 @@ void main() {
           VoiceSettings.ptVoices(raw.reversed.toList()));
     });
   });
-
-  test('tons: normal existe e é pitch 1.0; todos os tons são conhecidos', () {
-    expect(VoiceSettings.tones['normal'], 1.0);
-    expect(VoiceSettings.tones.keys, containsAll(['et', 'robo']));
-  });
 }

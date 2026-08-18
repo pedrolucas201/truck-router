@@ -2,38 +2,25 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'field_log.dart';
 
-/// Voz do guia escolhida pelo motorista: qual voz do aparelho fala e em que
-/// tom. Padrão = voz default do engine, tom normal — quem nunca mexeu aqui
-/// não muda de comportamento em nada.
+/// Voz do guia escolhida pelo motorista. Padrão = voz default do engine —
+/// quem nunca mexeu aqui não muda de comportamento em nada.
+///
+/// Os tons E.T./Robô (pitch) foram CORTADOS em 2026-08-18 a pedido do Pedro:
+/// pitch de TTS tem teto de qualidade baixo e reprovou de ouvido (1.7/0.7 e
+/// depois 1.4/0.8). Voz de personagem de verdade = DSP pós-síntese
+/// (synthesizeToFile + ring modulator), spec à parte se um dia valer o risco
+/// no subsistema de voz. A chave antiga 'tts_voice_tone' fica órfã no
+/// SharedPreferences de quem instalou a v2.4.50 — inofensiva, ninguém lê.
 class VoiceSettings {
   static const _kName   = 'tts_voice_name';
   static const _kLocale = 'tts_voice_locale';
-  static const _kTone   = 'tts_voice_tone';
 
-  /// Tons disponíveis. O pitch é o que fabrica a "voz de E.T." — funciona
-  /// sobre qualquer voz de qualquer aparelho, ao contrário da lista de vozes,
-  /// que depende do engine instalado.
-  // Knob DE OUVIDO, não de papel: 1.7/0.7 foram escolhidos sem ouvir e o
-  // Pedro reprovou ("péssimas") — extremos de pitch viram ruído no engine.
-  // Valores atuais são o próximo chute; calibrar ouvindo antes de mexer.
-  static const tones = <String, double>{
-    'normal': 1.0,
-    'et':     1.4, // aguda, "E.T."
-    'robo':   0.8, // grave, robótica
-  };
-
-  static Future<({String? name, String? locale, String tone})> load() async {
+  static Future<({String? name, String? locale})> load() async {
     final p = await SharedPreferences.getInstance();
-    final tone = p.getString(_kTone);
-    return (
-      name:   p.getString(_kName),
-      locale: p.getString(_kLocale),
-      tone:   tones.containsKey(tone) ? tone! : 'normal',
-    );
+    return (name: p.getString(_kName), locale: p.getString(_kLocale));
   }
 
-  static Future<void> save(
-      {String? name, String? locale, required String tone}) async {
+  static Future<void> save({String? name, String? locale}) async {
     final p = await SharedPreferences.getInstance();
     if (name == null) {
       await p.remove(_kName);
@@ -42,7 +29,6 @@ class VoiceSettings {
       await p.setString(_kName, name);
       await p.setString(_kLocale, locale ?? 'pt-BR');
     }
-    await p.setString(_kTone, tone);
   }
 
   /// Aplica a escolha salva numa instância de TTS. Falha aqui nunca cala a
@@ -51,12 +37,10 @@ class VoiceSettings {
   static Future<void> apply(FlutterTts tts) async {
     try {
       final s = await load();
-      if (s.name != null) {
-        final ok =
-            await tts.setVoice({'name': s.name!, 'locale': s.locale ?? 'pt-BR'});
-        if (ok != 1) FieldLog.event('tts_voice_fallback', {'voice': s.name!});
-      }
-      await tts.setPitch(tones[s.tone] ?? 1.0);
+      if (s.name == null) return;
+      final ok =
+          await tts.setVoice({'name': s.name!, 'locale': s.locale ?? 'pt-BR'});
+      if (ok != 1) FieldLog.event('tts_voice_fallback', {'voice': s.name!});
     } catch (e, st) {
       FieldLog.error('tts_voice_apply', e, st);
     }
