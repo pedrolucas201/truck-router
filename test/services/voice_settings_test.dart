@@ -33,6 +33,20 @@ void main() {
       );
     });
 
+    test('par -local/-network vira UMA voz, preferindo a -local', () {
+      // Era o "milhão de vozes iguais": o Google TTS lista cada voz 2x.
+      // A -local fala sem internet — zona morta de sinal não pode calar o guia.
+      final voices = VoiceSettings.ptVoices([
+        {'name': 'pt-br-x-afs-network', 'locale': 'pt-BR'},
+        {'name': 'pt-br-x-afs-local', 'locale': 'pt-BR'},
+        {'name': 'pt-br-x-ptd-network', 'locale': 'pt-BR'},
+      ]);
+      expect(voices.map((v) => v['name']), [
+        'pt-br-x-afs-local',   // par colapsado na -local
+        'pt-br-x-ptd-network', // sem par: entra como está
+      ]);
+    });
+
     test('a numeração Voz 1..N é estável entre aberturas da tela', () {
       final raw = [
         {'name': 'pt-br-b', 'locale': 'pt-BR'},

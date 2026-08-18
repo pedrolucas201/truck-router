@@ -13,10 +13,13 @@ class VoiceSettings {
   /// Tons disponíveis. O pitch é o que fabrica a "voz de E.T." — funciona
   /// sobre qualquer voz de qualquer aparelho, ao contrário da lista de vozes,
   /// que depende do engine instalado.
+  // Knob DE OUVIDO, não de papel: 1.7/0.7 foram escolhidos sem ouvir e o
+  // Pedro reprovou ("péssimas") — extremos de pitch viram ruído no engine.
+  // Valores atuais são o próximo chute; calibrar ouvindo antes de mexer.
   static const tones = <String, double>{
     'normal': 1.0,
-    'et':     1.7, // aguda, "E.T."
-    'robo':   0.7, // grave, robótica
+    'et':     1.4, // aguda, "E.T."
+    'robo':   0.8, // grave, robótica
   };
 
   static Future<({String? name, String? locale, String tone})> load() async {
@@ -61,16 +64,26 @@ class VoiceSettings {
 
   /// Filtra o retorno cru do getVoices para as vozes em português do aparelho,
   /// pt-BR primeiro, ordem estável — é ela que numera "Voz 1..N" na tela.
+  ///
+  /// O Google TTS lista cada voz DUAS vezes: `...-local` (sintetiza no
+  /// aparelho) e `...-network` (no servidor). Era o "milhão de vozes iguais"
+  /// da tela — colapsamos o par preferindo a -local, que fala sem internet
+  /// (voz que some em zona morta de sinal não serve pra caminhão).
   static List<Map<String, String>> ptVoices(dynamic rawVoices) {
-    final out = <Map<String, String>>[];
-    if (rawVoices is! List) return out;
+    if (rawVoices is! List) return const [];
+    final byBase = <String, Map<String, String>>{};
     for (final v in rawVoices) {
       if (v is! Map) continue;
       final name   = '${v['name'] ?? ''}';
       final locale = '${v['locale'] ?? ''}';
       if (name.isEmpty || !locale.toLowerCase().startsWith('pt')) continue;
-      out.add({'name': name, 'locale': locale});
+      final base = name.replaceFirst(RegExp(r'-(local|network)$'), '');
+      final atual = byBase[base];
+      if (atual == null || name.endsWith('-local')) {
+        byBase[base] = {'name': name, 'locale': locale};
+      }
     }
+    final out = byBase.values.toList();
     out.sort((a, b) {
       final aBr = a['locale']!.toLowerCase() == 'pt-br' ? 0 : 1;
       final bBr = b['locale']!.toLowerCase() == 'pt-br' ? 0 : 1;
