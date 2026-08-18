@@ -52,6 +52,7 @@ import '../data/map_styles.dart';
 import '../providers/theme_controller.dart';
 import '../utils/truck_glyph.dart';
 import '../widgets/route_loading_indicator.dart';
+import 'voice_settings_screen.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -1553,6 +1554,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                               ),
                               onSelected: (value) {
                                 if (value == 'history') { _showHistory(); }
+                                if (value == 'voice') {
+                                  Navigator.push(context, MaterialPageRoute(
+                                    builder: (_) => const VoiceSettingsScreen(),
+                                  ));
+                                }
                                 if (value == 'truck') {
                                   final truckProv = context.read<TruckProfileProvider>();
                                   final routeProv = context.read<RouteProvider>();
@@ -1572,6 +1578,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     Icon(Icons.history, color: Colors.teal.shade700, size: 20),
                                     const SizedBox(width: 12),
                                     const Text('Histórico'),
+                                  ]),
+                                ),
+                                PopupMenuItem(
+                                  value: 'voice',
+                                  child: Row(children: [
+                                    Icon(Icons.record_voice_over, color: Colors.teal.shade700, size: 20),
+                                    const SizedBox(width: 12),
+                                    const Text('Voz do guia'),
                                   ]),
                                 ),
                                 PopupMenuItem(

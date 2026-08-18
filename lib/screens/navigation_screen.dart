@@ -36,6 +36,7 @@ import '../utils/maneuver_phrase.dart';
 import '../services/restriction_service.dart';
 import '../data/map_styles.dart';
 import '../services/scale_service.dart';
+import '../services/voice_settings.dart';
 import '../models/poi.dart';
 import '../models/route_event.dart';
 import '../models/weather_alert.dart';
@@ -787,6 +788,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   void _initTts() {
     _tts = FlutterTts();
     _tts.setLanguage('pt-BR');
+    // Voz e tom escolhidos pelo motorista ("Voz do guia" no menu do mapa).
+    // Fire-and-forget como os sets acima; falha nunca cala a nav.
+    VoiceSettings.apply(_tts);
     _logTtsSetup();
     // flutter_tts multiplica por 2 no Android (rate*2 → engine), onde 1.0 = normal.
     // 0.9 dava 1.8× (quase o dobro) e o Gilberto reclamou que fala rápido demais.
