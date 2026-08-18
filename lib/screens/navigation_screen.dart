@@ -787,6 +787,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   void _initTts() {
     _tts = FlutterTts();
     _tts.setLanguage('pt-BR');
+    _logTtsSetup();
     // flutter_tts multiplica por 2 no Android (rate*2 → engine), onde 1.0 = normal.
     // 0.9 dava 1.8× (quase o dobro) e o Gilberto reclamou que fala rápido demais.
     // 0.5 = velocidade normal de fala; bom pra instrução no volante. Knob de campo.
@@ -808,6 +809,23 @@ class _NavigationScreenState extends State<NavigationScreen>
       _ttsWatchdog?.cancel();
       FieldLog.event('tts_error', {'msg': msg.toString()});
     });
+  }
+
+  // Instrumento do relato "voz masculina / voz de E.T". Éramos cegos: se o
+  // pt-BR não está disponível, o setLanguage devolve 0 em silêncio e o engine
+  // fala na voz/idioma default do aparelho — e nunca soubemos QUAL engine/voz
+  // falou. Leitura pura, 1x por navegação, fora do hot path; não muda a voz
+  // (regra: não mexer na voz sem instrumento).
+  Future<void> _logTtsSetup() async {
+    try {
+      final ptBr = await _tts.isLanguageAvailable('pt-BR');
+      final engine = await _tts.getDefaultEngine;
+      final voice = await _tts.getDefaultVoice;
+      FieldLog.event('tts_setup',
+          {'ptBr': '$ptBr', 'engine': '$engine', 'voice': '$voice'});
+    } catch (e, st) {
+      FieldLog.error('tts_setup', e, st);
+    }
   }
 
   Future<void> _startForegroundService() async {
