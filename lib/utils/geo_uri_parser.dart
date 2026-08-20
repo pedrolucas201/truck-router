@@ -10,22 +10,24 @@ enum DeepLinkType { route, destination, unknown }
 ///
 /// - [apply]       — não há destino e o mapa está na frente: aplica direto
 /// - [ask]         — já existe destino: pergunta antes de substituir
-/// - [storeQuietly] — há tela por cima (navegação): guarda calado e avisa
-enum IncomingLinkAction { apply, ask, storeQuietly }
+/// - [offerSwap]   — navegação aberta: popup "de X → para Y" DENTRO da nav
+/// - [storeQuietly] — outra tela por cima (não é a nav): guarda calado e avisa
+enum IncomingLinkAction { apply, ask, offerSwap, storeQuietly }
 
 /// Decide o que fazer com um link recebido.
 ///
-/// [screenOnTop] é o que muda tudo: se o motorista está com a navegação aberta,
-/// um diálogo do mapa aparece POR CIMA dela — e o "Usar" era mentira, porque a
-/// NavigationScreen recebe o destino no construtor e não muda de rota com isso.
-/// Ele confirmava uma troca que não acontecia e só descobria no fim da viagem.
-/// Com tela por cima ninguém pergunta nada e ninguém recalcula rota por baixo:
-/// guarda pro mapa e avisa. Decisão do Pedro em 12/08/2026 — trocar destino DE
-/// VERDADE no meio da viagem é outro item, não este.
+/// [navOnTop] manda mais que tudo: link só chega quando o motorista TOCA nele,
+/// então com a navegação aberta o toque é intenção explícita — a nav mostra o
+/// popup de troca de destino (decisão do Pedro em 19/08/2026, desfazendo o
+/// guardar-calado de 12/08 pra esse caso). [screenOnTop] sem nav (ex.: perfil
+/// do caminhão por cima do mapa) mantém o guardar-calado: um diálogo do mapa
+/// por baixo de outra tela seguiria sendo o "Usar" mentiroso de antes.
 IncomingLinkAction incomingLinkAction({
   required bool screenOnTop,
   required bool hasDestination,
+  bool navOnTop = false,
 }) {
+  if (navOnTop)      return IncomingLinkAction.offerSwap;
   if (screenOnTop)   return IncomingLinkAction.storeQuietly;
   if (hasDestination) return IncomingLinkAction.ask;
   return IncomingLinkAction.apply;

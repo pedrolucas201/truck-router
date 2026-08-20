@@ -89,6 +89,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   Key _destinationKey = const ValueKey('destination');
   StreamSubscription<Uri>? _deepLinkSub;
   bool _locatingGps = false;
+  // Navegação empilhada por cima deste mapa. Com ela aberta, link tocado vira
+  // oferta de troca de destino DENTRO da nav (via _incomingNavLocation), não
+  // guardar-calado.
+  bool _navOpen = false;
+  final _incomingNavLocation = ValueNotifier<GeoLocation?>(null);
   final _waypointPositions = <LatLng?>[];
   final _waypointLabels    = <String?>[];
   final _waypointKeys      = <Key>[];
@@ -270,7 +275,22 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final action = incomingLinkAction(
       screenOnTop:    quiet,
       hasDestination: _destination != null,
+      navOnTop:       _navOpen,
     );
+    if (action == IncomingLinkAction.offerSwap) {
+      // A nav mostra o popup "de X → para Y". Descartar lá = descartar mesmo
+      // (nada fica guardado — decisão do Pedro, 19/08).
+      _incomingNavLocation.value = geo;
+      // Solta o valor logo depois: ValueNotifier engole set idêntico (records
+      // com o mesmo conteúdo são ==) e o MESMO link tocado de novo não
+      // notificaria. A nav ignora o null.
+      scheduleMicrotask(() => _incomingNavLocation.value = null);
+      FieldLog.event('deeplink_nav_offer', {
+        'lat': geo.coords.latitude,
+        'lng': geo.coords.longitude,
+      });
+      return;
+    }
     if (action == IncomingLinkAction.storeQuietly) {
       _setDeepLinkDestination(geo, quiet: true);
       return;
@@ -325,6 +345,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   void dispose() {
     _routeSelectionTimer?.cancel();
     _deepLinkSub?.cancel();
+    _incomingNavLocation.dispose();
     _policeAlertSub?.cancel();
     _themeController.removeListener(_onThemeChanged);
     WidgetsBinding.instance.removeObserver(this);
@@ -881,6 +902,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   void _startNavigation() {
     final result = context.read<RouteProvider>().result;
     if (result == null || _destination == null) return;
+    _incomingNavLocation.value = null;
+    _navOpen = true;
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => NavigationScreen(
         result:           result,
@@ -890,6 +913,18 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         waypoints:        _waypointPositions.whereType<LatLng>().toList(),
         initialRadares:   _nearbyRadares,
         initialWeatherAlerts: context.read<RouteProvider>().weatherAlerts,
+        // Link tocado com a nav aberta cai aqui: a nav mostra o popup de troca.
+        incomingLocation: _incomingNavLocation,
+        // Nav trocou o destino (popup do link): o mapa acompanha, senão ao
+        // voltar o campo mostraria a entrega antiga.
+        onDestinationChanged: (pos, label) {
+          if (!mounted) return;
+          setState(() {
+            _destination      = pos;
+            _destinationLabel = label;
+            _destinationKey   = ValueKey('dest_swap_${DateTime.now().millisecondsSinceEpoch}');
+          });
+        },
         // Radar removido dentro da nav sai também do cache do mapa — senão
         // reaparecia ao reabrir a navegação (a dispensa já foi pro Firestore).
         onRadarRemoved:   (r) {
@@ -899,7 +934,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               .toList());
         },
       ),
-    ));
+    )).whenComplete(() {
+      _navOpen = false;
+      _incomingNavLocation.value = null; // oferta não respondida morre com a nav
+    });
   }
 
   void _copyRoute(RouteResult result, TruckProfile truck) {

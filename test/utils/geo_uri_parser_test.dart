@@ -20,14 +20,16 @@ void main() {
       );
     });
 
-    test('navegando com destino: guarda calado, NUNCA pergunta', () {
+    test('outra tela por cima (não-nav): guarda calado, NUNCA pergunta', () {
+      // Ex.: perfil do caminhão aberto — um diálogo do mapa por baixo dela
+      // seria o "Usar" mentiroso de antes.
       expect(
         incomingLinkAction(screenOnTop: true, hasDestination: true),
         IncomingLinkAction.storeQuietly,
       );
     });
 
-    test('navegando sem destino: guarda calado do mesmo jeito', () {
+    test('tela por cima sem destino: guarda calado do mesmo jeito', () {
       // Sem esta linha, "sem destino" cairia em apply e dispararia cálculo de
       // rota por baixo da navegação.
       expect(
@@ -36,13 +38,29 @@ void main() {
       );
     });
 
-    test('tela por cima manda mais que ter destino', () {
-      // O invariante em uma linha: dirigindo, nenhuma combinação pergunta nada.
+    // Decisão do Pedro (19/08/2026): link só chega quando o motorista TOCA,
+    // então com a nav aberta o toque é intenção — popup de troca DENTRO da nav.
+    test('navegando: oferece a troca de destino, pra qualquer combinação', () {
       for (final hasDest in [true, false]) {
         expect(
-          incomingLinkAction(screenOnTop: true, hasDestination: hasDest),
-          isNot(IncomingLinkAction.ask),
+          incomingLinkAction(
+              screenOnTop: true, hasDestination: hasDest, navOnTop: true),
+          IncomingLinkAction.offerSwap,
         );
+      }
+    });
+
+    test('tela por cima manda mais que ter destino', () {
+      // O invariante em uma linha: dirigindo, nenhuma combinação abre o
+      // diálogo do MAPA (ask) — o que existe em nav é o popup da própria nav.
+      for (final hasDest in [true, false]) {
+        for (final navOnTop in [true, false]) {
+          expect(
+            incomingLinkAction(
+                screenOnTop: true, hasDestination: hasDest, navOnTop: navOnTop),
+            isNot(IncomingLinkAction.ask),
+          );
+        }
       }
     });
   });

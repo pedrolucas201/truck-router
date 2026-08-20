@@ -3,7 +3,7 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
-    show listEquals, defaultTargetPlatform, TargetPlatform;
+    show listEquals, defaultTargetPlatform, TargetPlatform, ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SystemSound, SystemSoundType;
 import 'package:flutter_tts/flutter_tts.dart';
@@ -32,6 +32,8 @@ import '../services/firestore_radar_service.dart';
 import '../utils/radar_tts.dart';
 import '../utils/geo_angle.dart';
 import '../utils/geo_bounds.dart';
+import '../utils/geo_uri_parser.dart' show GeoLocation;
+import '../services/here_geocoding_service.dart';
 import '../utils/maneuver_phrase.dart';
 import '../services/restriction_service.dart';
 import '../data/map_styles.dart';
@@ -222,6 +224,11 @@ class NavigationScreen extends StatefulWidget {
   // Avisa o mapa quando um radar é removido aqui (voto "não existe"), pra ele
   // podar a lista em cache e o radar não reaparecer ao reabrir a navegação.
   final void Function(RadarPoint)? onRadarRemoved;
+  // Localização tocada num link (WhatsApp) com esta nav aberta: o mapa publica
+  // aqui e a nav mostra o popup "de X → para Y" (trocar destino / descartar).
+  final ValueListenable<GeoLocation?>? incomingLocation;
+  // Nav trocou o destino pelo popup: avisa o mapa por baixo pra ele acompanhar.
+  final void Function(LatLng pos, String label)? onDestinationChanged;
 
   const NavigationScreen({
     super.key,
@@ -233,6 +240,8 @@ class NavigationScreen extends StatefulWidget {
     this.initialRadares = const [],
     this.initialWeatherAlerts = const [],
     this.onRadarRemoved,
+    this.incomingLocation,
+    this.onDestinationChanged,
   });
 
   @override
@@ -284,6 +293,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   late final FlutterTts _tts;
 
   late RouteResult _result;
+  // Destino é ESTADO, não widget.destination: o popup do link recebido troca a
+  // entrega no meio da nav (a troca só é gravada DEPOIS do recálculo dar certo,
+  // então destino e rota nunca ficam dessincronizados).
+  late LatLng _destination;
+  late String _destinationLabel;
+  // Popup do link já na tela? Segura re-entrância (dois toques no mesmo link).
+  bool _swapOfferOpen = false;
   List<RadarPoint> _radares = [];
   List<RadarPoint> _visibleRadares = [];
   List<WeatherAlert> _weatherAlerts = const [];
@@ -597,6 +613,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   void initState() {
     super.initState();
     _result  = widget.result;
+    _destination      = widget.destination;
+    _destinationLabel = widget.destinationLabel;
+    widget.incomingLocation?.addListener(_onIncomingLocation);
     // Telemetria: marca o início do drive — garante rastro mesmo num trajeto
     // limpo (sem reroute), pra diagnosticar "travou" onde o heartbeat parar.
     FieldLog.event('nav_start', {
@@ -608,13 +627,13 @@ class _NavigationScreenState extends State<NavigationScreen>
       'destBlocked': _result.destinationBlocked,
       // Precisão do destino (diag. "cheguei mas o app achava que faltava X"):
       // qual coord virou destino e se a polyline termina nela ou desviada.
-      'destLat': widget.destination.latitude,
-      'destLng': widget.destination.longitude,
+      'destLat': _destination.latitude,
+      'destLng': _destination.longitude,
       'polyEndLat': _result.polylinePoints.isNotEmpty ? _result.polylinePoints.last.latitude : null,
       'polyEndLng': _result.polylinePoints.isNotEmpty ? _result.polylinePoints.last.longitude : null,
       'destToPolyEndM': _result.polylinePoints.isNotEmpty
           ? RadarService.haversine(
-              widget.destination.latitude, widget.destination.longitude,
+              _destination.latitude, _destination.longitude,
               _result.polylinePoints.last.latitude, _result.polylinePoints.last.longitude).round()
           : null,
     });
@@ -691,13 +710,14 @@ class _NavigationScreenState extends State<NavigationScreen>
       'straightToDestM': _currentPos != null
           ? RadarService.haversine(
               _currentPos!.latitude, _currentPos!.longitude,
-              widget.destination.latitude, widget.destination.longitude).round()
+              _destination.latitude, _destination.longitude).round()
           : null,
       'remainingRouteM': _remainingDistanceM().round(),
       'speedKmh': _speedKmh.round(),
       'ttsDropped': _ttsDropped, // falas comidas por colisão nesta viagem
     });
     WidgetsBinding.instance.removeObserver(this);
+    widget.incomingLocation?.removeListener(_onIncomingLocation);
     _refreshTimer?.cancel();
     _timeBannerTimer?.cancel();
     _policeTimelineTimer?.cancel();
@@ -869,8 +889,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     await FlutterForegroundTask.startService(
       serviceId: 256,
       notificationTitle: 'Navegando',
-      notificationText: widget.destinationLabel.isNotEmpty
-          ? 'Destino: ${widget.destinationLabel}'
+      notificationText: _destinationLabel.isNotEmpty
+          ? 'Destino: $_destinationLabel'
           : 'GPS ativo',
       callback: _navForegroundCallback,
     );
@@ -1049,7 +1069,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       'straightToDestM': _currentPos != null
           ? RadarService.haversine(
               _currentPos!.latitude, _currentPos!.longitude,
-              widget.destination.latitude, widget.destination.longitude).round()
+              _destination.latitude, _destination.longitude).round()
           : null,
       'remainingRouteM': _remainingDistanceM().round(),
     });
@@ -1395,7 +1415,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (!_arrived && !_arriving && pos.speed * 3.6 < 10) {
       final straightToDestM = RadarService.haversine(
         latLng.latitude, latLng.longitude,
-        widget.destination.latitude, widget.destination.longitude,
+        _destination.latitude, _destination.longitude,
       );
       if (straightToDestM < 80 &&
           RadarService.remainingAlongRoute(pts, bestIdx, _arrivalStraightMaxRouteM)
@@ -1941,16 +1961,90 @@ class _NavigationScreenState extends State<NavigationScreen>
     await _reroute();
   }
 
-  Future<void> _reroute({LatLng? fromPos, bool urgent = false}) async {
+  // ── Link tocado com a nav aberta: popup "de X → para Y" ───────────────────
+
+  void _onIncomingLocation() {
+    final geo = widget.incomingLocation?.value;
+    if (geo == null || !mounted) return;
+    // Segundo link com o popup do primeiro na tela: o novo substitui o velho.
+    if (_swapOfferOpen) Navigator.of(context).pop();
+    unawaited(_showSwapOffer(geo));
+  }
+
+  Future<void> _showSwapOffer(GeoLocation geo) async {
+    _swapOfferOpen = true;
+    // Endereço legível do ponto novo (coordenada crua não diz nada), buscado em
+    // paralelo: o popup não espera rede pra aparecer.
+    final labelFuture = geo.label != null
+        ? Future.value(geo.label!)
+        : HereGeocodingService.reverseGeocode(geo.coords)
+            .timeout(const Duration(seconds: 6))
+            .catchError((_) => 'Localização compartilhada');
+    final swap = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nova localização recebida'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('De: $_destinationLabel'),
+            const SizedBox(height: 8),
+            FutureBuilder<String>(
+              future: labelFuture,
+              builder: (_, snap) =>
+                  Text('Para: ${snap.data ?? 'buscando endereço…'}'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Descartar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Alterar rota'),
+          ),
+        ],
+      ),
+    );
+    _swapOfferOpen = false;
+    if (swap != true || !mounted) return;
+    final label = await labelFuture;
+    // Troca de verdade só acontece dentro do _reroute, e só se a HERE responder:
+    // falhou = nada muda (nem destino, nem rota) e o motorista fica sabendo.
+    final ok = await _reroute(
+        urgent: true, destOverride: (pos: geo.coords, label: label));
+    FieldLog.event('nav_dest_swap', {
+      'ok': ok,
+      'toLat': geo.coords.latitude,
+      'toLng': geo.coords.longitude,
+    });
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Não deu pra calcular a rota nova, seguindo a atual'),
+      ));
+    }
+  }
+
+  Future<bool> _reroute({
+    LatLng? fromPos,
+    bool urgent = false,
+    ({LatLng pos, String label})? destOverride,
+  }) async {
     final origin = fromPos ?? _currentPos;
-    if (_isRerouting || origin == null) return;
+    if (_isRerouting || origin == null) return false;
     final now = DateTime.now();
     // Desvio real (urgent) usa piso curto; refresh de background usa throttle cheio.
+    // Troca de destino (destOverride) NUNCA é barrada: é ação explícita do
+    // motorista, e um "ok" no popup engolido pelo throttle seria mentira.
     final floorSec = urgent ? _rerouteUrgentFloorSec : _rerouteThrottleSec;
-    if (_lastRerouteAt != null && now.difference(_lastRerouteAt!).inSeconds < floorSec) {
+    if (destOverride == null &&
+        _lastRerouteAt != null && now.difference(_lastRerouteAt!).inSeconds < floorSec) {
       // Throttle barrou: se isto aparecer em rajada nos breadcrumbs, é storm.
       FieldLog.event('reroute_skip', {'urgent': urgent, 'floorSec': floorSec});
-      return;
+      return false;
     }
     _lastRerouteAt = now;
     // Instrumentação P0: tempo de detecção (saiu do corredor → disparou o reroute).
@@ -1999,14 +2093,14 @@ class _NavigationScreenState extends State<NavigationScreen>
 
       final newResult = await HereRoutingService.calculateRoute(
         origin:      origin,
-        destination: widget.destination,
+        destination: destOverride?.pos ?? _destination,
         truck:       widget.truck,
         course:      course,
         waypoints:   widget.waypoints,
         avoidAreas:  manualAvoidAreas,
       );
       final hereMs = recalcSw.elapsedMilliseconds;
-      if (!mounted || seq != _rerouteSeq) return;
+      if (!mounted || seq != _rerouteSeq) return false;
 
       // ── FASE 1: destravar a tela ─────────────────────────────────────────────
       // Só entra aqui o que NÃO depende de rede. Enquanto _isRerouting está de pé o
@@ -2020,8 +2114,14 @@ class _NavigationScreenState extends State<NavigationScreen>
       // Verdictos do curador deste device: cache em memória, sem rede. Sem eles um
       // radar NEGADO ressuscitaria na tela durante a janela do enrichment.
       final localOverrides = await FirestoreRadarService.loadLocalOverrides();
-      if (!mounted || seq != _rerouteSeq) return;
+      if (!mounted || seq != _rerouteSeq) return false;
       setState(() {
+        // Rota nova chegou: agora (e só agora) o destino trocado vira oficial —
+        // destino e polyline mudam no MESMO frame, nunca dessincronizados.
+        if (destOverride != null) {
+          _destination      = destOverride.pos;
+          _destinationLabel = destOverride.label;
+        }
         _result                  = newResult;
         _radares                 = applyOverrides(csvNearby, localOverrides);
         _closestPolylineIdx      = 0;
@@ -2101,10 +2201,16 @@ class _NavigationScreenState extends State<NavigationScreen>
       // Sai do caminho crítico: a rota já está na tela e o _isRerouting cai no
       // finally logo abaixo. Sem await de propósito — é isto que destrava a seta.
       unawaited(_enrichRoute(newResult, seq, csvNearby, repo));
+      // Mapa por baixo acompanha a troca (senão ao voltar mostraria a antiga).
+      if (destOverride != null) {
+        widget.onDestinationChanged?.call(destOverride.pos, destOverride.label);
+      }
+      return true;
     } catch (e, st) {
       // Não vaza pro usuário (princípio do Márcio), mas não some: sobe como
       // non-fatal pro Crashlytics + breadcrumb. Antes era catch(_) {} mudo.
       FieldLog.error('reroute', e, st);
+      return false;
     } finally {
       // Só o reroute mais recente destrava: um encadeado (seq maior) já assumiu o
       // controle e não pode ter o _isRerouting derrubado pelo finally do antigo.
@@ -2583,7 +2689,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   void _enterMarkingMode({bool radar = false}) {
-    final pos = _currentPos ?? widget.destination;
+    final pos = _currentPos ?? _destination;
     _cameraTarget = pos;
     setState(() { _markingMode = true; _markingRadar = radar; _freeLook = false; });
     _mapController?.animateCamera(
@@ -3056,8 +3162,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     final markers = <Marker>{
       Marker(
         markerId: const MarkerId('destination'),
-        position: widget.destination,
-        infoWindow: InfoWindow(title: 'Destino', snippet: widget.destinationLabel),
+        position: _destination,
+        infoWindow: InfoWindow(title: 'Destino', snippet: _destinationLabel),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       ),
       // Puck do usuário NÃO é mais um Marker. Atualizar posição de Marker via
@@ -3193,7 +3299,7 @@ class _NavigationScreenState extends State<NavigationScreen>
                           onPointerMove: (_) { _lastPointerAt = DateTime.now(); _zoomJustChanged = false; },
                           child: GoogleMap(
                             initialCameraPosition: CameraPosition(
-                              target: _currentPos ?? widget.destination,
+                              target: _currentPos ?? _destination,
                               zoom: 17,
                               tilt: 45,
                             ),
