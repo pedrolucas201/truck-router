@@ -1984,16 +1984,27 @@ class _NavigationScreenState extends State<NavigationScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Nova localização recebida'),
+        // Rótulos apagados, destino NOVO em negrito: dirigindo, o olho tem que
+        // achar "pra onde" num relance — é ele que decide o toque.
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('De: $_destinationLabel'),
+            Text.rich(TextSpan(children: [
+              const TextSpan(text: 'De: ', style: TextStyle(color: Colors.grey)),
+              TextSpan(text: _destinationLabel),
+            ])),
             const SizedBox(height: 8),
             FutureBuilder<String>(
               future: labelFuture,
-              builder: (_, snap) =>
-                  Text('Para: ${snap.data ?? 'buscando endereço…'}'),
+              builder: (_, snap) => Text.rich(TextSpan(children: [
+                const TextSpan(
+                    text: 'Para: ', style: TextStyle(color: Colors.grey)),
+                TextSpan(
+                  text: snap.data ?? 'buscando endereço…',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ])),
             ),
           ],
         ),
