@@ -54,6 +54,15 @@ import '../utils/truck_glyph.dart';
 import '../widgets/route_loading_indicator.dart';
 import 'voice_settings_screen.dart';
 
+/// Idade máxima do fix de GPS que ainda vale como origem de rota nova.
+const kOriginFreshFor = Duration(minutes: 2);
+
+/// Puro/testável: a origem "Minha localização" envelheceu a ponto de a rota
+/// nascer de onde o caminhão ESTAVA, não de onde está? Origem de busca ou
+/// histórico é escolha deliberada e chega aqui com fixAt=null (nunca stale).
+bool originFixIsStale(DateTime? fixAt, DateTime now) =>
+    fixAt != null && now.difference(fixAt) > kOriginFreshFor;
+
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
 
@@ -69,6 +78,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   bool      _openedViaDeepLink = false;
   String?   _loadingTruckAsset;
   LatLng? _origin;
+  // Quando _origin veio do GPS ("Minha localização"): instante do fix. Null =
+  // origem escolhida por busca/histórico/link, que nunca é re-buscada.
+  DateTime? _originFixAt;
   LatLng? _destination;
   String? _originLabel;
   String? _destinationLabel;
@@ -235,6 +247,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       _destinationKey   = ValueKey('dest_shared_${DateTime.now().millisecondsSinceEpoch}');
       if (route.origin != null) {
         _origin      = route.origin;
+        _originFixAt = null;
         _originLabel = 'Origem compartilhada';
         _originKey   = ValueKey('origin_shared_${DateTime.now().millisecondsSinceEpoch}');
       }
@@ -573,6 +586,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       setState(() {
         _origin      = latLng;
+        _originFixAt = DateTime.now();
         _originLabel = label;
         _originKey   = ValueKey(latLng.toString());
         _locatingGps = false;
@@ -643,6 +657,37 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         },
       ),
     );
+  }
+
+  /// Re-busca a origem quando ela veio do GPS e o fix envelheceu (>2 min).
+  /// Origem de busca/histórico/link tem _originFixAt=null e nunca é tocada.
+  Future<void> _refreshStaleGpsOrigin() async {
+    if (!originFixIsStale(_originFixAt, DateTime.now())) return;
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          // Teto curto: rota atrasada 5 s já incomoda; sem fix novo a rota sai
+          // do fix antigo (comportamento anterior) e o reroute corrige depois.
+          timeLimit: Duration(seconds: 5),
+        ),
+      );
+      // Se o usuário trocou a origem na mão durante o await, _originFixAt
+      // voltou null — a escolha dele vence o fix.
+      if (!mounted || _originFixAt == null) return;
+      final latLng = LatLng(pos.latitude, pos.longitude);
+      setState(() {
+        _origin      = latLng;
+        _originFixAt = DateTime.now();
+        _originKey   = ValueKey(latLng.toString());
+      });
+      // Endereço do campo atualiza em segundo plano: a rota não espera geocode.
+      unawaited(HereGeocodingService.reverseGeocode(latLng).then((label) {
+        if (mounted) setState(() => _originLabel = label);
+      }).catchError((_) {}));
+    } catch (e) {
+      FieldLog.event('origin_refresh_fail', {'err': e.runtimeType.toString()});
+    }
   }
 
   // Seta o destino, garante a origem (localização atual) e calcula.
@@ -867,6 +912,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   void _clearAll() {
     setState(() {
       _origin           = null;
+      _originFixAt      = null;
       _destination      = null;
       _originLabel      = null;
       _destinationLabel = null;
@@ -886,6 +932,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final ts = DateTime.now().millisecondsSinceEpoch;
     setState(() {
       _origin           = h.originPosition;
+      _originFixAt      = null;
       _originLabel      = h.originLabel;
       _originKey        = ValueKey('origin_$ts');
       _destination      = h.destinationPosition;
@@ -1035,12 +1082,18 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       );
       return;
     }
+    final routeProvider = context.read<RouteProvider>();
     final truck = context.read<TruckProfileProvider>().profile;
+    // Origem "Minha localização" envelhece: no field de 19/08 a rota das 14:56
+    // nasceu do fix de 71 min antes (24 km de rota com o caminhão a 50 km dela
+    // → off_route imediato + reroute urgente + uma chamada HERE jogada fora).
+    await _refreshStaleGpsOrigin();
+    if (!mounted) return;
     final manualAvoidAreas = _userRestrictions
         .where((r) => r.toBridgeRestriction().conflictsWith(truck))
         .map((r) => r.toBridgeRestriction().toAvoidArea())
         .toList();
-    await context.read<RouteProvider>().calculate(
+    await routeProvider.calculate(
           origin: _origin!,
           destination: _destination!,
           truck: truck,
@@ -1518,6 +1571,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                   setState(() {
                                     _originLabel = record.$1;
                                     _origin      = record.$2;
+                                    _originFixAt = null;
                                     _originKey   = const ValueKey('origin');
                                   });
                                   context.read<RouteProvider>().clear();

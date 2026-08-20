@@ -603,6 +603,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       'points': _result.polylinePoints.length,
       'distM':  _result.distanceMeters,
       'durS':   _result.durationSeconds,
+      // Rota que já NASCE com o fim proibido pra caminhão: sem isto o storm de
+      // reroute perto do pino (Lorena, 19/08) é indistinguível de GPS ruim.
+      'destBlocked': _result.destinationBlocked,
       // Precisão do destino (diag. "cheguei mas o app achava que faltava X"):
       // qual coord virou destino e se a polyline termina nela ou desviada.
       'destLat': widget.destination.latitude,
@@ -2077,6 +2080,9 @@ class _NavigationScreenState extends State<NavigationScreen>
         'recalcMs': recalcSw.elapsedMilliseconds,
         'points':   newResult.polylinePoints.length,
         'distM':    newResult.distanceMeters.round(),
+        // Reroutes urgentes com distM crescendo E destBlocked=true = HERE
+        // tentando devolver o caminhão a um pino inalcançável (não é GPS).
+        'destBlocked': newResult.destinationBlocked,
       });
       _announceRestriction(newResult);
       _loadRoutePois();
