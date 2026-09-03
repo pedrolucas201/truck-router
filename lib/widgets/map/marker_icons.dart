@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../models/user_restriction.dart';
+import '../nav/nav_ui_defs.dart';
 
 Future<BitmapDescriptor> buildPoiIcon(Color color, IconData iconData) async {
   const size = 26.0;
@@ -41,13 +42,15 @@ Future<BitmapDescriptor> buildPoiIcon(Color color, IconData iconData) async {
 }
 
 Future<BitmapDescriptor> buildRadarIcon(
-    int speedKmh, {bool isLombada = false, bool isPedagio = false}) async {
+    int speedKmh, {bool isLombada = false, bool isPedagio = false, bool isMovel = false}) async {
   const size = 20.0;
   final bgColor = isPedagio
       ? Colors.blue.shade700
       : isLombada
           ? Colors.orange.shade700
-          : Colors.red.shade700;
+          : isMovel
+              ? kMovelColor
+              : Colors.red.shade700;
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   canvas.drawCircle(
@@ -65,7 +68,8 @@ Future<BitmapDescriptor> buildRadarIcon(
   );
   // Só lido no branch else (isPedagio || speedKmh == 0); no caso de texto
   // (speedKmh > 0) nunca é usado.
-  final iconData = isPedagio ? Icons.toll : Icons.camera_alt;
+  final iconData =
+      isPedagio ? Icons.toll : (isMovel ? kMovelIcon : Icons.camera_alt);
 
   if (!isPedagio && speedKmh > 0) {
     final tp = TextPainter(textDirection: TextDirection.ltr)

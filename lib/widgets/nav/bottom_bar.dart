@@ -193,11 +193,16 @@ class _RadarChip extends StatelessWidget {
     final isInactive = radar.status == 'inactive';
     final isOpposite = dirMatch == RadarDirMatch.opposite;
 
+    // Radar MÓVEL (ponto de fiscalização com radar portátil): mesmo alerta, só
+    // não passa por câmera fixa — igual ao ícone do mapa. Drive 2026-09-02.
+    final isMovel = radar.isMovel;
     final Color color = isInactive
         ? Colors.blueGrey.shade700
         : isOpposite
             ? Colors.grey.shade700
-            : (isLombada ? Colors.orange.shade700 : Colors.red.shade700);
+            : isLombada
+                ? Colors.orange.shade700
+                : (isMovel ? kMovelColor : Colors.red.shade700);
 
     final eff =
         truckRadarLimit(radar.speedKmh, officialTruckLimit: radar.truckLimitOff);
@@ -205,7 +210,9 @@ class _RadarChip extends StatelessWidget {
         eff != null ? '$eff km/h' : (isLombada ? 'Lombada' : 'Radar');
     final tag = isInactive
         ? 'desativado'
-        : (isOpposite ? 'sentido oposto' : null);
+        : isOpposite
+            ? 'sentido oposto'
+            : (isMovel ? 'móvel' : null);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -216,7 +223,8 @@ class _RadarChip extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+          Icon(isMovel ? kMovelIcon : Icons.camera_alt,
+              color: Colors.white, size: 20),
           const SizedBox(width: 8),
           if (dirMatch == RadarDirMatch.same && !isInactive) ...[
             const Icon(Icons.arrow_upward, color: Colors.white, size: 16),

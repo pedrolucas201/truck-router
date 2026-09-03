@@ -1930,9 +1930,12 @@ class _NavigationScreenState extends State<NavigationScreen>
     } else if (isPedagio) {
       _speak('Pedágio à frente');
     } else {
-      // Silencia o TTS quando dentro do limite. speedKmh == 0 = dado ausente → alerta por cautela.
-      if (radar.speedKmh > 0 && _speedKmh <= radar.speedKmh) return;
-      _speak(radarAlertPhrase(radar.speedKmh));
+      // Silencia o TTS quando dentro do limite DE CAMINHÃO (o mesmo da barra —
+      // comparar com a placa de carro calava o radar a 95 sob placa de 110).
+      // truckKmh == null = dado ausente → alerta por cautela.
+      final lim = radar.truckKmh ?? 0;
+      if (lim > 0 && _speedKmh <= lim) return;
+      _speak(radarAlertPhrase(lim));
     }
   }
 
@@ -2330,15 +2333,22 @@ class _NavigationScreenState extends State<NavigationScreen>
   Future<BitmapDescriptor> _radarIcon(RadarPoint r) async {
     final isLombada = r.type.toLowerCase().contains('lombada');
     final isPedagio = r.type.toLowerCase().contains('pedagio');
-    final isRadarWithSpeed = !isPedagio && !isLombada && r.speedKmh > 0;
-    final key = isPedagio ? 'p' : '${isLombada ? 'l' : 'r'}_${r.speedKmh}';
+    final isMovel = r.isMovel;
+    // Número de caminhão (o mesmo da barra), nunca a placa de carro.
+    final shownKmh = r.truckKmh ?? 0;
+    final isRadarWithSpeed = !isPedagio && !isLombada && shownKmh > 0;
+    final key = isPedagio
+        ? 'p'
+        : '${isLombada ? 'l' : (isMovel ? 'm' : 'r')}_$shownKmh';
     if (_iconCache.containsKey(key)) return _iconCache[key]!;
 
     final bgColor = isPedagio
         ? Colors.blue.shade700
         : isLombada
             ? Colors.orange.shade700
-            : Colors.red.shade700;
+            : isMovel
+                ? kMovelColor
+                : Colors.red.shade700;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
@@ -2350,9 +2360,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       // retângulo cresce pra caber o grupo.
       final numTp = TextPainter(textDirection: TextDirection.ltr)
         ..text = TextSpan(
-          text: r.speedKmh.toString(),
+          text: shownKmh.toString(),
           style: TextStyle(
-            fontSize: r.speedKmh >= 100 ? 11.0 : 13.0,
+            fontSize: shownKmh >= 100 ? 11.0 : 13.0,
             fontWeight: FontWeight.bold,
             color: Colors.white,
           ),
@@ -2374,7 +2384,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, w, h), const Radius.circular(8)),
         Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 3.0,
       );
-      const camIcon = Icons.camera_alt;
+      final camIcon = isMovel ? kMovelIcon : Icons.camera_alt;
       final camTp = TextPainter(textDirection: TextDirection.ltr)
         ..text = TextSpan(
           text: String.fromCharCode(camIcon.codePoint),
@@ -2402,7 +2412,8 @@ class _NavigationScreenState extends State<NavigationScreen>
       const Offset(size / 2, size / 2), size / 2 - 3.0,
       Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 3.0,
     );
-    final IconData displayIcon = isPedagio ? Icons.toll : Icons.camera_alt;
+    final IconData displayIcon =
+        isPedagio ? Icons.toll : (isMovel ? kMovelIcon : Icons.camera_alt);
     final tp = TextPainter(textDirection: TextDirection.ltr)
       ..text = TextSpan(
         text: String.fromCharCode(displayIcon.codePoint),

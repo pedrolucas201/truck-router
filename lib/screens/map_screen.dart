@@ -39,6 +39,7 @@ import '../widgets/map/poi_sheet.dart';
 import '../widgets/map/police_sheets.dart';
 import '../widgets/map/restriction_detail_sheet.dart';
 import '../widgets/map/result_card.dart';
+import '../widgets/nav/nav_ui_defs.dart';
 import '../widgets/speed_plate.dart';
 import 'truck_profile_screen.dart';
 import 'navigation_screen.dart';
@@ -99,6 +100,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   final _waypointKeys      = <Key>[];
   int   _waypointKeySeq    = 0;
   final _poiIconCache      = <String, BitmapDescriptor>{};
+
+  /// Chave do bitmap de radar: tipo + número de CAMINHÃO (110 e 100 de carro
+  /// viram o mesmo ícone de 90). Radar móvel tem ícone próprio.
+  static String _radarIconKey(RadarPoint r) {
+    final t = r.type.toLowerCase();
+    if (t.contains('pedagio')) return 'pedagio';
+    final kind = t.contains('lombada') ? 'lombada' : (r.isMovel ? 'movel' : 'radar');
+    return '${kind}_${r.truckKmh ?? 0}';
+  }
   BitmapDescriptor? _weatherIcon; // ⛈️ do marcador de clima (um só, cacheado)
   List<RadarPoint>         _nearbyRadares = [];
   List<UserRestriction>    _userRestrictions = [];
@@ -1155,14 +1165,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       for (final r in filtered) {
         final isLombada = r.type.toLowerCase().contains('lombada');
         final isPedagio = r.type.toLowerCase().contains('pedagio');
-        final key = isPedagio
-            ? 'pedagio'
-            : '${isLombada ? 'lombada' : 'radar'}_${r.speedKmh}';
+        final key = _radarIconKey(r);
         if (!_poiIconCache.containsKey(key)) {
           _poiIconCache[key] = await buildRadarIcon(
-            r.speedKmh,
+            r.truckKmh ?? 0,
             isLombada: isLombada,
             isPedagio: isPedagio,
+            isMovel: r.isMovel,
           );
         }
       }
@@ -1445,17 +1454,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
     if (_currentZoom >= _radarMinZoom) {
       for (final r in _nearbyRadares) {
-        final isLombada = r.type.toLowerCase().contains('lombada');
-        final isPedagio = r.type.toLowerCase().contains('pedagio');
-        final key = isPedagio
-            ? 'pedagio'
-            : '${isLombada ? 'lombada' : 'radar'}_${r.speedKmh}';
+        final key = _radarIconKey(r);
+        final shownKmh = r.truckKmh ?? 0;
         markers.add(Marker(
           markerId: MarkerId('radar_${r.lat}_${r.lng}'),
           position: LatLng(r.lat, r.lng),
           icon: _poiIconCache[key] ?? BitmapDescriptor.defaultMarker,
           infoWindow: InfoWindow(
-            title: r.speedKmh > 0 ? '${r.speedKmh} km/h' : r.type,
+            title: shownKmh > 0 ? '$shownKmh km/h' : r.type,
             snippet: r.type,
           ),
           onTap: () => _onRadarTap(r),

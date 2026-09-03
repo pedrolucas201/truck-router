@@ -1,5 +1,9 @@
 import 'dart:math';
 
+import 'package:flutter/material.dart';
+
+import '../../models/radar_point.dart';
+
 enum AudioLevel { completo, essencial, silencioso }
 
 enum ZoomLevel { recuado, medio, aproximado }
@@ -9,6 +13,11 @@ enum ZoomLevel { recuado, medio, aproximado }
 // (ex: 110 na Dom Pedro). ponytail: knob de calibração — se alguma classe de via
 // pedir teto menor, dá pra parametrizar por tipo de via depois.
 const int kTruckCapKmh = 90;
+
+// Radar MÓVEL (ponto de fiscalização com radar portátil): mesma família visual
+// do radar, cor e glifo próprios pra não passar por câmera fixa.
+const Color kMovelColor = Color(0xFF512DA8); // deepPurple.shade700
+const IconData kMovelIcon = Icons.local_police;
 
 // Limite de caminhão NA ÁREA DE UM RADAR = a velocidade POSTADA no radar (a
 // "velocidade permitida" que o Gilberto cura), capada no teto de caminhão. NÃO
@@ -27,4 +36,14 @@ int? truckRadarLimit(int radarSpeedKmh, {int? officialTruckLimit}) {
     limit = limit == null ? off : min(limit, off);
   }
   return limit;
+}
+
+/// O número de radar que o motorista OBEDECE — o mesmo em ícone, balão, chip,
+/// velocímetro e voz. Antes cada consumidor escolhia: a barra usava o limite de
+/// caminhão e o ícone/voz a placa crua (110/100/120 de carro) — 1.414 radares
+/// do asset com dois números na mesma tela (print do Gilberto na Castelo,
+/// 2026-09-02). Curadoria continua mostrando a placa crua de propósito.
+extension RadarTruckKmh on RadarPoint {
+  int? get truckKmh =>
+      truckRadarLimit(speedKmh, officialTruckLimit: truckLimitOff);
 }

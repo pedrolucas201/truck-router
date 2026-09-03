@@ -15,6 +15,14 @@ class RadarPoint {
   final String? status;      // 'active' | 'inactive' (só de fonte oficial)
   final int? truckLimitOff;  // limite de caminhão oficial (só ABAIXA truckRadarLimit)
 
+  /// "Radar Movel" do MapaRadar = ponto onde a fiscalização costuma parar com
+  /// radar portátil, não câmera fixa. Alerta igual (invariante), visual diferente:
+  /// o Gilberto negava esses como "radar que não existe" (drive 2026-09-02).
+  bool get isMovel {
+    final t = type.toLowerCase();
+    return t.contains('movel') || t.contains('móvel');
+  }
+
   const RadarPoint({
     required this.lat,
     required this.lng,
