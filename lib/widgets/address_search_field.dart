@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../services/field_log.dart';
 import '../services/here_geocoding_service.dart';
 import '../services/places_service.dart';
 
@@ -94,6 +95,13 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
   }
 
   Future<void> _select(GeocodingSuggestion s) async {
+    // Fecha o par com o geocode_search: qual posição/fonte o motorista tocou.
+    // src vazio = caminho do CEP.
+    FieldLog.event('geocode_pick', {
+      'i':   _suggestions.indexOf(s),
+      'src': s.source,
+      'km':  s.distanceM == null ? '' : (s.distanceM! / 1000).round(),
+    });
     _controller.text = s.title;
 
     // Resultado de lugar nomeado já tem coords — usa direto, sem lookup.
@@ -120,6 +128,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
 
   // Tocou num lugar já conhecido (recente ou match local): usa direto.
   void _selectKnown((String, LatLng) place) {
+    FieldLog.event('geocode_pick', {'i': -1, 'src': 'history'});
     _controller.text = place.$1;
     _remember(place.$1, place.$2);
     setState(() { _suggestions = []; _confirmed = true; });

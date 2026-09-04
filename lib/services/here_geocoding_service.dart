@@ -10,16 +10,51 @@ class GeocodingSuggestion {
   final String title;
   final String? hereId;    // autocomplete: lookup para coordenadas precisas
   final LatLng? position;  // geocode/nominatim: coords já resolvidas
+  final int? distanceM;    // HERE `distance` (do `at`); só existe com bias
+  final String source;     // ac|gc|dc|nm|marco|google|cep — telemetria do pick
 
-  const GeocodingSuggestion._({required this.title, this.hereId, this.position});
+  // A HERE devolve o rótulo com entidade HTML escapada ("Quina &amp; Silva",
+  // medido na chave real em 2026-09-04) e o app mostrava o "&amp;" literal.
+  GeocodingSuggestion._({
+    required String title,
+    this.hereId,
+    this.position,
+    this.distanceM,
+    this.source = '',
+  }) : title = unescapeHtml(title);
 
-  factory GeocodingSuggestion.address({required String title, required String id}) =>
-      GeocodingSuggestion._(title: title, hereId: id);
+  factory GeocodingSuggestion.address({
+    required String title,
+    required String id,
+    int? distanceM,
+    String source = '',
+  }) =>
+      GeocodingSuggestion._(
+          title: title, hereId: id, distanceM: distanceM, source: source);
 
-  factory GeocodingSuggestion.place({required String title, required LatLng pos}) =>
-      GeocodingSuggestion._(title: title, position: pos);
+  factory GeocodingSuggestion.place({
+    required String title,
+    required LatLng pos,
+    int? distanceM,
+    String source = '',
+  }) =>
+      GeocodingSuggestion._(
+          title: title, position: pos, distanceM: distanceM, source: source);
 
   bool get needsLookup => position == null;
+
+  /// Só as entidades que um rótulo de endereço pode carregar. Sem dependência
+  /// nova: o dart:convert só escapa, não desescapa.
+  @visibleForTesting
+  static String unescapeHtml(String s) => s.contains('&')
+      ? s
+          .replaceAll('&amp;', '&')
+          .replaceAll('&lt;', '<')
+          .replaceAll('&gt;', '>')
+          .replaceAll('&quot;', '"')
+          .replaceAll('&#39;', "'")
+          .replaceAll('&apos;', "'")
+      : s;
 }
 
 class HereGeocodingService {
@@ -30,6 +65,7 @@ class HereGeocodingService {
       String query, {LatLng? bias}) async {
     if (query.trim().isEmpty) return [];
     if (_isCep(query)) return _cepSearch(query);
+    final clock = Stopwatch()..start();
 
     // Endereço de rodovia por km (ex: "Fernão Dias km 936"). A HERE lê o "936"
     // como número de casa: medido contra os radares do PNCV, ela erra 4 km na
@@ -62,13 +98,8 @@ class HereGeocodingService {
       _safe('discover',     () => _discoverPlaces(query, bias: bias)),
     ]);
 
-    final merged   = <GeocodingSuggestion>[];
-    final seenKeys = <String>{};
-    for (final list in hereResults) {
-      for (final s in list) {
-        if (seenKeys.add(s.title.toLowerCase().trim())) merged.add(s);
-      }
-    }
+    final merged   = mergeHere(hereResults, byDistance: bias != null);
+    final seenKeys = merged.map((s) => s.title.toLowerCase().trim()).toSet();
 
     // Já estão rodando desde antes do Future.wait; aqui só se colhe o resultado.
     // Só vira sugestão se achou o MARCO — ver [acceptsKmResult].
@@ -101,14 +132,64 @@ class HereGeocodingService {
 
     // Fallback: Nominatim (OpenStreetMap) quando HERE não encontra nada.
     // Chamado só neste caso para respeitar o limite de 1 req/s do serviço gratuito.
+    var nm = -1;
     if (merged.isEmpty) {
       final nominatim = await _safe('nominatim', () => _nominatimSearch(query, bias: bias));
+      nm = nominatim.length;
       for (final s in nominatim) {
         if (seenKeys.add(s.title.toLowerCase().trim())) merged.add(s);
       }
     }
 
-    return merged.take(5).toList();
+    final out = merged.take(5).toList();
+    // Ponto cego até 2026-09-04: o Beto relatou "nome de empresa não acha" e não
+    // havia registro de busca nenhum, só de erro. Uma escrita por busca debounced
+    // (~5-8 por digitação). ponytail: se a cota do Spark apertar, logar só quando
+    // n==0 ou top>200km, que são os casos que interessam.
+    FieldLog.event('geocode_search', {
+      'q':    query.length > 40 ? query.substring(0, 40) : query,
+      'n':    out.length,
+      'ac':   hereResults[0].length,
+      'gc':   hereResults[1].length,
+      'dc':   hereResults[2].length,
+      'nm':   nm,
+      'bias': bias != null ? 1 : 0,
+      'top':  out.isEmpty ? '' : '${out.first.source}:${out.first.distanceM ?? ''}',
+      'ms':   clock.elapsedMilliseconds,
+    });
+    return out;
+  }
+
+  /// Junta as listas da HERE removendo título repetido (a primeira ocorrência
+  /// fica) e, havendo bias, ordena pela distância que a própria HERE devolve.
+  ///
+  /// Sem isto a ordem era por FONTE (autocomplete, geocode, discover) e o
+  /// motorista via "Rua Salito Graal, Manaus" (2.708 km) em primeiro, acima do
+  /// Graal de Caçapava a 19 km — e concluía que o app "não acha" a empresa.
+  /// Medido na chave real em 2026-09-04. Sem `at` a HERE não manda `distance`
+  /// (só o discover, ancorado em Brasília, e esse ranking seria arbitrário), então
+  /// a ordem por fonte fica. Item sem distância vai pro fim; sort é estável.
+  @visibleForTesting
+  static List<GeocodingSuggestion> mergeHere(
+      List<List<GeocodingSuggestion>> lists, {required bool byDistance}) {
+    final merged = <GeocodingSuggestion>[];
+    final seen   = <String>{};
+    for (final list in lists) {
+      for (final s in list) {
+        if (seen.add(s.title.toLowerCase().trim())) merged.add(s);
+      }
+    }
+    if (!byDistance) return merged;
+    final indexed = merged.asMap().entries.toList()
+      ..sort((a, b) {
+        final da = a.value.distanceM, db = b.value.distanceM;
+        if (da == null && db == null) return a.key.compareTo(b.key);
+        if (da == null) return 1;
+        if (db == null) return -1;
+        final c = da.compareTo(db);
+        return c != 0 ? c : a.key.compareTo(b.key);
+      });
+    return indexed.map((e) => e.value).toList();
   }
 
   /// Roda uma fonte de geocoding e devolve [] em falha, logando qual quebrou.
@@ -184,6 +265,7 @@ class HereGeocodingService {
           GeocodingSuggestion.place(
             title: i['title'] as String? ?? query,
             pos: LatLng((i['lat'] as num).toDouble(), (i['lng'] as num).toDouble()),
+            source: 'marco',
           )
     ];
   }
@@ -246,6 +328,7 @@ class HereGeocodingService {
       return GeocodingSuggestion.place(
         title: formatted.isEmpty ? query : formatted,
         pos:   LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
+        source: 'google',
       );
     } catch (e, st) {
       FieldLog.error('geocode_google_km', e, st);
@@ -273,8 +356,10 @@ class HereGeocodingService {
         .cast<Map<String, dynamic>>()
         .where((i) => i['id'] != null)
         .map((i) => GeocodingSuggestion.address(
-              title: i['address']?['label'] as String? ?? i['title'] as String,
-              id:    i['id'] as String,
+              title:     i['address']?['label'] as String? ?? i['title'] as String,
+              id:        i['id'] as String,
+              distanceM: (i['distance'] as num?)?.toInt(),
+              source:    'ac',
             ))
         .toList();
   }
@@ -306,6 +391,8 @@ class HereGeocodingService {
               (pos['lat'] as num).toDouble(),
               (pos['lng'] as num).toDouble(),
             ),
+            distanceM: (i['distance'] as num?)?.toInt(),
+            source:    'gc',
           );
         })
         .toList();
@@ -343,6 +430,8 @@ class HereGeocodingService {
               (pos['lat'] as num).toDouble(),
               (pos['lng'] as num).toDouble(),
             ),
+            distanceM: (i['distance'] as num?)?.toInt(),
+            source:    'dc',
           );
         })
         .toList();
@@ -418,6 +507,7 @@ class HereGeocodingService {
           double.parse(item['lat'] as String),
           double.parse(item['lon'] as String),
         ),
+        source: 'nm',
       );
     }).toList();
   }
