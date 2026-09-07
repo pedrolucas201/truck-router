@@ -76,7 +76,17 @@ class HereGeocodingService {
     //     justamente o que o SNV não tem, por serem estaduais).
     final isKm     = _isRodoviaKm(query);
     final marcoKm  = isKm ? _safe('marco_km', () => _marcoKm(query, bias)) : null;
-    final googleKm = isKm ? _googleGeocode(query) : null;
+    final houseNum = houseNumberOf(query);
+    // Google só com km ou número de casa: é onde HERE/TomTom mais erram (rua de
+    // loteamento que só os Correios e a Google têm — Carvalhal, Caçapava, 05/09)
+    // e é o gate de custo (10k grátis/mês, US$ 5/1k depois; ~5-8 chamadas por
+    // busca digitada). Em paralelo com a HERE, não em segunda rodada: a
+    // sequência só pouparia chamada quando a HERE já tem o número, que é a
+    // minoria dos casos em que o gate abre. ponytail: se a franquia apertar, o
+    // knob é este gate, não a ordem.
+    final googleKm = (isKm || houseNum != null)
+        ? _googleGeocode(query, km: isKm, bias: bias)
+        : null;
 
     // Endereço com número de casa: o OSM entra como fonte extra — ver houseNumberOf.
     // Dispara JUNTO com as da HERE (mesmo lote, sem await aqui) e não numa segunda
@@ -85,7 +95,6 @@ class HereGeocodingService {
     // ponytail: o Nominatim pede no máximo 1 req/s. Com o debounce do campo e UM
     // motorista isso não chega perto; se escalar de usuário, trocar pelo `qq=`
     // estruturado da HERE, que já foi medido e resolve o mesmo caso.
-    final houseNum = houseNumberOf(query);
     final osmNum   = houseNum == null
         ? null
         : _safe('nominatim_num', () => _nominatimSearch(query, bias: bias));
@@ -101,10 +110,16 @@ class HereGeocodingService {
     final merged   = mergeHere(hereResults, byDistance: bias != null);
     final seenKeys = merged.map((s) => s.title.toLowerCase().trim()).toSet();
 
-    // Já estão rodando desde antes do Future.wait; aqui só se colhe o resultado.
-    // Só vira sugestão se achou o MARCO — ver [acceptsKmResult].
+    // Já está rodando desde antes do Future.wait; aqui só se colhe o resultado.
+    // Km: só vira sugestão se achou o MARCO — ver [acceptsKmResult].
+    // Número de casa: só entra se nenhuma sugestão da HERE já traz ESSE número
+    // (mesma regra do OSM abaixo). Quando a HERE tem o ponto exato ele é mais
+    // preciso que o centro de rua da Google e a linha extra seria duplicata
+    // com outro rótulo ("Rua X, 36" × "R. X, 36").
     final g = await googleKm;
-    if (g != null && seenKeys.add(g.title.toLowerCase().trim())) {
+    final hereHasNum = houseNum != null &&
+        merged.any((s) => labelHasHouseNumber(s.title, houseNum));
+    if (g != null && !hereHasNum && seenKeys.add(g.title.toLowerCase().trim())) {
       merged.insert(0, g);
     }
     // O marco entra por último pra ficar em PRIMEIRO: dado oficial contra palpite
@@ -286,54 +301,117 @@ class HereGeocodingService {
     return want != null && want == _kmRe.firstMatch(formatted)?.group(1);
   }
 
-  // Google Geocoding para endereço de rodovia por km.
-  //
-  // ponytail: esta chamada NUNCA funcionou. A `googleMapsApiKey` é a chave
-  // "Android SDK", restrita ao pacote — e o Geocoding é web service, que só
-  // autoriza via X-Android-Package/X-Android-Cert, headers que apenas o SDK
-  // nativo assina. O `http` do Dart não manda nenhum dos dois: 403 em 100% das
-  // chamadas entre 07/07 e 31/07 (172 requests, zero 200 — métricas do
-  // maps-route-495614), sempre em silêncio. Teto conhecido: só volta a viver
-  // quando passar pelo proxy do backend com chave sem restrição de app, igual
-  // HERE/TomTom. Até lá o `geocode_google_km` abaixo é o que prova o estado.
-  static Future<GeocodingSuggestion?> _googleGeocode(String query) async {
+  /// Endereço com número: a Google também faz fuzzy, e o `partial_match` vem
+  /// `true` até quando só o NÚMERO não existe (Carvalhal: rua certa, 36 não) —
+  /// não serve de gate. O que separa acerto de chute é o NOME: toda palavra da
+  /// consulta tem que estar no rótulo, sem acento (a Google devolve "Antonio",
+  /// o motorista digita "Antônio"). Tipo tem que ser via ou imóvel: cidade, CEP
+  /// ou bairro sozinhos são o mesmo "só achei o município" que a HERE já dá.
+  /// Consulta sem palavra útil ("Rua Um, 36") não tem como ser conferida →
+  /// rejeita. Rejeitado = fica o que a HERE mostrou, nunca pior do que hoje.
+  @visibleForTesting
+  static bool acceptsAddressResult(
+      String query, String locationType, String formatted, List<String> types) {
+    if (locationType == 'APPROXIMATE') return false;
+    if (!types.any(_addrTypes.contains)) return false;
+    final words = _words(query).toList();
+    if (words.isEmpty) return false;
+    final label = _fold(formatted);
+    return words.every(label.contains);
+  }
+
+  static const _addrTypes = {
+    'street_address', 'route', 'premise', 'subpremise', 'intersection',
+  };
+  // O que o motorista escreve por extenso e a Google abrevia ("R.", "Av.",
+  // "Dr."). ponytail: lista curta; o `ok=false` do geocode_google_addr é que
+  // diz se falta alguma.
+  static const _abbrevWords = {
+    'rua', 'avenida', 'alameda', 'travessa', 'estrada', 'rodovia', 'praca',
+    'largo', 'viela', 'doutor', 'doutora', 'professor', 'professora',
+    'coronel', 'capitao', 'general', 'marechal', 'presidente', 'senador',
+    'deputado', 'engenheiro', 'padre', 'comendador', 'santo', 'santa',
+  };
+  static Iterable<String> _words(String q) => _fold(q)
+      .split(RegExp(r'[^a-z]+'))
+      .where((w) => w.length > 3 && !_abbrevWords.contains(w));
+  static String _fold(String s) => s.toLowerCase().replaceAllMapped(
+      RegExp('[áàâãäéèêëíìîïóòôõöúùûüç]'),
+      (m) => const {
+        'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a',
+        'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+        'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+        'ó': 'o', 'ò': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
+        'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u', 'ç': 'c',
+      }[m[0]]!);
+
+  // Primeiro resultado da Geocoding API via proxy do backend (chave de servidor
+  // restrita à Geocoding; a "Android SDK" nunca autorizou web service — 172×403
+  // entre 07/07 e 31/07, em silêncio). `components` RESTRINGE ao Brasil;
+  // `bounds` só ENVIESA (doc), é o equivalente do `at` da HERE: sem ele
+  // "Rua X, 36" sem cidade cai numa homônima de outro estado. `tag` é o evento
+  // de telemetria do chamador.
+  static Future<Map<String, dynamic>?> _googleFirst(
+      String address, String tag, {LatLng? bias}) async {
     try {
-      final resp = await http.get(Uri.https(
-        'maps.googleapis.com', '/maps/api/geocode/json',
-        {'address': query, 'components': 'country:BR', 'language': 'pt-BR', 'key': googleMapsApiKey},
-      ));
+      final resp = await http
+          .get(
+            Uri.parse('$backendUrl/google/geocode').replace(queryParameters: {
+              'address': address,
+              'components': 'country:BR',
+              'language': 'pt-BR',
+              if (bias != null)
+                'bounds': '${bias.latitude - 1.5},${bias.longitude - 1.5}'
+                    '|${bias.latitude + 1.5},${bias.longitude + 1.5}',
+            }),
+            headers: await AuthService.getHeaders(),
+          )
+          .timeout(const Duration(seconds: 8));
       if (resp.statusCode != 200) {
-        FieldLog.event('geocode_google_km', {'http': resp.statusCode});
+        FieldLog.event(tag, {'http': resp.statusCode});
         return null;
       }
       final body   = jsonDecode(resp.body) as Map<String, dynamic>;
       final status = body['status'] as String? ?? '';
       if (status != 'OK') {
-        FieldLog.event('geocode_google_km', {'status': status});
+        FieldLog.event(tag, {'status': status});
         return null;
       }
       final results = (body['results'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
-      if (results.isEmpty) return null;
-      final first     = results.first;
-      final geom      = first['geometry'] as Map<String, dynamic>?;
-      final locType   = geom?['location_type'] as String? ?? '';
-      final loc       = geom?['location'] as Map<String, dynamic>?;
-      final formatted = first['formatted_address'] as String? ?? '';
-      final ok        = loc != null && acceptsKmResult(query, locType, formatted);
-      // Enquanto o transporte estiver quebrado este ramo é inalcançável (só sai
-      // o `status` acima). Depois do proxy, é ele que mede em campo a cobertura
-      // real da Google — na amostra de 18 consultas de 31/07 foram 4 aceitas.
-      FieldLog.event('geocode_google_km', {'lt': locType, 'ok': ok});
-      if (!ok) return null;
-      return GeocodingSuggestion.place(
-        title: formatted.isEmpty ? query : formatted,
-        pos:   LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
-        source: 'google',
-      );
+      return results.isEmpty ? null : results.first;
     } catch (e, st) {
-      FieldLog.error('geocode_google_km', e, st);
+      FieldLog.error(tag, e, st);
       return null;
     }
+  }
+
+  // Google Geocoding: rodovia por km ([acceptsKmResult]) ou endereço com número
+  // de casa ([acceptsAddressResult]). Telemetria separada por caso — é ela que
+  // mede a cobertura real da Google em campo; `pm` (partial_match) entra só
+  // pra confirmar em campo que não serve de gate.
+  static Future<GeocodingSuggestion?> _googleGeocode(
+      String query, {required bool km, LatLng? bias}) async {
+    final tag   = km ? 'geocode_google_km' : 'geocode_google_addr';
+    final first = await _googleFirst(query, tag, bias: bias);
+    if (first == null) return null;
+    final geom      = first['geometry'] as Map<String, dynamic>?;
+    final locType   = geom?['location_type'] as String? ?? '';
+    final loc       = geom?['location'] as Map<String, dynamic>?;
+    final formatted = first['formatted_address'] as String? ?? '';
+    final types     = (first['types'] as List<dynamic>? ?? []).cast<String>();
+    final ok = loc != null &&
+        (km
+            ? acceptsKmResult(query, locType, formatted)
+            : acceptsAddressResult(query, locType, formatted, types));
+    FieldLog.event(tag, {
+      'lt': locType, 'ok': ok, 'pm': first['partial_match'] == true,
+    });
+    if (!ok) return null;
+    return GeocodingSuggestion.place(
+      title:  formatted.isEmpty ? query : formatted,
+      pos:    LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
+      source: 'google',
+    );
   }
 
   // Autocomplete HERE: endereços com ID único (sem ambiguidade de coords).
@@ -580,42 +658,24 @@ class HereGeocodingService {
             } catch (_) {}
           }
 
-          // Passo 3: Google Geocoding — melhor cobertura de ruas no Brasil, incluindo cidades do interior.
-          // Valida location_type != APPROXIMATE (approx = só achou cidade/região, não a rua).
-          // ATENÇÃO: mesma chave restrita ao app do _googleGeocode, então este passo
-          // também vem tomando 403 desde sempre. Aqui o guard de APPROXIMATE está
-          // certo (é endereço de RUA — GEOMETRIC_CENTER é o centro da rua, legítimo);
-          // o que faltava era o log. Passo 4 (TomTom) é quem vinha salvando o CEP.
+          // Passo 3: Google Geocoding via proxy — melhor cobertura de rua no
+          // interior (Carvalhal/Caçapava: HERE e TomTom zeram, Google resolve
+          // a rua). O endereço vem do ViaCEP, já com cidade e UF, por isso
+          // basta o guard de tipo: GEOMETRIC_CENTER é o centro da rua, legítimo
+          // pra CEP; APPROXIMATE é só a cidade — rejeitar, senão pino errado.
           if (logradouro.isNotEmpty && cidade.isNotEmpty) {
-            try {
-              final address = [logradouro, if (bairro.isNotEmpty) bairro, cidade, uf, 'Brasil']
-                  .join(', ');
-              final resp = await http.get(Uri.https(
-                'maps.googleapis.com', '/maps/api/geocode/json',
-                {'address': address, 'components': 'country:BR', 'language': 'pt-BR', 'key': googleMapsApiKey},
-              ));
-              if (resp.statusCode != 200) {
-                FieldLog.event('geocode_cep_google', {'http': resp.statusCode});
-              } else {
-                final body    = jsonDecode(resp.body) as Map<String, dynamic>;
-                final status  = body['status'] as String? ?? '';
-                final results = (body['results'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
-                if (status != 'OK') FieldLog.event('geocode_cep_google', {'status': status});
-                if (status == 'OK' && results.isNotEmpty) {
-                  final first       = results.first;
-                  final locType     = (first['geometry'] as Map<String, dynamic>?)?['location_type'] as String? ?? '';
-                  final loc         = (first['geometry'] as Map<String, dynamic>?)?['location'] as Map<String, dynamic>?;
-                  // APPROXIMATE = só achou cidade; rejeitar para não meter marker em lugar errado.
-                  if (locType != 'APPROXIMATE' && loc != null) {
-                    return [GeocodingSuggestion.place(
-                      title: label,
-                      pos: LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
-                    )];
-                  }
-                }
-              }
-            } catch (e, st) {
-              FieldLog.error('geocode_cep_google', e, st);
+            final address = [logradouro, if (bairro.isNotEmpty) bairro, cidade, uf, 'Brasil']
+                .join(', ');
+            final first   = await _googleFirst(address, 'geocode_cep_google');
+            final geom    = first?['geometry'] as Map<String, dynamic>?;
+            final locType = geom?['location_type'] as String? ?? '';
+            final loc     = geom?['location'] as Map<String, dynamic>?;
+            if (first != null) FieldLog.event('geocode_cep_google', {'lt': locType});
+            if (first != null && locType != 'APPROXIMATE' && loc != null) {
+              return [GeocodingSuggestion.place(
+                title: label,
+                pos: LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
+              )];
             }
           }
 

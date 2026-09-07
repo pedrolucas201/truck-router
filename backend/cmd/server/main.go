@@ -64,6 +64,11 @@ func main() {
 		// TomTom geocoding proxy
 		r.Get("/tomtom/geocode", handlers.TomTomGeocode)
 
+
+
+		// Google Geocoding proxy (endereço com número / km / CEP)
+		r.Get("/google/geocode", handlers.GoogleGeocode)
+
 		// Routing proxy
 		r.Get("/route/here", handlers.HereRoute)
 		r.Get("/route/tomtom/*", handlers.TomTomRoute)

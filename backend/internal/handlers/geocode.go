@@ -41,6 +41,15 @@ func HereWeather(w http.ResponseWriter, r *http.Request) {
 	forward(w, "https://weather.hereapi.com/v3/report", q)
 }
 
+// GoogleGeocode — proxy da Geocoding API. Chave PRÓPRIA de servidor, restrita
+// a geocoding-backend (a "Android SDK" nunca autorizou web service: 403 em 100%
+// das chamadas do app entre 07/07 e 31/07). Caso de origem: rua de loteamento
+// que só os Correios e a Google conhecem (Carvalhal, Caçapava, 2026-09-05).
+func GoogleGeocode(w http.ResponseWriter, r *http.Request) {
+	q := appendKey(r.URL.RawQuery, "key", os.Getenv("GOOGLE_GEOCODING_KEY"))
+	forward(w, "https://maps.googleapis.com/maps/api/geocode/json", q)
+}
+
 func TomTomGeocode(w http.ResponseWriter, r *http.Request) {
 	q := appendKey(r.URL.RawQuery, "key", os.Getenv("TOMTOM_API_KEY"))
 	forward(w, "https://api.tomtom.com/search/2/structuredGeocode.json", q)
