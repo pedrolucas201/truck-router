@@ -324,6 +324,19 @@ class HereGeocodingService {
     return words.every(label.contains);
   }
 
+  /// Rua do ViaCEP × rua devolvida por HERE/TomTom no fluxo do CEP. Mesma
+  /// régua do [acceptsAddressResult]: TODA palavra útil da esperada tem que
+  /// estar na devolvida, sem acento. O `any` antigo aceitava "Rua Antônio
+  /// Condino" pra "Rua Antônio Ailton Carvalhal" — uma palavra em comum
+  /// virava pino na rua errada com o rótulo certo. Sem palavra útil → false.
+  @visibleForTesting
+  static bool streetMatches(String expected, String returned) {
+    final words = _words(expected).toList();
+    if (words.isEmpty) return false;
+    final label = _fold(returned);
+    return words.every(label.contains);
+  }
+
   static const _addrTypes = {
     'street_address', 'route', 'premise', 'subpremise', 'intersection',
   };
@@ -638,7 +651,6 @@ class HereGeocodingService {
               ), headers: await AuthService.getHeaders());
               if (resp.statusCode == 200) {
                 final cidadeN = _norm(cidade);
-                final ruaN    = _norm(logradouro);
                 final allItems = (jsonDecode(resp.body)['items'] as List<dynamic>? ?? [])
                     .cast<Map<String, dynamic>>();
                 for (final item in allItems) {
@@ -646,10 +658,9 @@ class HereGeocodingService {
                   if ((item['scoring']?['queryScore'] as num? ?? 0) < 0.6) continue;
                   final addr         = item['address'] as Map<String, dynamic>? ?? {};
                   final retCity      = _norm(addr['city'] as String? ?? addr['county'] as String? ?? '');
-                  final retStreet    = _norm(addr['street'] as String? ?? '');
+                  final retStreet    = addr['street'] as String? ?? '';
                   final cityOk       = retCity.contains(cidadeN) || cidadeN.contains(retCity);
-                  final streetOk     = retStreet.isNotEmpty &&
-                      ruaN.split(' ').where((w) => w.length > 3).any((w) => retStreet.contains(w));
+                  final streetOk     = streetMatches(logradouro, retStreet);
                   if (cityOk && streetOk) {
                     final pos = item['position'] as Map<String, dynamic>;
                     return [GeocodingSuggestion.place(
@@ -816,18 +827,15 @@ class HereGeocodingService {
         .cast<Map<String, dynamic>>();
     if (results.isEmpty) return null;
 
-    final cityNorm   = _norm(city);
-    final streetNorm = _norm(street);
-    final streetKeys = streetNorm.split(' ').where((w) => w.length > 3).toList();
+    final cityNorm = _norm(city);
 
     Map<String, dynamic>? match;
     for (final r in results) {
       final addr           = r['address'] as Map<String, dynamic>? ?? {};
       final returnedCity   = _norm(addr['municipality'] as String? ?? '');
-      final returnedStreet = _norm(addr['streetName']   as String? ?? '');
-      if (returnedStreet.isEmpty) continue;
+      final returnedStreet = addr['streetName'] as String? ?? '';
       final cityOk   = returnedCity.contains(cityNorm) || cityNorm.contains(returnedCity);
-      final streetOk = streetKeys.any((w) => returnedStreet.contains(w));
+      final streetOk = streetMatches(street, returnedStreet);
       if (cityOk && streetOk) { match = r; break; }
     }
 
