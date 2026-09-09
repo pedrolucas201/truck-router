@@ -23,6 +23,7 @@ if ($pubspec -match "version:\s*(.+)") {
     exit 1
 }
 
+$scriptStart = Get-Date
 Write-Host "Buildando v$version..." -ForegroundColor Cyan
 
 # APP_VERSION carimba a versao em TODO evento do field_logs (FieldLog.appVersion).
@@ -32,7 +33,20 @@ flutter build apk --release --no-tree-shake-icons `
     "--dart-define-from-file=dart_defines.json" `
     "--dart-define=APP_VERSION=$version"
 
+# $ErrorActionPreference = Stop NAO pega falha de executavel nativo: em 2026-09-09 o
+# Gradle falhou, o script seguiu e subiu o APK do dia anterior (2.4.57) pro GCS, pro
+# latest e pro App Distribution com o nome 2.4.58. Guarda dupla: codigo de saida E
+# o APK tem que ser mais novo que o inicio deste script.
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Build FALHOU (codigo $LASTEXITCODE). Nada foi publicado." -ForegroundColor Red
+    exit 1
+}
+
 $apk    = "build\app\outputs\flutter-apk\app-release.apk"
+if (-not (Test-Path $apk) -or (Get-Item $apk).LastWriteTime -lt $scriptStart) {
+    Write-Host "APK ausente ou mais velho que o inicio do build. Nada foi publicado." -ForegroundColor Red
+    exit 1
+}
 $dest   = "gs://truck-router-apks/truck-router-v$version.apk"
 $latest = "gs://truck-router-apks/truck-router-latest.apk"
 $url    = "https://storage.googleapis.com/truck-router-apks/truck-router-v$version.apk"
