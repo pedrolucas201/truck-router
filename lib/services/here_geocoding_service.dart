@@ -11,7 +11,10 @@ class GeocodingSuggestion {
   final String? hereId;    // autocomplete: lookup para coordenadas precisas
   final LatLng? position;  // geocode/nominatim: coords já resolvidas
   final int? distanceM;    // HERE `distance` (do `at`); só existe com bias
-  final String source;     // ac|gc|dc|nm|marco|google|cep — telemetria do pick
+  // ac|gc|dc|nm|marco|google — telemetria do pick; vazio = CEP por HERE/TomTom/OSM.
+  // 'google' também decide persistência: conteúdo da Google não pode ficar
+  // guardado além de 30 dias (termo da plataforma) — ver [fromGoogle].
+  final String source;
 
   // A HERE devolve o rótulo com entidade HTML escapada ("Quina &amp; Silva",
   // medido na chave real em 2026-09-04) e o app mostrava o "&amp;" literal.
@@ -42,6 +45,7 @@ class GeocodingSuggestion {
           title: title, position: pos, distanceM: distanceM, source: source);
 
   bool get needsLookup => position == null;
+  bool get fromGoogle  => source == 'google';
 
   /// Só as entidades que um rótulo de endereço pode carregar. Sem dependência
   /// nova: o dart:convert só escapa, não desescapa.
@@ -675,6 +679,7 @@ class HereGeocodingService {
               return [GeocodingSuggestion.place(
                 title: label,
                 pos: LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
+                source: 'google',
               )];
             }
           }

@@ -13,7 +13,10 @@ class AddressSearchField extends StatefulWidget {
   // Separa o histórico por campo (ex: 'origin' vs 'destination') — partida e
   // destino têm memórias diferentes.
   final String historyRole;
-  final ValueChanged<(String label, LatLng position)> onSelected;
+  // `google` = coordenada da Google: quem guardar tem que marcar a entrada
+  // pra ela expirar em 30 dias (utils/google_cache.dart). O label já vem
+  // como o texto digitado, nunca o formatted_address.
+  final ValueChanged<(String label, LatLng position, bool google)> onSelected;
 
   const AddressSearchField({
     super.key,
@@ -33,7 +36,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   List<GeocodingSuggestion> _suggestions = [];
-  List<(String, LatLng)> _places = []; // lugares já usados (recente primeiro)
+  List<(String, LatLng, bool)> _places = []; // lugares já usados (recente primeiro); $3 = Google
   bool _loading = false;
   bool _confirmed = false;
   bool _focused = false;
@@ -86,15 +89,21 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
   }
 
   // Grava o lugar escolhido na memória local e reflete no estado do campo.
-  void _remember(String label, LatLng pos) {
-    PlacesService.record(widget.historyRole, label, pos);
+  // `fresh` = a coordenada acabou de vir da Google (prazo novo); recente
+  // re-escolhido não renova — o record preserva marca e data originais.
+  void _remember(String label, LatLng pos, {bool google = false, bool fresh = true}) {
+    PlacesService.record(widget.historyRole, label, pos, google: google && fresh);
     _places = [
-      (label, pos),
+      (label, pos, google),
       ..._places.where((p) => p.$1.toLowerCase() != label.toLowerCase()),
     ];
   }
 
   Future<void> _select(GeocodingSuggestion s) async {
+    // Rótulo gravado/propagado: pra Google é o texto DIGITADO (dado do
+    // motorista) — o formatted_address dela não pode ser guardado (o termo
+    // 6.3.1 só cobre lat/lng). O campo em si ainda mostra o endereço dela.
+    final label = s.fromGoogle ? _controller.text.trim() : s.title;
     // Fecha o par com o geocode_search: qual posição/fonte o motorista tocou.
     // src vazio = caminho do CEP.
     FieldLog.event('geocode_pick', {
@@ -106,10 +115,10 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
 
     // Resultado de lugar nomeado já tem coords — usa direto, sem lookup.
     if (!s.needsLookup) {
-      _remember(s.title, s.position!);
+      _remember(label, s.position!, google: s.fromGoogle);
       setState(() { _suggestions = []; _confirmed = true; });
       _focusNode.unfocus();
-      widget.onSelected((s.title, s.position!));
+      widget.onSelected((label, s.position!, s.fromGoogle));
       return;
     }
 
@@ -119,18 +128,18 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
     if (!mounted) return;
     setState(() => _loading = false);
     if (position != null) {
-      _remember(s.title, position);
+      _remember(s.title, position); // lookup é sempre HERE, nunca Google
       setState(() => _confirmed = true);
       _focusNode.unfocus();
-      widget.onSelected((s.title, position));
+      widget.onSelected((s.title, position, false));
     }
   }
 
   // Tocou num lugar já conhecido (recente ou match local): usa direto.
-  void _selectKnown((String, LatLng) place) {
+  void _selectKnown((String, LatLng, bool) place) {
     FieldLog.event('geocode_pick', {'i': -1, 'src': 'history'});
     _controller.text = place.$1;
-    _remember(place.$1, place.$2);
+    _remember(place.$1, place.$2, google: place.$3, fresh: false);
     setState(() { _suggestions = []; _confirmed = true; });
     _focusNode.unfocus();
     widget.onSelected(place);
@@ -234,7 +243,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
     if (_confirmed) return const SizedBox.shrink();
     final q = _controller.text.trim().toLowerCase();
     // Lugares conhecidos: campo vazio+focado → recentes; digitando → match local.
-    final List<(String, LatLng)> known = q.isEmpty
+    final List<(String, LatLng, bool)> known = q.isEmpty
         ? (_focused ? _places.take(5).toList() : const [])
         : _places.where((p) => p.$1.toLowerCase().contains(q)).take(5).toList();
     // Geocoding sem repetir o que já apareceu como conhecido (dedup por label).

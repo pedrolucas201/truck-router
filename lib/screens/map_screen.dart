@@ -78,6 +78,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   DateTime? _lastHandledAt;
   bool      _openedViaDeepLink = false;
   String?   _loadingTruckAsset;
+  // Posições vindas da Google (busca por número/km e CEP): a rota que usa
+  // uma delas entra no histórico marcada `google: true` e expira em 30 dias
+  // (utils/google_cache.dart). ponytail: set nunca é limpo; entrada velha só
+  // marcaria de novo uma coord idêntica, e marcar a mais é o lado seguro.
+  final _googlePoints = <LatLng>{};
   LatLng? _origin;
   // Quando _origin veio do GPS ("Minha localização"): instante do fix. Null =
   // origem escolhida por busca/histórico/link, que nunca é re-buscada.
@@ -160,6 +165,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final h = await HistoryService.load(); // recente primeiro
     final pairs = <(String, LatLng)>[];
     for (final e in h) {
+      if (e.google) continue; // marca/prazo não viajam no seed
       pairs.add((e.destinationLabel, e.destinationPosition));
       pairs.add((e.originLabel, e.originPosition));
     }
@@ -1201,6 +1207,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         distanceText:        result.distanceText,
         durationText:        result.durationText,
         calculatedAt:        DateTime.now(),
+        google: _googlePoints.contains(_origin) ||
+            _googlePoints.contains(_destination) ||
+            _waypointPositions.any(_googlePoints.contains),
       ));
     }
 
@@ -1612,6 +1621,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                 initialValue: _originLabel,
                                 indicatorColor: Colors.red.shade400,
                                 onSelected: (record) {
+                                  if (record.$3) _googlePoints.add(record.$2);
                                   setState(() {
                                     _originLabel = record.$1;
                                     _origin      = record.$2;
@@ -1735,6 +1745,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           indicatorColor: Colors.teal.shade600,
                           biasLocation: _origin,
                           onSelected: (record) {
+                            if (record.$3) _googlePoints.add(record.$2);
                             setState(() {
                               _destinationLabel = record.$1;
                               _destination = record.$2;
@@ -1759,6 +1770,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                       indicatorColor: Colors.orange.shade600,
                                       biasLocation: _origin,
                                       onSelected: (record) {
+                                        if (record.$3) _googlePoints.add(record.$2);
                                         setState(() {
                                           _waypointLabels[i]    = record.$1;
                                           _waypointPositions[i] = record.$2;

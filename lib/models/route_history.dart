@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../utils/google_cache.dart';
 
 class WaypointEntry {
   final String label;
@@ -30,6 +31,9 @@ class RouteHistory {
   final String durationText;
   final DateTime calculatedAt;
   final String? name; // apelido (só nas favoritas, ex: "Casa → Obra")
+  // Alguma coordenada (origem/destino/parada) veio da Google Geocoding: a
+  // entrada é apagada 30 dias após [calculatedAt] (utils/google_cache.dart).
+  final bool google;
 
   const RouteHistory({
     required this.originLabel,
@@ -42,6 +46,7 @@ class RouteHistory {
     required this.durationText,
     required this.calculatedAt,
     this.name,
+    this.google = false,
   });
 
   RouteHistory copyWith({String? name}) => RouteHistory(
@@ -55,6 +60,7 @@ class RouteHistory {
         durationText: durationText,
         calculatedAt: calculatedAt,
         name: name ?? this.name,
+        google: google,
       );
 
   Map<String, dynamic> toJson() => {
@@ -70,6 +76,7 @@ class RouteHistory {
     'durationText':       durationText,
     'calculatedAt':       calculatedAt.toIso8601String(),
     'name':               name,
+    'google':             google,
   };
 
   factory RouteHistory.fromJson(Map<String, dynamic> j) => RouteHistory(
@@ -87,7 +94,10 @@ class RouteHistory {
     durationText:        j['durationText'] as String,
     calculatedAt:        DateTime.parse(j['calculatedAt'] as String),
     name:                j['name'] as String?,
+    google:              j['google'] as bool? ?? false,
   );
+
+  bool googleExpired(DateTime now) => google && googleCacheExpired(calculatedAt, now);
 
   static List<RouteHistory> listFromJson(String raw) =>
       (jsonDecode(raw) as List<dynamic>)

@@ -15,11 +15,18 @@ class FavoritesService {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
     if (raw == null || raw.isEmpty) return [];
+    List<RouteHistory> list;
     try {
-      return RouteHistory.listFromJson(raw);
+      list = RouteHistory.listFromJson(raw);
     } catch (_) {
       return [];
     }
+    // Termo da Google: entrada com coordenada dela some em 30 dias — do
+    // disco, não só da lista (utils/google_cache.dart).
+    final now  = DateTime.now();
+    final kept = list.where((h) => !h.googleExpired(now)).toList();
+    if (kept.length != list.length) await _save(kept);
+    return kept;
   }
 
   static Future<void> _save(List<RouteHistory> list) async {
