@@ -485,7 +485,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             if (idx != -1) _userRestrictions[idx] = rWithId;
           });
         }
-      } catch (_) {}
+      } catch (e, st) {
+        // A restrição já está salva local (marcador na tela); só a cópia no
+        // Firestore falhou. Sem isto a perda era invisível — mesmo furo que
+        // escondeu os 15 permission-denied de radar em 2026-09-02.
+        FieldLog.error('restriction_add', e, st);
+      }
     }();
 
     final key = 'ur_${r.lat}_${r.lng}_${r.createdAt.millisecondsSinceEpoch}_${r.isVerified}';
@@ -1347,17 +1352,25 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       builder: (_) => const ReportPoliceSheet(),
     );
     if (type == null) return;
-    await PoliceAlertService.report(
-      type: type,
-      lat: _cameraTarget.latitude,
-      lng: _cameraTarget.longitude,
-      uid: uid,
-    );
+    var ok = true;
+    try {
+      await PoliceAlertService.report(
+        type: type,
+        lat: _cameraTarget.latitude,
+        lng: _cameraTarget.longitude,
+        uid: uid,
+      );
+    } catch (e, st) {
+      // Sem isto a falha virava exceção solta e o motorista não recebia
+      // retorno nenhum. Erro de sistema não vai pra tela (regra do Márcio).
+      ok = false;
+      FieldLog.error('police_report', e, st);
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Alerta reportado'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(ok ? 'Alerta reportado' : 'Não deu pra enviar o alerta agora'),
+          duration: const Duration(seconds: 2),
         ),
       );
     }
