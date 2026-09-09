@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/field_log.dart';
@@ -40,6 +41,14 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
   bool _loading = false;
   bool _confirmed = false;
   bool _focused = false;
+  // Token de sessão do Autocomplete da Google: nasce na digitação, morre na
+  // escolha (agrupa as teclas + o details). Sem pacote uuid no projeto: 32
+  // hex do Random.secure bastam.
+  String? _placesSession;
+  static String _newSession() {
+    final r = Random.secure();
+    return List.generate(32, (_) => r.nextInt(16).toRadixString(16)).join();
+  }
 
   @override
   void initState() {
@@ -72,6 +81,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
       setState(() => _suggestions = []);
       return;
     }
+    _placesSession ??= _newSession();
     _debounce = Timer(const Duration(milliseconds: 400), () => _search(query));
   }
 
@@ -79,7 +89,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
     if (!mounted) return;
     setState(() => _loading = true);
     final results = await HereGeocodingService.search(
-        query, bias: widget.biasLocation);
+        query, bias: widget.biasLocation, placesSession: _placesSession);
     if (mounted) {
       setState(() {
         _suggestions = results;
@@ -104,6 +114,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
     // motorista) — o formatted_address dela não pode ser guardado (o termo
     // 6.3.1 só cobre lat/lng). O campo em si ainda mostra o endereço dela.
     final label = s.fromGoogle ? _controller.text.trim() : s.title;
+    final session = _placesSession;
     // Fecha o par com o geocode_search: qual posição/fonte o motorista tocou.
     // src vazio = caminho do CEP.
     FieldLog.event('geocode_pick', {
@@ -112,6 +123,8 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
       'km':  s.distanceM == null ? '' : (s.distanceM! / 1000).round(),
     });
     _controller.text = s.title;
+
+    _placesSession = null; // escolha fecha a sessão do Autocomplete
 
     // Resultado de lugar nomeado já tem coords — usa direto, sem lookup.
     if (!s.needsLookup) {
@@ -122,22 +135,25 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
       return;
     }
 
-    // Resultado de endereço — precisa de lookup para coords precisas.
+    // Resultado sem coordenada — HERE (lookup) ou Google Places (details).
     setState(() { _suggestions = []; _loading = true; _confirmed = false; });
-    final position = await HereGeocodingService.lookup(s.hereId!);
+    final position = s.source == 'gp'
+        ? await HereGeocodingService.placeDetails(s.hereId!, session: session)
+        : await HereGeocodingService.lookup(s.hereId!);
     if (!mounted) return;
     setState(() => _loading = false);
     if (position != null) {
-      _remember(s.title, position); // lookup é sempre HERE, nunca Google
+      _remember(label, position, google: s.fromGoogle);
       setState(() => _confirmed = true);
       _focusNode.unfocus();
-      widget.onSelected((s.title, position, false));
+      widget.onSelected((label, position, s.fromGoogle));
     }
   }
 
   // Tocou num lugar já conhecido (recente ou match local): usa direto.
   void _selectKnown((String, LatLng, bool) place) {
     FieldLog.event('geocode_pick', {'i': -1, 'src': 'history'});
+    _placesSession = null;
     _controller.text = place.$1;
     _remember(place.$1, place.$2, google: place.$3, fresh: false);
     setState(() { _suggestions = []; _confirmed = true; });
@@ -155,7 +171,7 @@ class _AddressSearchFieldState extends State<AddressSearchField> {
     if (query.length < 3) return;
     setState(() => _loading = true);
     final results = await HereGeocodingService.search(
-        query, bias: widget.biasLocation);
+        query, bias: widget.biasLocation, placesSession: _placesSession);
     if (mounted) {
       setState(() => _loading = false);
       if (results.isNotEmpty) await _select(results.first);

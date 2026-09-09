@@ -69,6 +69,12 @@ func main() {
 		// Google Geocoding proxy (endereço com número / km / CEP)
 		r.Get("/google/geocode", handlers.GoogleGeocode)
 
+		// Google Places (New): nome de lugar (empresa, posto, CD, portaria).
+		// Autocomplete + Details Essentials, field mask fixa no servidor
+		// (custo). Ver places.go.
+		r.Get("/google/places/autocomplete", handlers.GooglePlacesAutocomplete)
+		r.Get("/google/places/details", handlers.GooglePlacesDetails)
+
 		// Routing proxy
 		r.Get("/route/here", handlers.HereRoute)
 		r.Get("/route/tomtom/*", handlers.TomTomRoute)

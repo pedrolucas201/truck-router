@@ -11,9 +11,9 @@ class GeocodingSuggestion {
   final String? hereId;    // autocomplete: lookup para coordenadas precisas
   final LatLng? position;  // geocode/nominatim: coords já resolvidas
   final int? distanceM;    // HERE `distance` (do `at`); só existe com bias
-  // ac|gc|dc|nm|marco|google — telemetria do pick; vazio = CEP por HERE/TomTom/OSM.
-  // 'google' também decide persistência: conteúdo da Google não pode ficar
-  // guardado além de 30 dias (termo da plataforma) — ver [fromGoogle].
+  // ac|gc|dc|nm|marco|google|gp — telemetria do pick; vazio = CEP por HERE/TomTom/OSM.
+  // 'google' (Geocoding) e 'gp' (Places) também decidem persistência: conteúdo
+  // da Google não fica guardado além de 30 dias (termos 6.3.1 e 14.3) — ver [fromGoogle].
   final String source;
 
   // A HERE devolve o rótulo com entidade HTML escapada ("Quina &amp; Silva",
@@ -45,7 +45,7 @@ class GeocodingSuggestion {
           title: title, position: pos, distanceM: distanceM, source: source);
 
   bool get needsLookup => position == null;
-  bool get fromGoogle  => source == 'google';
+  bool get fromGoogle  => source == 'google' || source == 'gp';
 
   /// Só as entidades que um rótulo de endereço pode carregar. Sem dependência
   /// nova: o dart:convert só escapa, não desescapa.
@@ -66,7 +66,7 @@ class HereGeocodingService {
   /// Detecta CEP (XXXXX-XXX) e usa rota específica de código postal.
   /// Caso contrário, tenta HERE (autocomplete + geocode) e cai no Nominatim se vazio.
   static Future<List<GeocodingSuggestion>> search(
-      String query, {LatLng? bias}) async {
+      String query, {LatLng? bias, String? placesSession}) async {
     if (query.trim().isEmpty) return [];
     if (_isCep(query)) return _cepSearch(query);
     final clock = Stopwatch()..start();
@@ -105,13 +105,24 @@ class HereGeocodingService {
 
     // _safe isola cada fonte: sem isto, um jsonDecode que lança (backend devolveu
     // HTML/erro em vez de JSON) mata a busca INTEIRA via Future.wait, sem sinal.
+    // Google Places: nome de lugar (empresa, posto, CD, portaria). Medido em
+    // 2026-09-09 com 20 nomes que um motorista digita: HERE achou 14, Google
+    // 20 ("Ceasa SJC" → CEAGESP, CD do Mercado Livre, portaria da Johnson).
+    // Só quando não é km nem número de casa — esses já vão pela Geocoding.
+    // Autocomplete Essentials, 10k grátis/mês. ponytail: se apertar, o knob
+    // é este gate.
+    final placesOn = !isKm && houseNum == null;
     final hereResults = await Future.wait([
       _safe('autocomplete', () => _autocomplete(query, bias: bias)),
       _safe('geocode',      () => _geocodePlaces(query, bias: bias)),
       _safe('discover',     () => _discoverPlaces(query, bias: bias)),
+      placesOn
+          ? _safe('places', () => _placesAutocomplete(query, bias: bias, session: placesSession))
+          : Future.value(const <GeocodingSuggestion>[]),
     ]);
 
-    final merged   = mergeHere(hereResults, byDistance: bias != null);
+    final merged   = mergePlaces(
+        hereResults[3], mergeHere(hereResults.sublist(0, 3), byDistance: bias != null));
     final seenKeys = merged.map((s) => s.title.toLowerCase().trim()).toSet();
 
     // Já está rodando desde antes do Future.wait; aqui só se colhe o resultado.
@@ -171,6 +182,7 @@ class HereGeocodingService {
       'ac':   hereResults[0].length,
       'gc':   hereResults[1].length,
       'dc':   hereResults[2].length,
+      'gp':   hereResults[3].length,
       'nm':   nm,
       'bias': bias != null ? 1 : 0,
       'top':  out.isEmpty ? '' : '${out.first.source}:${out.first.distanceM ?? ''}',
@@ -209,6 +221,80 @@ class HereGeocodingService {
         return c != 0 ? c : a.key.compareTo(b.key);
       });
     return indexed.map((e) => e.value).toList();
+  }
+
+  /// Google primeiro (até 3), depois a HERE já ordenada. Medido 2026-09-09: a
+  /// Google acertou 20/20 nomes e a HERE 14/20; por distância a HERE ainda
+  /// ganharia com lixo perto ("Casa Doce" a 1 km pra "Ceasa SJC", que na
+  /// Google é o CEAGESP a 12 km). ponytail: knob; a Google manda `distanceM`,
+  /// então cortar por raio aqui é uma linha se ela trouxer lixo longe.
+  @visibleForTesting
+  static List<GeocodingSuggestion> mergePlaces(
+      List<GeocodingSuggestion> google, List<GeocodingSuggestion> here) {
+    final out  = <GeocodingSuggestion>[];
+    final seen = <String>{};
+    for (final s in [...google.take(3), ...here]) {
+      if (seen.add(s.title.toLowerCase().trim())) out.add(s);
+    }
+    return out;
+  }
+
+  // Autocomplete (New) via proxy: o backend monta o POST (bias/origin/país)
+  // e segura a chave. Sugestão vem sem coordenada → needsLookup → [placeDetails].
+  static Future<List<GeocodingSuggestion>> _placesAutocomplete(
+      String query, {LatLng? bias, String? session}) async {
+    final response = await http.get(
+        Uri.parse('$backendUrl/google/places/autocomplete').replace(queryParameters: {
+          'input': query,
+          if (bias != null) 'at': '${bias.latitude},${bias.longitude}',
+          'session': ?session,
+        }),
+        headers: await AuthService.getHeaders());
+    if (response.statusCode != 200) return [];
+    return parsePlacesAutocomplete(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  /// Forma real da resposta (2026-09-09): suggestions[].placePrediction
+  /// {placeId, text.text, distanceMeters (só com origin)}. queryPrediction
+  /// (sugestão de texto, sem lugar) é ignorada.
+  @visibleForTesting
+  static List<GeocodingSuggestion> parsePlacesAutocomplete(Map<String, dynamic> json) {
+    final out = <GeocodingSuggestion>[];
+    for (final s in (json['suggestions'] as List<dynamic>? ?? const [])) {
+      final p = (s as Map<String, dynamic>)['placePrediction'] as Map<String, dynamic>?;
+      final id    = p?['placeId'] as String?;
+      final title = (p?['text'] as Map<String, dynamic>?)?['text'] as String?;
+      if (id == null || title == null || title.isEmpty) continue;
+      out.add(GeocodingSuggestion.address(
+        title:     title,
+        id:        id,
+        distanceM: (p!['distanceMeters'] as num?)?.toInt(),
+        source:    'gp',
+      ));
+    }
+    return out;
+  }
+
+  /// Place Details Essentials (field mask fixa no backend): só a coordenada.
+  static Future<LatLng?> placeDetails(String placeId, {String? session}) async {
+    try {
+      final response = await http.get(
+          Uri.parse('$backendUrl/google/places/details').replace(queryParameters: {
+            'id': placeId,
+            'session': ?session,
+          }),
+          headers: await AuthService.getHeaders());
+      if (response.statusCode != 200) {
+        FieldLog.event('place_details_fail', {'status': response.statusCode});
+        return null;
+      }
+      final loc = jsonDecode(response.body)['location'] as Map<String, dynamic>?;
+      if (loc == null) return null;
+      return LatLng((loc['latitude'] as num).toDouble(), (loc['longitude'] as num).toDouble());
+    } catch (e, st) {
+      FieldLog.error('place_details', e, st);
+      return null;
+    }
   }
 
   /// Roda uma fonte de geocoding e devolve [] em falha, logando qual quebrou.
