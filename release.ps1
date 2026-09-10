@@ -47,6 +47,18 @@ if (-not (Test-Path $apk) -or (Get-Item $apk).LastWriteTime -lt $scriptStart) {
     Write-Host "APK ausente ou mais velho que o inicio do build. Nada foi publicado." -ForegroundColor Red
     exit 1
 }
+# Assinatura: o release tem que sair do upload-keystore.jks (SHA-1 abaixo). Sem o
+# key.properties o Gradle cai na chave de debug em silencio, e um APK de debug por cima
+# da base instalada obriga todo motorista a desinstalar. Publicar so com a chave certa.
+$releaseSha1 = "14e1e4af20d6d371cb2863fb28af201c1a7ba145"
+$apksigner = Get-ChildItem "$env:LOCALAPPDATA\Android\Sdk\build-tools\*\apksigner.bat" |
+    Sort-Object Name | Select-Object -Last 1
+$certs = & $apksigner.FullName verify --print-certs $apk 2>&1 | Out-String
+if ($certs -notmatch "SHA-1 digest:\s*$releaseSha1") {
+    Write-Host "APK NAO esta assinado com o upload-keystore (falta android/key.properties?). Nada foi publicado." -ForegroundColor Red
+    exit 1
+}
+
 $dest   = "gs://truck-router-apks/truck-router-v$version.apk"
 $latest = "gs://truck-router-apks/truck-router-latest.apk"
 $url    = "https://storage.googleapis.com/truck-router-apks/truck-router-v$version.apk"
