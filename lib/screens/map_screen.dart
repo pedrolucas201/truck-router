@@ -809,7 +809,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       final url = 'https://maps.google.com/maps'
           '?saddr=${_origin!.latitude},${_origin!.longitude}'
           '&daddr=${_destination!.latitude},${_destination!.longitude}';
-      text.writeln('\n\nAbrir no Truck Router:');
+      text.writeln('\n\nAbrir no app No Trecho:');
       text.write(url);
     }
     Share.share(text.toString(), subject: 'Rota do Caminhão');

@@ -11,7 +11,7 @@
          nav some em background). POST_NOTIFICATIONS já vem do manifest do plugin. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <application
-        android:label="truck_router"
+        android:label="No Trecho"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <meta-data

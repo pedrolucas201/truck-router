@@ -101,7 +101,7 @@ class TruckRouterApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeMode = context.watch<ThemeController>().value;
     return MaterialApp(
-      title: 'Rota Caminhão',
+      title: 'No Trecho',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Color(0xFF00897B)),
