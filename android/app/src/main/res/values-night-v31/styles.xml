@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+: o sistema desenha a PRÓPRIA splash (cor + ícone) antes de
+         qualquer coisa e ignora o launch_background em tela cheia; sem isto ele
+         encaixava a nossa arte no slot do ícone como uma faixa (Redmi Note 11,
+         10/09). A arte em tela cheia fica com a SplashScreen do app (3 s). -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>
