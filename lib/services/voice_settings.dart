@@ -76,16 +76,3 @@ class VoiceSettings {
     return out;
   }
 }
-
-/// Apelidos de estrada pra lista de vozes (pedido do Gilberto, 10/09): "Voz 3"
-/// não diz nada. Sem gênero de propósito: o TTS não informa se a voz é
-/// masculina ou feminina, e apelido de gênero errado é pior que número.
-const List<String> kVoiceNicknames = [
-  'Copiloto', 'Parceiro', 'Chefe', 'Comandante', 'Estradeiro', 'Boleia',
-  'Câmbio', 'Positivo', 'QAP', 'Trecheiro', 'Carreteiro', 'Navegador',
-];
-
-String voiceNickname(int index) => index < kVoiceNicknames.length
-    ? kVoiceNicknames[index]
-    : 'Voz ${index + 1}';
-
