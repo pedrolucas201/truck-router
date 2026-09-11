@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import '../services/field_log.dart';
 import '../services/voice_settings.dart';
 
 /// Escolha da voz do guia, DE OUVIDO: a API do Android não diz o gênero da
@@ -34,7 +35,16 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen> {
     final saved = await VoiceSettings.load();
     List<Map<String, String>> voices = const [];
     try {
-      voices = VoiceSettings.ptVoices(await _tts.getVoices);
+      final raw = await _tts.getVoices;
+      voices = VoiceSettings.ptVoices(raw);
+      // Lista crua do aparelho: o Gilberto ainda vê vozes iguais depois do
+      // colapso -local/-network; só com os nomes reais dá pra entender por quê.
+      FieldLog.event('voice_list', {
+        'n': voices.length,
+        'raw': raw is List
+            ? raw.map((v) => v is Map ? '${v['name']}' : '?').join(',')
+            : '?',
+      });
     } catch (_) {} // sem lista, sobram Padrão + tons — a tela continua útil
     if (!mounted) return;
     setState(() {
@@ -88,7 +98,7 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen> {
                 ),
                 for (final (i, v) in _voices.indexed)
                   _voiceTile(
-                    label: 'Voz ${i + 1}',
+                    label: voiceNickname(i),
                     selected: _selectedName == v['name'],
                     onTap: () => _choose(v['name']),
                   ),

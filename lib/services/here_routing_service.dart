@@ -11,6 +11,9 @@ import '../models/truck_profile.dart';
 import 'flexible_polyline_decoder.dart';
 import 'radar_service.dart';
 
+/// 90 km/h em m/s, o mesmo teto do radar/velocímetro (kTruckCapKmh).
+const int kTruckSpeedCapMs = 25;
+
 /// Um span da rota + se ele cai em trecho com restrição violada. Só existe pro
 /// invariante do destino inalcançável (ver [HereRoutingService.destinationBlockedLabel]).
 typedef SpanViolation = ({int offset, bool violated, bool blocksMode});
@@ -91,6 +94,10 @@ class HereRoutingService {
       'lang':            'pt-BR',
       if (avoidDirtRoad) 'avoid[features]': 'dirtRoad',
       ...truck.toHereParams(),
+      // Teto de velocidade do caminhão (m/s). Onde o mapa da HERE não tem limite
+      // específico de caminhão ela usa o da via; sem isso o tempo estimado supõe
+      // que o caminhão anda a 110 (pergunta do Gilberto, 10/09). 90 km/h = 25 m/s.
+      'vehicle[speedCap]': kTruckSpeedCapMs.toString(),
       'departureTime': ?departureTime,
       if (waypoints.isNotEmpty)
         'via': waypoints.map((w) => '${w.latitude},${w.longitude}').toList(),
