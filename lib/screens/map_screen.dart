@@ -41,7 +41,7 @@ import '../widgets/map/police_sheets.dart';
 import '../widgets/map/restriction_detail_sheet.dart';
 import '../widgets/map/result_card.dart';
 import '../widgets/nav/nav_ui_defs.dart';
-import '../widgets/speed_plate.dart';
+import '../widgets/curation_sheet.dart';
 import 'truck_profile_screen.dart';
 import 'navigation_screen.dart';
 import '../models/police_alert.dart';
@@ -1077,42 +1077,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // some; existe → mantém; existe @ X → troca a velocidade. Override local-first +
   // Firestore. Editável passando de novo. Mesma folha da navegação.
   Future<void> _onRadarTap(RadarPoint r) async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (_) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            leading: const Icon(Icons.camera_alt),
-            title: Text(r.speedKmh > 0
-                ? 'Radar ${r.speedKmh} km/h'
-                : (r.type.isEmpty ? 'Radar' : r.type)),
-            subtitle: const Text('Existe aqui? Qual a velocidade real?'),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                for (final s in [60, 70, 80, 90])
-                  SpeedPlate(
-                      kmh: s, onTap: () => Navigator.pop(context, 'speed:$s')),
-              ],
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.check_circle, color: Colors.green),
-            title: const Text('Existe (manter velocidade)'),
-            onTap: () => Navigator.pop(context, 'confirm'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.cancel, color: Colors.red),
-            title: const Text('Não existe aqui'),
-            onTap: () => Navigator.pop(context, 'remove'),
-          ),
-        ]),
-      ),
-    );
+    final action = await showCurationSheet(context, r);
     if (action == null || !mounted) return;
     final uid = await AuthService.getUid();
     bool sameAs(RadarPoint x) => x.lat == r.lat && x.lng == r.lng && x.type == r.type;

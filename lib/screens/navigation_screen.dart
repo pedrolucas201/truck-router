@@ -49,6 +49,7 @@ import '../widgets/add_radar_sheet.dart';
 import '../widgets/crosshair.dart';
 import '../widgets/next_event_strip.dart';
 import '../widgets/speed_plate.dart';
+import '../widgets/curation_sheet.dart';
 import '../widgets/upcoming_dots.dart';
 import '../widgets/nav/bottom_bar.dart';
 import '../widgets/nav/instruction_bar.dart';
@@ -3031,6 +3032,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Chegou num radar sem verdicto → abre o card (uma vez por radar/sessão).
   void _maybePromptCuration(RadarPoint? radar, LatLng pos) {
     if (radar == null || _markingMode || _arrived || _curationPrompt != null) return;
+    // Pedágio não pede veredito sozinho: na praça o motorista está trocando de
+    // faixa e pagando, e o card de 6 s com chips de velocidade é onde nasce o
+    // toque errado (Jacareí, 13/07). Quem quiser marcar toca no ícone.
+    if (radar.type.toLowerCase().contains('pedagio')) return;
     final key = dismissalKey(radar.lat, radar.lng);
     if (_curatedKeys.contains(key) || _promptedKeys.contains(key)) return;
     if (RadarService.haversine(pos.latitude, pos.longitude, radar.lat, radar.lng) >
@@ -3124,44 +3129,10 @@ class _NavigationScreenState extends State<NavigationScreen>
     );
   }
 
-  // Folha de curadoria: 1 toque resolve. Chips 60/70/80/90 = velocidade real
-  // (confirma + troca). "Existe" mantém a atual. "Não existe" mata.
-  Future<String?> _showCurationSheet(RadarPoint r) => showModalBottomSheet<String>(
-        context: context,
-        builder: (_) => SafeArea(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: Text(r.speedKmh > 0
-                  ? 'Radar ${r.speedKmh} km/h'
-                  : (r.type.isEmpty ? 'Radar' : r.type)),
-              subtitle: const Text('Existe aqui? Qual a velocidade real?'),
-            ),
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  for (final s in [60, 70, 80, 90])
-                    SpeedPlate(
-                        kmh: s, onTap: () => Navigator.pop(context, 'speed:$s')),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.check_circle, color: Colors.green),
-              title: const Text('Existe (manter velocidade)'),
-              onTap: () => Navigator.pop(context, 'confirm'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.cancel, color: Colors.red),
-              title: const Text('Não existe aqui'),
-              onTap: () => Navigator.pop(context, 'remove'),
-            ),
-          ]),
-        ),
-      );
+  // Folha de curadoria (widgets/curation_sheet.dart, a mesma do mapa): chips
+  // 60/70/80/90 = velocidade real; "Existe" mantém; "Não existe" mata. Pedágio
+  // vem sem chips.
+  Future<String?> _showCurationSheet(RadarPoint r) => showCurationSheet(context, r);
 
   // ── Build ─────────────────────────────────────────────────────────────────────
 
