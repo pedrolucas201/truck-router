@@ -79,6 +79,10 @@ class TollPlaza {
   const TollPlaza(this.name, this.position, {this.priceBrl});
 }
 
+/// "R\$ 40,50" sem puxar o intl: vírgula decimal, sem separador de milhar
+/// (pedágio não passa de centenas).
+String brl(double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
+
 class RouteResult {
   final List<LatLng> polylinePoints;
   final int distanceMeters;
@@ -178,8 +182,25 @@ class RouteResult {
             speedKmh: 0,
             source: 'here',
             name: t.name,
+            priceBrl: t.priceBrl,
           ),
       ];
+
+  /// Soma das praças COM valor. Praça sem fare não entra (e `tollText` avisa
+  /// que o total é parcial) — melhor total menor e honesto que inventar.
+  double get tollTotalBrl =>
+      tolls.fold(0.0, (sum, t) => sum + (t.priceBrl ?? 0));
+
+  /// Linha do card: "4 pedágios · R\$ 107,70". Sem nenhum valor → só a
+  /// contagem; com valor faltando em alguma → "a partir de".
+  String get tollText {
+    final n = tolls.length;
+    final head = n == 1 ? '1 pedágio' : '$n pedágios';
+    final semValor = tolls.where((t) => t.priceBrl == null).length;
+    if (semValor == n) return head;
+    final total = brl(tollTotalBrl);
+    return semValor == 0 ? '$head · $total' : '$head · a partir de $total';
+  }
 
   /// Total de estrada de terra na rota, em metros. 0 = rota toda pavimentada
   /// (ou fonte sem o dado — ver `dirtSegments`).

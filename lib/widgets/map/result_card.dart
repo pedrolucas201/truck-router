@@ -65,6 +65,7 @@ class ResultCard extends StatelessWidget {
           ),
         if (weatherAlerts.isNotEmpty) WeatherBanner(alerts: weatherAlerts),
         if (result.dirtSegments.isNotEmpty) DirtRoadBanner(result: result),
+        if (result.tolls.isNotEmpty) TollBanner(result: result),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
           child: Row(
@@ -303,6 +304,44 @@ class DirtRoadBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 message,
+                style: TextStyle(
+                    fontSize: 12, color: color, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pedágios da rota, antes de sair: quantas praças e quanto vai custar pro
+/// caminhão do perfil (a HERE precifica pelos eixos que o app manda). Pedido
+/// do Pedro em 11/09, depois do relato do Gilberto em Jacareí. Informativo:
+/// não muda a rota.
+class TollBanner extends StatelessWidget {
+  final RouteResult result;
+  const TollBanner({super.key, required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Colors.blue.shade700;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.blue.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.toll, color: color, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${result.tollText} na rota',
                 style: TextStyle(
                     fontSize: 12, color: color, fontWeight: FontWeight.w500),
               ),

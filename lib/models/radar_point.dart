@@ -17,6 +17,9 @@ class RadarPoint {
   // Nome da praça quando o pedágio vem da rota da HERE (`return=tolls`). Null
   // no CSV e no crowd. Só entra na fala e no chip; nunca é chave nem gate.
   final String? name;
+  // Valor da praça (R$) pro perfil enviado à HERE (eixos incluídos). Só no
+  // pedágio vindo da rota; null = sem dado, o chip mostra só o nome.
+  final double? priceBrl;
 
   /// "Radar Movel" do MapaRadar = ponto onde a fiscalização costuma parar com
   /// radar portátil, não câmera fixa. Alerta igual (invariante), visual diferente:
@@ -39,6 +42,7 @@ class RadarPoint {
     this.status,
     this.truckLimitOff,
     this.name,
+    this.priceBrl,
   });
 
   RadarPoint copyWith({
@@ -62,5 +66,6 @@ class RadarPoint {
         status: status ?? this.status,
         truckLimitOff: truckLimitOff ?? this.truckLimitOff,
         name: name,
+        priceBrl: priceBrl,
       );
 }

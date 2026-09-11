@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../models/radar_point.dart';
+import '../../models/route_result.dart' show brl;
 import '../../services/radar_direction.dart';
 import 'nav_ui_defs.dart';
 
@@ -219,7 +220,9 @@ class _RadarChip extends StatelessWidget {
         ? 'desativado'
         : isOpposite
             ? 'sentido oposto'
-            : (isMovel ? 'móvel' : null);
+            : isPedagio
+                ? (radar.priceBrl == null ? null : brl(radar.priceBrl!))
+                : (isMovel ? 'móvel' : null);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

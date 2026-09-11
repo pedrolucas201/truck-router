@@ -92,5 +92,41 @@ void main() {
       expect(out.length, 1, reason: 'uma praça, não dois avisos');
       expect(out.first.name, 'Jacareí', reason: 'o da HERE é o que fica');
     });
+
+    test('preço acompanha o radar e some no total', () {
+      const r = RouteResult(
+        polylinePoints: [LatLng(0, 0)],
+        distanceMeters: 0,
+        durationSeconds: 0,
+        tolls: [
+          TollPlaza('Jacareí', LatLng(-23.29644, -46.00746), priceBrl: 40.5),
+          TollPlaza('Guararema', LatLng(-23.38405, -46.15395), priceBrl: 28.5),
+        ],
+      );
+      expect(r.tollRadares.first.priceBrl, 40.5);
+      expect(r.tollTotalBrl, 69.0);
+      expect(r.tollText, '2 pedágios · R\$ 69,00');
+      expect(brl(107.7), 'R\$ 107,70');
+    });
+
+    test('praça sem valor: total parcial e texto honesto', () {
+      const r = RouteResult(
+        polylinePoints: [LatLng(0, 0)],
+        distanceMeters: 0,
+        durationSeconds: 0,
+        tolls: [
+          TollPlaza('A', LatLng(0, 0), priceBrl: 10),
+          TollPlaza('B', LatLng(0, 0)),
+        ],
+      );
+      expect(r.tollText, '2 pedágios · a partir de R\$ 10,00');
+      const so = RouteResult(
+        polylinePoints: [LatLng(0, 0)],
+        distanceMeters: 0,
+        durationSeconds: 0,
+        tolls: [TollPlaza('B', LatLng(0, 0))],
+      );
+      expect(so.tollText, '1 pedágio');
+    });
   });
 }
