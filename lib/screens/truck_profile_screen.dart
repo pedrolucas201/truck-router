@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/meters.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/truck_profile.dart';
@@ -214,9 +215,9 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
     super.initState();
     final p = widget.existing;
     _nameCtrl   = TextEditingController(text: p?.name   ?? '');
-    _heightCtrl = TextEditingController(text: (p?.heightCm ?? 420).toString());
-    _widthCtrl  = TextEditingController(text: (p?.widthCm  ?? 260).toString());
-    _lengthCtrl = TextEditingController(text: (p?.lengthCm ?? 1400).toString());
+    _heightCtrl = TextEditingController(text: cmToMeters(p?.heightCm ?? 420));
+    _widthCtrl  = TextEditingController(text: cmToMeters(p?.widthCm  ?? 260));
+    _lengthCtrl = TextEditingController(text: cmToMeters(p?.lengthCm ?? 1400));
     _weightCtrl = TextEditingController(text: (p?.weightKg ?? 25000).toString());
     _axleCtrl   = TextEditingController(text: (p?.axleCount ?? 2).toString());
   }
@@ -238,9 +239,9 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
       id:        widget.existing?.id ??
                  DateTime.now().millisecondsSinceEpoch.toString(),
       name:      _nameCtrl.text.trim(),
-      heightCm:  int.parse(_heightCtrl.text),
-      widthCm:   int.parse(_widthCtrl.text),
-      lengthCm:  int.parse(_lengthCtrl.text),
+      heightCm:  metersToCm(_heightCtrl.text)!,
+      widthCm:   metersToCm(_widthCtrl.text)!,
+      lengthCm:  metersToCm(_lengthCtrl.text)!,
       weightKg:  int.parse(_weightCtrl.text),
       axleCount: int.parse(_axleCtrl.text),
     );
@@ -273,23 +274,26 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
               const SizedBox(height: 12),
               _field(
                 ctrl: _heightCtrl,
-                label: 'Altura (cm)',
-                hint: 'Ex: 420',
+                label: 'Altura (m)',
+                hint: 'Ex: 4,20',
                 max: 700,
+                meters: true,
               ),
               const SizedBox(height: 12),
               _field(
                 ctrl: _lengthCtrl,
-                label: 'Comprimento (cm)',
-                hint: 'Ex: 1400',
+                label: 'Comprimento (m)',
+                hint: 'Ex: 14,00',
                 max: 3000,
+                meters: true,
               ),
               const SizedBox(height: 12),
               _field(
                 ctrl: _widthCtrl,
-                label: 'Largura (cm)',
-                hint: 'Ex: 260',
+                label: 'Largura (m)',
+                hint: 'Ex: 2,60',
                 max: 400,
+                meters: true,
               ),
               const SizedBox(height: 12),
               _field(
@@ -327,6 +331,7 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
     required String label,
     required String hint,
     bool isText = false,
+    bool meters = false, // texto em metros, limites (min/max) em cm
     int min = 1,
     int max = 999999,
   }) {
@@ -337,17 +342,26 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
         hintText: hint,
         border: const OutlineInputBorder(),
       ),
-      keyboardType: isText ? TextInputType.text : TextInputType.number,
+      keyboardType: isText
+          ? TextInputType.text
+          : TextInputType.numberWithOptions(decimal: meters),
       textCapitalization:
           isText ? TextCapitalization.words : TextCapitalization.none,
-      inputFormatters:
-          isText ? [] : [FilteringTextInputFormatter.digitsOnly],
+      inputFormatters: isText
+          ? []
+          : meters
+              ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))]
+              : [FilteringTextInputFormatter.digitsOnly],
       validator: (v) {
         if (v == null || v.trim().isEmpty) return 'Campo obrigatório';
         if (isText) return null;
-        final n = int.tryParse(v);
-        if (n == null || n < min) return 'Valor mínimo: $min';
-        if (n > max) return 'Valor máximo: $max';
+        final n = meters ? metersToCm(v) : int.tryParse(v);
+        if (n == null || n < min) {
+          return meters ? 'Valor mínimo: ${cmToMeters(min)} m' : 'Valor mínimo: $min';
+        }
+        if (n > max) {
+          return meters ? 'Valor máximo: ${cmToMeters(max)} m' : 'Valor máximo: $max';
+        }
         return null;
       },
     );

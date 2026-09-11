@@ -27,19 +27,18 @@ class OnboardingScreen extends StatelessWidget {
           child: Column(
             children: [
               const Spacer(flex: 3),
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: scheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(24),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: Image.asset(
+                  'assets/brand/icone.png',
+                  width: 120,
+                  height: 120,
+                  fit: BoxFit.cover,
                 ),
-                child: Icon(Icons.local_shipping_rounded,
-                    size: 48, color: scheme.primary),
               ),
               const SizedBox(height: 24),
               Text(
-                'Rota Caminhão',
+                'No Trecho',
                 style: Theme.of(context)
                     .textTheme
                     .headlineMedium
@@ -47,7 +46,7 @@ class OnboardingScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                'Rotas seguras para caminhões pesados no Brasil — evitando pontes baixas, vias com restrição de peso e estradas de terra.',
+                'Rotas para caminhões pesados no Brasil, evitando vias com restrições diversas.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context)
                     .textTheme

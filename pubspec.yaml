@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   cupertino_icons: ^1.0.8
   google_maps_flutter: ^2.9.0
@@ -72,6 +74,8 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/brand/icone.png
+    - assets/brand/abertura.jpg
     - assets/maparadar.csv
     - assets/balancas.csv
     - assets/restricoes.csv

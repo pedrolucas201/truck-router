@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/meters.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/bridge_restriction.dart';
@@ -75,7 +76,7 @@ class ResultCard extends StatelessWidget {
                 builder: (context, p, child) => InfoItem(
                   icon: Icons.local_shipping,
                   label: 'Caminhão',
-                  value: '${p.profile.heightCm}cm · ${(p.profile.weightKg / 1000).toStringAsFixed(0)}t',
+                  value: '${cmToMeters(p.profile.heightCm)}m · ${(p.profile.weightKg / 1000).toStringAsFixed(0)}t',
                   color: primary,
                 ),
               ),

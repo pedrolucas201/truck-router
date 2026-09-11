@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import '../utils/meters.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -795,8 +796,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
     buf.writeln();
     buf.write(
-      'Caminhão: ${truck.heightCm}cm alt / ${truck.widthCm}cm larg / '
-      '${truck.lengthCm}cm comp / '
+      'Caminhão: ${cmToMeters(truck.heightCm)}m alt / ${cmToMeters(truck.widthCm)}m larg / '
+      '${cmToMeters(truck.lengthCm)}m comp / '
       '${(truck.weightKg / 1000).toStringAsFixed(0)}t bruto / '
       '${truck.axleCount} eixos',
     );
