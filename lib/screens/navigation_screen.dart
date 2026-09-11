@@ -29,6 +29,7 @@ import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
 import '../services/radar_direction.dart';
 import '../services/firestore_radar_service.dart';
+import '../services/highway_truck_cap.dart';
 import '../utils/radar_tts.dart';
 import '../utils/geo_angle.dart';
 import '../utils/geo_bounds.dart';
@@ -2143,7 +2144,8 @@ class _NavigationScreenState extends State<NavigationScreen>
           _destinationLabel = destOverride.label;
         }
         _result                  = newResult;
-        _radares                 = applyOverrides(csvNearby, localOverrides);
+        _radares                 = applyHighwayCaps(
+            applyOverrides(csvNearby, localOverrides), newResult);
         _closestPolylineIdx      = 0;
         _predIdx                 = 0; // rota nova começa na posição atual (índice 0)
         _anchorIdx               = 0;
@@ -2279,7 +2281,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         if (conflicts.isNotEmpty) {
           _result = _result.copyWith(restrictionsBlocked: conflicts);
         }
-        _radares = radares;
+        _radares = applyHighwayCaps(radares, route);
         // NÃO zera _radarIconsFuture: ele é indexado por _visibleRadares, que não
         // mudou aqui. O próximo _onPositionUpdate recalcula os visíveis a partir do
         // _radares novo e refaz os ícones via radarListChanged. Zerar só faria o

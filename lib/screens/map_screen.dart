@@ -28,6 +28,7 @@ import '../services/here_geocoding_service.dart';
 import '../services/field_log.dart';
 import '../services/radar_service.dart';
 import '../services/firestore_radar_service.dart';
+import '../services/highway_truck_cap.dart';
 import '../widgets/address_search_field.dart';
 import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
@@ -1140,7 +1141,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         ...RadarService.filterNearRoute(allRadares, result.polylinePoints),
       ]).where((r) => !(r.type.toLowerCase().contains('lombada') && r.speedKmh == 0)).toList();
       // Merge crowd: + radares adicionados, − os dispensados por voto.
-      final filtered = await FirestoreRadarService.mergeCrowd(csvFiltered, result.polylinePoints);
+      // Teto por rodovia por cima de tudo (CSV, crowd e verdicto do curador).
+      final filtered = applyHighwayCaps(
+          await FirestoreRadarService.mergeCrowd(csvFiltered, result.polylinePoints),
+          result);
       // Gera ícones só para os speeds que aparecem nesta rota
       for (final r in filtered) {
         final isLombada = r.type.toLowerCase().contains('lombada');

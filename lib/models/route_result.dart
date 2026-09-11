@@ -12,6 +12,15 @@ class SpeedLimitSpan {
   const SpeedLimitSpan(this.offset, this.kmh);
 }
 
+/// Números de rodovia ("SP-021", "BR-116") vigentes a partir de um offset da
+/// polyline (`spans=routeNumbers`). Vazio = trecho sem número (acesso, rua).
+/// Alimenta o teto de caminhão por rodovia (services/highway_truck_cap.dart).
+class RefSpan {
+  final int offset;
+  final List<String> refs;
+  const RefSpan(this.offset, this.refs);
+}
+
 /// Nível de trânsito de um trecho (trafficSpeed vs baseSpeed da HERE).
 enum TrafficLevel {
   free,
@@ -113,6 +122,8 @@ class RouteResult {
   // Praças de pedágio da rota HERE. Vazio na rota TomTom (fail-open: sem a
   // lista, o pedágio do CSV continua valendo como antes).
   final List<TollPlaza> tolls;
+  // Rodovia por trecho (offsets da polyline HERE; vazio na rota TomTom).
+  final List<RefSpan> routeRefs;
 
   const RouteResult({
     required this.polylinePoints,
@@ -131,6 +142,7 @@ class RouteResult {
     this.trafficSpans         = const [],
     this.dirtSegments         = const [],
     this.tolls                = const [],
+    this.routeRefs            = const [],
   });
 
   RouteResult copyWith({
@@ -150,6 +162,7 @@ class RouteResult {
     List<TrafficSpan>? trafficSpans,
     List<DirtRoadSegment>? dirtSegments,
     List<TollPlaza>? tolls,
+    List<RefSpan>? routeRefs,
   }) => RouteResult(
     polylinePoints:      polylinePoints      ?? this.polylinePoints,
     distanceMeters:      distanceMeters      ?? this.distanceMeters,
@@ -167,6 +180,7 @@ class RouteResult {
     trafficSpans:        trafficSpans        ?? this.trafficSpans,
     dirtSegments:        dirtSegments        ?? this.dirtSegments,
     tolls:               tolls               ?? this.tolls,
+    routeRefs:           routeRefs           ?? this.routeRefs,
   );
 
   /// Praças como pontos de radar tipo pedágio, pra entrar na MESMA lista que o
@@ -226,6 +240,16 @@ class RouteResult {
       kmh = s.kmh;
     }
     return kmh;
+  }
+
+  /// Números de rodovia vigentes em [polylineIdx] (mesmo esquema do limitAt).
+  List<String> refsAt(int polylineIdx) {
+    var refs = const <String>[];
+    for (final s in routeRefs) {
+      if (s.offset > polylineIdx) break;
+      refs = s.refs;
+    }
+    return refs;
   }
 
   /// Maior limite de caminhão da rota — usado no resumo/compartilhar.

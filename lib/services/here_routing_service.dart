@@ -92,7 +92,10 @@ class HereRoutingService {
       // pra confiar no avoid[features]=dirtRoad — sem alternativa a HERE devolve
       // a terra do mesmo jeito e NÃO emite notice (medido 06/08). O span é o
       // único sinal. `length` evita ter que medir a polyline pra dizer quantos m.
-      'spans':           'speedLimit,dynamicSpeedInfo,notices,streetAttributes,length',
+      // routeNumbers: "SP-021"/"BR-116" por trecho → teto de caminhão por
+      // rodovia (highway_truck_cap.dart). Rodoanel é 80 pra pesado e o
+      // MapaRadar cadastra 100 (áudio do Gilberto, 11/09).
+      'spans':           'speedLimit,dynamicSpeedInfo,notices,streetAttributes,length,routeNumbers',
       'lang':            'pt-BR',
       if (avoidDirtRoad) 'avoid[features]': 'dirtRoad',
       ...truck.toHereParams(),
@@ -164,6 +167,7 @@ class HereRoutingService {
     // destino precisa saber se o ÚLTIMO deles está restrito.
     final spanFlags = <SpanViolation>[];
     final tolls = <TollPlaza>[];
+    final routeRefs = <RefSpan>[];
 
     for (final s in sections) {
       final section      = s as Map<String, dynamic>;
@@ -208,6 +212,12 @@ class HereRoutingService {
       for (final sp in spans) {
         final span = sp as Map<String, dynamic>;
         final offset = sectionOffset + ((span['offset'] as num?)?.toInt() ?? 0);
+
+        routeRefs.add(RefSpan(offset, [
+          for (final rn in (span['routeNumbers'] as List?) ?? const [])
+            if ((rn as Map<String, dynamic>)['value'] is String)
+              rn['value'] as String,
+        ]));
 
         final speedMs = (span['speedLimit'] as num?)?.toDouble();
         if (speedMs != null && speedMs > 0) {
@@ -292,6 +302,7 @@ class HereRoutingService {
       trafficSpans:       trafficSpans,
       dirtSegments:       dirtSegments,
       tolls:              tolls,
+      routeRefs:          routeRefs,
     );
 
     // O rótulo EXPLICA o problema mas não muda a rota — sozinho, o motorista
