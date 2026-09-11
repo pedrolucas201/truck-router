@@ -15,6 +15,7 @@ import 'repositories/firestore_restriction_repository.dart';
 import 'repositories/api_restriction_repository.dart';
 import 'screens/map_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/splash_screen.dart';
 import 'providers/theme_controller.dart';
 import 'services/field_log.dart';
 import 'services/auth_service.dart';
@@ -125,7 +126,9 @@ class TruckRouterApp extends StatelessWidget {
         useMaterial3: true,
       ),
       themeMode: themeMode,
-      home: onboardingDone ? const MapScreen() : const OnboardingScreen(),
+      home: SplashScreen(
+        next: onboardingDone ? const MapScreen() : const OnboardingScreen(),
+      ),
     );
   }
 }

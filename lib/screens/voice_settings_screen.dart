@@ -98,7 +98,7 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen> {
                 ),
                 for (final (i, v) in _voices.indexed)
                   _voiceTile(
-                    label: 'Voz ${i + 1}',
+                    label: voiceLabel(v['name']!, v['locale']!, i),
                     selected: _selectedName == v['name'],
                     onTap: () => _choose(v['name']),
                   ),

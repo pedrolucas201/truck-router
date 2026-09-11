@@ -67,6 +67,15 @@ class VoiceSettings {
         byBase[base] = {'name': name, 'locale': locale};
       }
     }
+    // `pt-BR-language` / `pt-PT-language` são ALIASES da primeira voz `x-` do
+    // idioma (medido no Redmi do Pedro, 10/09: espectro idêntico, 1.000). Se o
+    // idioma tem voz `x-`, o alias é a "voz repetida" que o Gilberto vê.
+    final locaisComX = byBase.values
+        .where((v) => v['name']!.contains('-x-'))
+        .map((v) => v['locale']!.toLowerCase())
+        .toSet();
+    byBase.removeWhere((base, v) =>
+        base.endsWith('-language') && locaisComX.contains(v['locale']!.toLowerCase()));
     final out = byBase.values.toList();
     out.sort((a, b) {
       final aBr = a['locale']!.toLowerCase() == 'pt-br' ? 0 : 1;
@@ -76,3 +85,23 @@ class VoiceSettings {
     return out;
   }
 }
+
+/// Nome de gente pra cada voz do Google TTS, por id. Gênero MEDIDO no áudio
+/// (F0: afs 258 Hz, pte 253, ptd 140, jfb 216, sfs 211, jmn 132, pmj 129;
+/// `tools/voices_analyze.py`, 10/09/2026). Id desconhecido cai em "Voz N".
+const Map<String, String> kVoiceNames = {
+  'pt-br-x-afs': 'Cida',
+  'pt-br-x-pte': 'Rose',
+  'pt-br-x-ptd': 'Tião',
+  'pt-pt-x-jfb': 'Maria',
+  'pt-pt-x-sfs': 'Inês',
+  'pt-pt-x-jmn': 'Joaquim',
+  'pt-pt-x-pmj': 'Manuel',
+};
+
+String voiceLabel(String name, String locale, int index) {
+  final base = name.replaceFirst(RegExp(r'-(local|network)$'), '');
+  final n = kVoiceNames[base] ?? 'Voz ${index + 1}';
+  return locale.toLowerCase() == 'pt-pt' ? '$n (Portugal)' : n;
+}
+

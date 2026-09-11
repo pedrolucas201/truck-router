@@ -58,4 +58,28 @@ void main() {
           VoiceSettings.ptVoices(raw.reversed.toList()));
     });
   });
+
+  group('aliases e nomes (medidos no Redmi, 10/09)', () {
+    test('pt-BR-language some quando existe voz x- do mesmo idioma', () {
+      final raw = [
+        {'name': 'pt-BR-language', 'locale': 'pt-BR'},
+        {'name': 'pt-br-x-afs-local', 'locale': 'pt-BR'},
+        {'name': 'pt-br-x-afs-network', 'locale': 'pt-BR'},
+        {'name': 'pt-PT-language', 'locale': 'pt-PT'},
+        {'name': 'pt-pt-x-jfb-local', 'locale': 'pt-PT'},
+      ];
+      expect(VoiceSettings.ptVoices(raw).map((v) => v['name']),
+          ['pt-br-x-afs-local', 'pt-pt-x-jfb-local']);
+    });
+    test('alias fica quando é a única voz do idioma', () {
+      final raw = [{'name': 'pt-BR-language', 'locale': 'pt-BR'}];
+      expect(VoiceSettings.ptVoices(raw).map((v) => v['name']), ['pt-BR-language']);
+    });
+    test('rótulo por id, Portugal marcado, desconhecido vira Voz N', () {
+      expect(voiceLabel('pt-br-x-ptd-local', 'pt-BR', 0), 'Tião');
+      expect(voiceLabel('pt-br-x-afs-network', 'pt-BR', 0), 'Cida');
+      expect(voiceLabel('pt-pt-x-jmn-local', 'pt-PT', 3), 'Joaquim (Portugal)');
+      expect(voiceLabel('pt-br-x-zzz-local', 'pt-BR', 4), 'Voz 5');
+    });
+  });
 }
