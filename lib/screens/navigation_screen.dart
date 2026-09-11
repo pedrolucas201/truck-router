@@ -625,6 +625,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       // Rota que já NASCE com o fim proibido pra caminhão: sem isto o storm de
       // reroute perto do pino (Lorena, 19/08) é indistinguível de GPS ruim.
       'destBlocked': _result.destinationBlocked,
+      // Praças que a HERE devolveu: 0 = rota sem pedágio OU fonte sem o dado
+      // (TomTom). Fecha o ponto cego do "não avisou o pedágio" (Jacareí, 11/09).
+      'tolls': _result.tolls.length,
       // Precisão do destino (diag. "cheguei mas o app achava que faltava X"):
       // qual coord virou destino e se a polyline termina nela ou desviada.
       'destLat': _destination.latitude,
@@ -1928,7 +1931,9 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (isLombada) {
       _speak('Lombada à frente');
     } else if (isPedagio) {
-      _speak('Pedágio à frente');
+      _speak(radar.name == null
+          ? 'Pedágio à frente'
+          : 'Pedágio ${radar.name} à frente');
     } else {
       // Silencia o TTS quando dentro do limite DE CAMINHÃO (o mesmo da barra —
       // comparar com a placa de carro calava o radar a 95 sob placa de 110).
@@ -2124,7 +2129,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       // Pedro desviou 11 vezes num drive de 12min, ou seja, pagou o preço 11 vezes.
       // A rota nova é o que tira ele da cegueira; radar e restrição crowd são
       // enriquecimento e vão pra FASE 2, em background.
-      final csvNearby = await _csvRadaresNearRoute(newResult.polylinePoints);
+      final csvNearby = await _csvRadaresNearRoute(newResult);
       // Verdictos do curador deste device: cache em memória, sem rede. Sem eles um
       // radar NEGADO ressuscitaria na tela durante a janela do enrichment.
       final localOverrides = await FirestoreRadarService.loadLocalOverrides();
@@ -2234,9 +2239,14 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   /// Radares do CSV perto da rota. Tudo local: o `load()` é cache estático, o resto
   /// é CPU. Lombada sem velocidade é ruído da base — não vira alerta.
-  Future<List<RadarPoint>> _csvRadaresNearRoute(List<LatLng> pts) async {
+  Future<List<RadarPoint>> _csvRadaresNearRoute(RouteResult route) async {
     final all = await RadarService.load();
-    return RadarService.deduplicateNearby(RadarService.filterNearRoute(all, pts))
+    // Praças da HERE primeiro: vencem o ponto do MapaRadar no dedupe (mesmo
+    // esquema do map_screen no cálculo inicial).
+    return RadarService.deduplicateNearby([
+      ...route.tollRadares,
+      ...RadarService.filterNearRoute(all, route.polylinePoints),
+    ])
         .where((r) =>
             !(r.type.toLowerCase().contains('lombada') && r.speedKmh == 0))
         .toList();

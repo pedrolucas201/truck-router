@@ -1,5 +1,6 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'bridge_restriction.dart';
+import 'radar_point.dart';
 import 'route_maneuver.dart';
 
 /// Limite de velocidade de caminhão (km/h) a partir de um offset da polyline.
@@ -64,6 +65,20 @@ class DirtRoadSegment {
   const DirtRoadSegment(this.position, this.meters);
 }
 
+/// Praça de pedágio NA ROTA, da própria HERE (`return=tolls` →
+/// `tollCollectionLocations`). Existe porque o ponto do MapaRadar fica onde a
+/// praça é larga, fora do corredor de 22 m da linha (Jacareí, 11/09: 22,1 m,
+/// o Gilberto passou sem aviso). O ponto da HERE está sobre a linha por
+/// construção — não depende de corredor, dedupe nem override do asset.
+/// `priceBrl` é o valor da HERE pro veículo enviado; sem `vehicle[axleCount]`
+/// ela assume 2 eixos, então o valor NÃO vai pra tela até o perfil ter eixos.
+class TollPlaza {
+  final String name;
+  final LatLng position;
+  final double? priceBrl;
+  const TollPlaza(this.name, this.position, {this.priceBrl});
+}
+
 class RouteResult {
   final List<LatLng> polylinePoints;
   final int distanceMeters;
@@ -91,6 +106,9 @@ class RouteResult {
   // Trechos de terra na rota entregue. Vazio na rota TomTom: os offsets são da
   // polyline HERE (mesmo motivo de speedLimits/trafficSpans não serem herdados).
   final List<DirtRoadSegment> dirtSegments;
+  // Praças de pedágio da rota HERE. Vazio na rota TomTom (fail-open: sem a
+  // lista, o pedágio do CSV continua valendo como antes).
+  final List<TollPlaza> tolls;
 
   const RouteResult({
     required this.polylinePoints,
@@ -108,6 +126,7 @@ class RouteResult {
     this.speedLimits          = const [],
     this.trafficSpans         = const [],
     this.dirtSegments         = const [],
+    this.tolls                = const [],
   });
 
   RouteResult copyWith({
@@ -126,6 +145,7 @@ class RouteResult {
     List<SpeedLimitSpan>? speedLimits,
     List<TrafficSpan>? trafficSpans,
     List<DirtRoadSegment>? dirtSegments,
+    List<TollPlaza>? tolls,
   }) => RouteResult(
     polylinePoints:      polylinePoints      ?? this.polylinePoints,
     distanceMeters:      distanceMeters      ?? this.distanceMeters,
@@ -142,7 +162,24 @@ class RouteResult {
     speedLimits:         speedLimits         ?? this.speedLimits,
     trafficSpans:        trafficSpans        ?? this.trafficSpans,
     dirtSegments:        dirtSegments        ?? this.dirtSegments,
+    tolls:               tolls               ?? this.tolls,
   );
+
+  /// Praças como pontos de radar tipo pedágio, pra entrar na MESMA lista que o
+  /// CSV (alerta, ícone, chip, curadoria sem código novo). Vão ANTES do CSV no
+  /// `deduplicateNearby`: o primeiro vence, então o ponto da HERE (na linha)
+  /// substitui o do MapaRadar (22 m fora) em vez de dobrar o aviso.
+  List<RadarPoint> get tollRadares => [
+        for (final t in tolls)
+          RadarPoint(
+            lat: t.position.latitude,
+            lng: t.position.longitude,
+            type: 'Pedagio',
+            speedKmh: 0,
+            source: 'here',
+            name: t.name,
+          ),
+      ];
 
   /// Total de estrada de terra na rota, em metros. 0 = rota toda pavimentada
   /// (ou fonte sem o dado — ver `dirtSegments`).

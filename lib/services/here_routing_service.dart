@@ -80,7 +80,9 @@ class HereRoutingService {
           ? '${destination.latitude},${destination.longitude}'
           : '${destination.latitude},${destination.longitude}'
               ';radius=$destinationRadius',
-      'return':          'polyline,summary,actions',
+      // tolls: praças de pedágio com coordenada e nome, na mesma chamada
+      // (ver TollPlaza). Custo à parte na HERE ainda NÃO verificado (11/09).
+      'return':          'polyline,summary,actions,tolls',
       // spans é parâmetro PRÓPRIO — NÃO vai dentro de 'return' (isso dá E605001).
       // Com transportMode=truck a HERE já devolve o limite do CAMINHÃO por trecho.
       // dynamicSpeedInfo (sem departureTime) traz baseSpeed vs trafficSpeed = trânsito.
@@ -161,6 +163,7 @@ class HereRoutingService {
     // TODOS os spans em ordem (não só o 1º de cada notice): o invariante do
     // destino precisa saber se o ÚLTIMO deles está restrito.
     final spanFlags = <SpanViolation>[];
+    final tolls = <TollPlaza>[];
 
     for (final s in sections) {
       final section      = s as Map<String, dynamic>;
@@ -172,6 +175,7 @@ class HereRoutingService {
 
       final sectionPoints = FlexiblePolylineDecoder.decode(section['polyline'] as String);
       allPoints.addAll(sectionPoints);
+      tolls.addAll(parseTolls(section));
 
       final actions = section['actions'] as List<dynamic>? ?? [];
       for (final a in actions) {
@@ -287,6 +291,7 @@ class HereRoutingService {
       speedLimits:        speedLimits,
       trafficSpans:       trafficSpans,
       dirtSegments:       dirtSegments,
+      tolls:              tolls,
     );
 
     // O rótulo EXPLICA o problema mas não muda a rota — sozinho, o motorista
@@ -392,6 +397,33 @@ class HereRoutingService {
         destinationBlocked: true,
         restrictionPoints:  blocked.restrictionPoints,
       );
+
+  /// Praças de pedágio de uma section (`tolls[].tollCollectionLocations[]`).
+  /// Uma praça pode vir sem `fares`; o preço é do 1º fare (o de dinheiro vem
+  /// primeiro na prática). Sem nome → 'Pedágio'. Tolerante: campo faltando não
+  /// derruba a rota, só a praça.
+  @visibleForTesting
+  static List<TollPlaza> parseTolls(Map<String, dynamic> section) {
+    final out = <TollPlaza>[];
+    for (final t in (section['tolls'] as List?) ?? const []) {
+      final toll = t as Map<String, dynamic>;
+      final fares = (toll['fares'] as List?)?.cast<Map<String, dynamic>>();
+      final price = fares == null || fares.isEmpty
+          ? null
+          : ((fares.first['price'] as Map<String, dynamic>?)?['value'] as num?)
+              ?.toDouble();
+      for (final l in (toll['tollCollectionLocations'] as List?) ?? const []) {
+        final loc = (l as Map<String, dynamic>)['location'] as Map<String, dynamic>?;
+        final lat = (loc?['lat'] as num?)?.toDouble();
+        final lng = (loc?['lng'] as num?)?.toDouble();
+        if (lat == null || lng == null) continue;
+        final name = (l['name'] as String?)?.trim();
+        out.add(TollPlaza(name == null || name.isEmpty ? 'Pedágio' : name,
+            LatLng(lat, lng), priceBrl: price));
+      }
+    }
+    return out;
+  }
 
   /// Agrupa spans `dirtRoad` vizinhos num trecho só. Sem isto os 3,5 km de
   /// estrada do caso do Gilberto virariam "4 trechos de terra" — a HERE quebra

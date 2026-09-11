@@ -14,6 +14,9 @@ class RadarPoint {
   final String? dirSrc;      // 'dnit' | 'antt' | 'pass'
   final String? status;      // 'active' | 'inactive' (só de fonte oficial)
   final int? truckLimitOff;  // limite de caminhão oficial (só ABAIXA truckRadarLimit)
+  // Nome da praça quando o pedágio vem da rota da HERE (`return=tolls`). Null
+  // no CSV e no crowd. Só entra na fala e no chip; nunca é chave nem gate.
+  final String? name;
 
   /// "Radar Movel" do MapaRadar = ponto onde a fiscalização costuma parar com
   /// radar portátil, não câmera fixa. Alerta igual (invariante), visual diferente:
@@ -35,6 +38,7 @@ class RadarPoint {
     this.dirSrc,
     this.status,
     this.truckLimitOff,
+    this.name,
   });
 
   RadarPoint copyWith({
@@ -57,5 +61,6 @@ class RadarPoint {
         dirSrc: dirSrc ?? this.dirSrc,
         status: status ?? this.status,
         truckLimitOff: truckLimitOff ?? this.truckLimitOff,
+        name: name,
       );
 }

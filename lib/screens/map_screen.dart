@@ -1168,9 +1168,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     if (result != null) _routeCalculatedAt = DateTime.now();
     if (result != null) {
       final allRadares = await RadarService.load();
-      final csvFiltered = RadarService.deduplicateNearby(
-        RadarService.filterNearRoute(allRadares, result.polylinePoints),
-      ).where((r) => !(r.type.toLowerCase().contains('lombada') && r.speedKmh == 0)).toList();
+      // Praças da HERE primeiro: vencem o ponto do MapaRadar no dedupe.
+      final csvFiltered = RadarService.deduplicateNearby([
+        ...result.tollRadares,
+        ...RadarService.filterNearRoute(allRadares, result.polylinePoints),
+      ]).where((r) => !(r.type.toLowerCase().contains('lombada') && r.speedKmh == 0)).toList();
       // Merge crowd: + radares adicionados, − os dispensados por voto.
       final filtered = await FirestoreRadarService.mergeCrowd(csvFiltered, result.polylinePoints);
       // Gera ícones só para os speeds que aparecem nesta rota
