@@ -55,6 +55,7 @@ import '../data/map_styles.dart';
 import '../providers/theme_controller.dart';
 import '../utils/truck_glyph.dart';
 import '../widgets/route_loading_indicator.dart';
+import 'driver_profile_screen.dart';
 import 'voice_settings_screen.dart';
 
 /// Idade máxima do fix de GPS que ainda vale como origem de rota nova.
@@ -1653,6 +1654,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     builder: (_) => const VoiceSettingsScreen(),
                                   ));
                                 }
+                                if (value == 'driver') {
+                                  Navigator.push(context, MaterialPageRoute(
+                                    builder: (_) => const DriverProfileScreen(),
+                                  ));
+                                }
                                 if (value == 'truck') {
                                   final truckProv = context.read<TruckProfileProvider>();
                                   final routeProv = context.read<RouteProvider>();
@@ -1672,6 +1678,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     Icon(Icons.history, color: Colors.teal.shade700, size: 20),
                                     const SizedBox(width: 12),
                                     const Text('Histórico'),
+                                  ]),
+                                ),
+                                PopupMenuItem(
+                                  value: 'driver',
+                                  child: Row(children: [
+                                    Icon(Icons.person_outline, color: Colors.teal.shade700, size: 20),
+                                    const SizedBox(width: 12),
+                                    const Text('Meu perfil'),
                                   ]),
                                 ),
                                 PopupMenuItem(
