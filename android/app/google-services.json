@@ -12,7 +12,28 @@
           "package_name": "com.truckrouter.truck_router"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "730093721780-e0320l9k171ulk72trkec54bu1rgsmq3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.truckrouter.truck_router",
+            "certificate_hash": "14e1e4af20d6d371cb2863fb28af201c1a7ba145"
+          }
+        },
+        {
+          "client_id": "730093721780-qscnqc5epv5s4fskpj2ks7aqqpo42c2v.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.truckrouter.truck_router",
+            "certificate_hash": "0b5b3d159c52a2f12cafbd419d4ce89abf50beeb"
+          }
+        },
+        {
+          "client_id": "730093721780-dghh3g2uthgj33b1b36961fa76oacbal.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDpIHXipKEPIF7Gdl08HWReF8tIJ7LXHYY"
@@ -20,7 +41,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "730093721780-dghh3g2uthgj33b1b36961fa76oacbal.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
