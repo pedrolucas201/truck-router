@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:truck_router/models/driver_profile.dart';
+import 'package:truck_router/utils/phone_mask.dart';
 
 void main() {
   test('placa: normaliza e valida Mercosul e antiga', () {
@@ -27,5 +28,17 @@ void main() {
     expect(back.plate, 'ABC1D23');
     expect(back.phone, '');
     expect(DriverProfile.fromJson({'name': 'x'}).color, '');
+  });
+
+  test('máscara do telefone: celular, fixo, parcial, vazio, teto de 11', () {
+    expect(PhoneMaskFormatter.mask('12999998888'), '(12) 99999-8888');
+    expect(PhoneMaskFormatter.mask('1133334444'), '(11) 3333-4444');
+    expect(PhoneMaskFormatter.mask('129'), '(12) 9');
+    expect(PhoneMaskFormatter.mask('12'), '(12'); // fecha só com o 3º dígito, senão o backspace trava
+    expect(PhoneMaskFormatter.mask(''), '');
+    expect(PhoneMaskFormatter.mask('129999988889999'), '(12) 99999-8888');
+    // ida e volta com a normalização do modelo
+    expect(DriverProfile.normalizePhone(PhoneMaskFormatter.mask('12999998888')),
+        '12999998888');
   });
 }

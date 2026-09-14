@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/driver_profile.dart';
 import '../services/auth_service.dart';
 import '../services/driver_profile_service.dart';
+import '../utils/phone_mask.dart';
 
 /// "Meu perfil": quem é o motorista (Fase 0 do S.O.S.). Conta Google em cima
 /// porque é ela que segura o perfil numa reinstalação; os campos abaixo.
@@ -48,7 +49,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     _truck.text = p.truck;
     _color.text = p.color;
     _plate.text = p.plate;
-    _phone.text = p.phone;
+    _phone.text = PhoneMaskFormatter.mask(p.phone);
   }
 
   @override
@@ -142,11 +143,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     const SizedBox(height: 12),
                     _field(_phone, 'Telefone (WhatsApp)', 'Ex: 11 99999-8888',
                         keyboard: TextInputType.phone,
-                        formatters: [
-                          FilteringTextInputFormatter.allow(
-                              RegExp(r'[0-9 ()-]')),
-                          LengthLimitingTextInputFormatter(16),
-                        ],
+                        formatters: [PhoneMaskFormatter()],
                         validator: (v) => DriverProfile.isValidPhone(
                                 DriverProfile.normalizePhone(v ?? ''))
                             ? null
