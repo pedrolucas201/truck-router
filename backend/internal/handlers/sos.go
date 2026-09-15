@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"cloud.google.com/go/firestore"
+	"firebase.google.com/go/v4/messaging"
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -37,10 +38,11 @@ var sosTipos = map[string]bool{
 }
 
 type Sos struct {
-	fs *firestore.Client
+	fs  *firestore.Client
+	msg *messaging.Client // nil = sem push (teste local)
 }
 
-func NewSos(c *firestore.Client) *Sos { return &Sos{fs: c} }
+func NewSos(c *firestore.Client, m *messaging.Client) *Sos { return &Sos{fs: c, msg: m} }
 
 type sosCreateIn struct {
 	Lat   float64 `json:"lat"`
@@ -164,6 +166,9 @@ func (h *Sos) Create(w http.ResponseWriter, r *http.Request) {
 		sosErr(w, http.StatusInternalServerError, "interno", nil)
 		return
 	}
+	// Síncrono de propósito: goroutine solta depois da resposta pode ser
+	// congelada pelo Cloud Run (CPU só durante a request). Teto de 8 s.
+	h.notificarAbertura(r.Context(), ref.ID, uid, in, p)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]any{"id": ref.ID})
@@ -247,6 +252,7 @@ func (h *Sos) Aceitar(w http.ResponseWriter, r *http.Request) {
 		sosErr(w, http.StatusInternalServerError, "interno", nil)
 		return
 	}
+	h.notificarAceite(r.Context(), id, pedinteUID, ajudante.Nome)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"nome": pedinte.Nome, "telefone": pedinte.Telefone})
 }

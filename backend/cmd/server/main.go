@@ -49,7 +49,7 @@ func main() {
 		// (perfil com telefone, conta Google, conta com 24 h, um aberto por
 		// uid) só são confiáveis no servidor. Leitura é stream direto no
 		// Firestore. Ver docs/sos-rede-motoristas.md.
-		sos := handlers.NewSos(fsClient)
+		sos := handlers.NewSos(fsClient, apimw.MessagingClient())
 		r.Post("/sos", sos.Create)
 		r.Post("/sos/{id}/aceitar", sos.Aceitar)
 

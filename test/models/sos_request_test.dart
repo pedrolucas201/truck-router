@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:truck_router/models/sos_request.dart';
 
 void main() {
@@ -34,5 +35,30 @@ void main() {
       criadoEm: DateTime(2020), expireAt: DateTime(2020, 1, 1, 2),
     );
     expect(velho.ativo, isFalse);
+  });
+
+  test('parada do S.O.S. só vale atendendo por mim e viva', () {
+    SosRequest mk({String status = 'atendendo', String? ajudante = 'eu', int minutos = 60}) =>
+        SosRequest(
+          id: 'x', uid: 'u', nome: 'Beto', caminhao: '', cor: '', tipo: SosTipo.pneu, texto: '',
+          lat: -23.2, lng: -45.8, status: status, ajudanteUid: ajudante,
+          criadoEm: DateTime.now(), expireAt: DateTime.now().add(Duration(minutes: minutos)),
+        );
+    expect(sosParadaValida(mk(), 'eu'), isTrue);
+    expect(sosParadaValida(mk(), 'outro'), isFalse, reason: 'outro ajudante');
+    expect(sosParadaValida(null, 'eu'), isFalse, reason: 'sumiu do snapshot');
+    expect(sosParadaValida(mk(status: 'aberto', ajudante: null), 'eu'), isFalse,
+        reason: 'desisti: voltou a aberto');
+    expect(sosParadaValida(mk(minutos: -1), 'eu'), isFalse, reason: 'expirou');
+  });
+
+  test('vértice mais perto da parada na polyline', () {
+    final pts = [
+      const LatLng(-23.20, -45.90), const LatLng(-23.20, -45.85),
+      const LatLng(-23.20, -45.80), const LatLng(-23.20, -45.75),
+    ];
+    expect(nearestVertexIdx(pts, const LatLng(-23.201, -45.81)), 2);
+    expect(nearestVertexIdx(pts, const LatLng(-23.20, -45.90)), 0);
+    expect(nearestVertexIdx(const [], const LatLng(0, 0)), 0);
   });
 }

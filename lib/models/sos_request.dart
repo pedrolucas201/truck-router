@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -89,6 +91,29 @@ class SosRequest {
 String sosSpeech(SosRequest s, double distKm) {
   final km = distKm < 1 ? 'menos de 1 quilômetro' : '${distKm.round()} quilômetros';
   return 'Motorista pedindo ajuda a $km. ${s.tipo.fala}.';
+}
+
+/// Parada do S.O.S. na navegação só vale enquanto EU estou ajudando e o pedido
+/// vive. Fora disso (resolvido, expirado, desisti) a parada some — senão o
+/// refresh periódico da rota voltaria pro ponto do pedido a viagem inteira.
+bool sosParadaValida(SosRequest? s, String? me) =>
+    s != null && s.ativo && s.atendendo && s.ajudanteUid == me;
+
+/// Vértice da polyline mais perto de [p]. A parada é "cumprida" quando o índice
+/// do caminhão passa deste: invariante de geometria, não raio calibrado.
+/// Equirretangular basta: só compara vizinhos numa rota.
+int nearestVertexIdx(List<LatLng> pts, LatLng p) {
+  if (pts.isEmpty) return 0;
+  final k = math.cos(p.latitude * math.pi / 180);
+  var best = 0;
+  var bestD = double.infinity;
+  for (var i = 0; i < pts.length; i++) {
+    final dy = pts[i].latitude - p.latitude;
+    final dx = (pts[i].longitude - p.longitude) * k;
+    final d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
 }
 
 /// "8 km" / "800 m".

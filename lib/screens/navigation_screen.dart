@@ -18,6 +18,8 @@ import '../models/bridge_restriction.dart';
 import '../models/police_alert.dart';
 import '../models/sos_request.dart';
 import '../services/sos_service.dart';
+import '../services/sos_push.dart';
+import '../utils/voice_queue.dart';
 import '../widgets/sos/sos_sheets.dart';
 import '../models/radar_point.dart';
 import '../models/route_maneuver.dart';
@@ -302,6 +304,12 @@ class _NavigationScreenState extends State<NavigationScreen>
   // entrega no meio da nav (a troca só é gravada DEPOIS do recálculo dar certo,
   // então destino e rota nunca ficam dessincronizados).
   late LatLng _destination;
+  // "Ir até lá" do S.O.S.: o pedido vira parada ANTES do destino. Uma só; some
+  // quando o vértice dela fica pra trás (_paradaSosIdx) ou quando o pedido deixa
+  // de ser meu (sosParadaValida). Sem isso o refresh de 10 min voltaria pra lá.
+  SosRequest? _paradaSos;
+  int? _paradaSosIdx;
+  void Function(SosRequest)? _irAteLaAnterior;
   late String _destinationLabel;
   // Popup do link já na tela? Segura re-entrância (dois toques no mesmo link).
   bool _swapOfferOpen = false;
@@ -341,6 +349,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   int _rerouteSeq = 0;
   Timer? _refreshTimer;
   Timer? _heartbeatTimer;
+  int _heartbeatN = 0;
   DateTime? _lastRerouteAt;
   LatLng? _lastRefreshPos; // onde estava no último refresh periódico (ver _periodicRefresh)
   int _offRouteCount = 0;
@@ -436,6 +445,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Falas descartadas por colisão (outra já tocando). Sai no nav_end: hoje esse
   // descarte é invisível em campo, então "a voz sumiu" nunca vira causa raiz.
   int _ttsDropped = 0;
+  final _fila = VoiceQueue(); // falas raras que não podem sumir (S.O.S., parada)
   bool _speedAlertActive = false;
   DateTime? _lastSpeedAlertAt;
   final Set<String> _actionedRestrictions = {};
@@ -445,6 +455,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   // S.O.S. entre motoristas: ativos dentro de kSosRaioM da posição atual,
   // mais perto primeiro. Voz UMA vez por id (regra da tela limpa).
   StreamSubscription<List<SosRequest>>? _sosSub;
+  // Último snapshot: a lista "perto" depende da POSIÇÃO também, e o stream só
+  // acorda por mudança no Firestore. Sem isto, snapshot antes do 1º fix (dist =
+  // infinito) deixava o S.O.S. sem marcador/voz a viagem inteira (device 15/09).
+  List<SosRequest> _sosTodos = const [];
   List<SosRequest> _sosNearby = const [];
   final Set<String> _sosAnnounced = {};
   bool _hasFirstFix = false;
@@ -626,6 +640,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     _result  = widget.result;
     _destination      = widget.destination;
     _destinationLabel = widget.destinationLabel;
+    _irAteLaAnterior  = SosPush.irAteLa;
+    SosPush.irAteLa   = _irAteSos;
     widget.incomingLocation?.addListener(_onIncomingLocation);
     _sosSub = SosService.streamAtivos().listen(_onSosAtivos);
     // Telemetria: marca o início do drive — garante rastro mesmo num trajeto
@@ -693,6 +709,11 @@ class _NavigationScreenState extends State<NavigationScreen>
     // NOTA: em produção com muitos usuários, gatear/aumentar o intervalo.
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (_paused || _arrived || _currentPos == null) return;
+      // Presença pro push do S.O.S.: 1º heartbeat e a cada 5 min (10 × 30 s).
+      // ponytail: carona no heartbeat em vez de outro timer.
+      if (_heartbeatN++ % 10 == 0) SosPush.gravarPresenca(pos: _currentPos);
+      _checarParadaSos();
+      if (_sosTodos.isNotEmpty) _onSosAtivos(_sosTodos);
       FieldLog.event('heartbeat', {
         'idx':  _closestPolylineIdx,
         'kmh':  _speedKmh.round(),        // o que o MOTORISTA vê no velocímetro
@@ -713,6 +734,7 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   @override
   void dispose() {
+    SosPush.irAteLa = _irAteLaAnterior;
     _sosSub?.cancel();
     // No fecho (chegada OU X manual): onde o caminhão estava, a quantos metros
     // EM LINHA RETA do destino, e quanto o app achava que faltava PELA ROTA.
@@ -744,6 +766,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _ttsWatchdog?.cancel();
     _tts.stop();
     _ttsActive = false;
+    _fila.limpar(); // stop = descarta o que estava esperando
     _themeController.removeListener(_onThemeChanged);
     FlutterForegroundTask.stopService();
     WakelockPlus.disable();
@@ -840,17 +863,17 @@ class _NavigationScreenState extends State<NavigationScreen>
     // abra a janela para um novo _speak interromper a utterance em andamento.
     _tts.setCompletionHandler(() =>
         Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) _ttsActive = false;
+          if (mounted) _ttsLiberou();
         }));
-    _tts.setCancelHandler(() => _ttsActive = false);
+    _tts.setCancelHandler(_ttsLiberou);
     // speak.onError NÃO chama completion nem cancel (tabela de dispatch do
     // flutter_tts 4.2.0). Sem este handler o _ttsActive fica preso em true e o
     // gate do _speak cala a navegação inteira — manobra, radar, restrição,
     // chegada — pelo resto da viagem, sem deixar rastro.
     _tts.setErrorHandler((msg) {
-      _ttsActive = false;
       _ttsWatchdog?.cancel();
       FieldLog.event('tts_error', {'msg': msg.toString()});
+      _ttsLiberou();
     });
   }
 
@@ -994,18 +1017,33 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (_paused) {
       _tts.stop();
       _ttsActive = false;
+      _fila.limpar(); // pausou = o que esperava não vale mais
     } else {
       _resumedAt = DateTime.now();
       _recenter();
     }
   }
 
-  void _speak(String text) {
+  /// TTS livre: solta o gate e fala a próxima da fila, se houver. É a ÚNICA
+  /// porta de saída do _ttsActive (completion, cancel, error, watchdog,
+  /// catchError) — uma porta esquecida deixava a fila presa junto com a flag.
+  void _ttsLiberou() {
+    _ttsActive = false;
+    final proxima = _fila.proxima();
+    if (proxima != null) _speak(proxima, espera: true);
+  }
+
+  /// [espera] = fala rara que não volta (S.O.S., parada): com o TTS ocupado ela
+  /// entra na fila em vez de sumir. Manobra/radar NÃO esperam: envelhecem em
+  /// segundos e se repetem no próximo degrau. Medido em campo: 12 de 32 viagens
+  /// com `ttsDropped` > 0 (até 8 falas comidas numa viagem do Beto, 03/09).
+  void _speak(String text, {bool espera = false}) {
     if (_paused) return;
     if (_audioLevel == AudioLevel.silencioso) return;
     if (_resumedAt != null &&
         DateTime.now().difference(_resumedAt!).inMilliseconds < 4000) { return; }
     if (_ttsActive) {
+      if (espera) { _fila.enfileirar(text); return; }
       _ttsDropped++; // descarte silencioso: só medimos, comportamento intacto
       return;
     }
@@ -1016,16 +1054,16 @@ class _NavigationScreenState extends State<NavigationScreen>
     _ttsWatchdog?.cancel();
     _ttsWatchdog = Timer(const Duration(seconds: 15), () {
       if (!_ttsActive) return;
-      _ttsActive = false;
       FieldLog.event('tts_watchdog', {'chars': text.length});
+      _ttsLiberou();
     });
     // O Future do speak() era descartado: uma PlatformException (engine ausente,
     // pt-BR indisponível, foco de áudio negado) virava erro async não tratado e
     // deixava o _ttsActive preso em true.
     _tts.speak(text).catchError((Object e, StackTrace st) {
-      _ttsActive = false;
       _ttsWatchdog?.cancel();
       FieldLog.error('tts_speak', e, st);
+      _ttsLiberou();
       return null;
     });
   }
@@ -1070,6 +1108,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _arrivalProgress = 0.0;
     _tts.stop();
     _ttsActive = false;
+    _fila.limpar(); // stop = descarta o que estava esperando
     _lastRerouteAt = null; // fura o throttle: precisa reorientar já
     if (mounted) setState(() {});
     if (_currentPos != null) _reroute(fromPos: _currentPos, urgent: true);
@@ -1105,6 +1144,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     FlutterForegroundTask.stopService();
     _tts.stop();
     _ttsActive = false;
+    _fila.limpar(); // stop = descarta o que estava esperando
     // Sem speak aqui: "Você chegou ao destino" já foi dito em _beginArrival.
     if (mounted) setState(() {});
     Future.delayed(const Duration(seconds: 1), () {
@@ -2064,6 +2104,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     LatLng? fromPos,
     bool urgent = false,
     ({LatLng pos, String label})? destOverride,
+    bool explicito = false, // parada nova (S.O.S.): ação do motorista, sem throttle
   }) async {
     final origin = fromPos ?? _currentPos;
     if (_isRerouting || origin == null) return false;
@@ -2072,7 +2113,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     // Troca de destino (destOverride) NUNCA é barrada: é ação explícita do
     // motorista, e um "ok" no popup engolido pelo throttle seria mentira.
     final floorSec = urgent ? _rerouteUrgentFloorSec : _rerouteThrottleSec;
-    if (destOverride == null &&
+    if (destOverride == null && !explicito &&
         _lastRerouteAt != null && now.difference(_lastRerouteAt!).inSeconds < floorSec) {
       // Throttle barrou: se isto aparecer em rajada nos breadcrumbs, é storm.
       FieldLog.event('reroute_skip', {'urgent': urgent, 'floorSec': floorSec});
@@ -2128,7 +2169,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         destination: destOverride?.pos ?? _destination,
         truck:       widget.truck,
         course:      course,
-        waypoints:   widget.waypoints,
+        waypoints:   [if (_paradaSos != null) _paradaSos!.position, ...widget.waypoints],
         avoidAreas:  manualAvoidAreas,
       );
       final hereMs = recalcSw.elapsedMilliseconds;
@@ -2155,6 +2196,8 @@ class _NavigationScreenState extends State<NavigationScreen>
           _destinationLabel = destOverride.label;
         }
         _result                  = newResult;
+        _paradaSosIdx            = _paradaSos == null
+            ? null : nearestVertexIdx(newResult.polylinePoints, _paradaSos!.position);
         _radares                 = applyHighwayCaps(
             applyOverrides(csvNearby, localOverrides), newResult);
         _closestPolylineIdx      = 0;
@@ -2717,7 +2760,19 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   void _onSosAtivos(List<SosRequest> todos) {
     if (!mounted) return;
+    _sosTodos = todos;
     final me = AuthService.currentUid;
+    // Parada viva? Snapshot é a fonte: resolvido/desisti/expirado some da lista.
+    final parada = _paradaSos;
+    if (parada != null) {
+      final atual = todos.where((s) => s.id == parada.id).firstOrNull;
+      if (sosParadaValida(atual, me)) {
+        _paradaSos = atual; // expireAt renovado pelo dono, por exemplo
+      } else {
+        _encerrarParadaSos('closed', fala: 'Pedido de ajuda encerrado. Seguindo pro destino.',
+            recalcular: true);
+      }
+    }
     final perto = todos
         .where((s) => s.uid != me && _sosDist(s) <= kSosRaioM)
         .toList()
@@ -2726,11 +2781,65 @@ class _NavigationScreenState extends State<NavigationScreen>
       // Só anuncia pedido ainda sem ajudante; e nunca repete o mesmo id.
       if (s.aberto && _sosAnnounced.add(s.id)) {
         final km = _sosDist(s) / 1000;
-        _speak(sosSpeech(s, km));
+        _speak(sosSpeech(s, km), espera: true);
         FieldLog.event('sos_seen', {'id': s.id, 'distKm': km.round()});
       }
     }
     setState(() => _sosNearby = perto);
+  }
+
+  /// "Ir até lá" na ficha, navegando: o pedido vira parada ANTES do destino e
+  /// a rota é recalculada agora (sem throttle: é toque do motorista).
+  Future<void> _irAteSos(SosRequest s) async {
+    if (!mounted) return;
+    _paradaSos = s;
+    FieldLog.event('sos_stop_set', {'id': s.id});
+    _speak('Rota passa pelo motorista que pediu ajuda.', espera: true);
+    await _rerouteExplicito();
+  }
+
+  /// Recálculo por ação do motorista: espera um em voo (teto 15 s) em vez de
+  /// perder o toque. Se ainda assim não der, a parada fica: o próximo refresh
+  /// (≤ 10 min) já a inclui.
+  Future<void> _rerouteExplicito() async {
+    for (var i = 0; i < 50 && _isRerouting && mounted; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+    if (!mounted) return;
+    // urgent=false de propósito: "Rota recalculada" é só pra desvio real (P0 nº 7).
+    // Aqui a fala é a da parada/encerramento; explicito já pula o throttle.
+    final ok = await _reroute(fromPos: _currentPos, explicito: true);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Sem rota nova agora. A próxima atualização inclui a parada.')));
+    }
+  }
+
+  void _encerrarParadaSos(String motivo, {String? fala, bool recalcular = false}) {
+    final s = _paradaSos;
+    if (s == null) return;
+    _paradaSos = null;
+    _paradaSosIdx = null;
+    FieldLog.event('sos_stop_done', {'id': s.id, 'why': motivo});
+    if (fala != null) _speak(fala, espera: true);
+    if (recalcular) _rerouteExplicito();
+  }
+
+  /// No heartbeat (30 s, fora do hot path): parada cumprida quando o índice do
+  /// caminhão passou do vértice dela; expirada sem snapshot (o stream não
+  /// acorda por tempo) também encerra.
+  void _checarParadaSos() {
+    final s = _paradaSos;
+    if (s == null) return;
+    if (!s.ativo) {
+      _encerrarParadaSos('expired', fala: 'Pedido de ajuda expirou. Seguindo pro destino.',
+          recalcular: true);
+      return;
+    }
+    final idx = _paradaSosIdx;
+    if (idx != null && _closestPolylineIdx >= idx) {
+      _encerrarParadaSos('reached', fala: 'Você chegou no motorista que pediu ajuda.');
+    }
   }
 
   void _mostrarSosFicha(String id, double? distM) {
@@ -2768,7 +2877,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     try {
       final id = await SosService.abrir(
           lat: pos.latitude, lng: pos.longitude, tipo: r.$1, texto: r.$2);
-      _speak('S.O.S. aberto. Motoristas próximos vão ser avisados.');
+      _speak('S.O.S. aberto. Motoristas próximos vão ser avisados.', espera: true);
       if (mounted) _mostrarSosFicha(id, null);
     } on SosException catch (e) {
       if (!mounted) return;
@@ -3128,12 +3237,24 @@ class _NavigationScreenState extends State<NavigationScreen>
     // toque errado (Jacareí, 13/07). Quem quiser marcar toca no ícone.
     if (radar.type.toLowerCase().contains('pedagio')) return;
     final key = dismissalKey(radar.lat, radar.lng);
-    if (_curatedKeys.contains(key) || _promptedKeys.contains(key)) return;
     if (RadarService.haversine(pos.latitude, pos.longitude, radar.lat, radar.lng) >
         _radarReachedM) {
       return;
     }
+    // Relato do Beto (04/09): "o card só abre no zoom mais próximo". O código
+    // não olha zoom; sem telemetria não dá pra separar bug de percepção. Loga
+    // abrir e pular (dentro dos 60 m, raro) com o zoom da hora.
+    if (_curatedKeys.contains(key) || _promptedKeys.contains(key)) {
+      FieldLog.event('radar_prompt_skip', {
+        'zoom': _zoomLevel.name,
+        'why': _curatedKeys.contains(key) ? 'curated' : 'prompted',
+      });
+      return;
+    }
     _promptedKeys.add(key);
+    FieldLog.event('radar_prompt', {
+      'zoom': _zoomLevel.name, 'kmh': _speedKmh.round(), 'free': _freeLook,
+    });
     setState(() { _curationPrompt = radar; _curationSpeedStep = false; });
     _restartCurationTimer();
   }
@@ -3298,7 +3419,19 @@ class _NavigationScreenState extends State<NavigationScreen>
       ));
     }
 
+    final parada = _paradaSos;
+    if (parada != null) {
+      // Parada do S.O.S.: pino próprio, como o destino, independente do raio.
+      markers.add(Marker(
+        markerId: const MarkerId('sos_parada'),
+        position: parada.position,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+        infoWindow: InfoWindow(title: 'Parada', snippet: 'S.O.S. de ${parada.nome}'),
+        onTap: () => _mostrarSosFicha(parada.id, _sosDist(parada)),
+      ));
+    }
     for (final s in _sosNearby) {
+      if (s.id == parada?.id) continue;
       markers.add(Marker(
         markerId: MarkerId('sos_${s.id}'),
         position: s.position,

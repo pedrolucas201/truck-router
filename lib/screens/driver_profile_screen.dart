@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/driver_profile.dart';
 import '../services/auth_service.dart';
+import '../services/sos_push.dart';
 import '../services/driver_profile_service.dart';
 import '../utils/phone_mask.dart';
 
@@ -72,7 +75,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     switch (r) {
       case GoogleLinkResult.linked:
         _snack('Conta conectada');
+        // Já pode receber S.O.S.: presença nasce aqui, não só no próximo abrir.
+        unawaited(SosPush.gravarPresenca());
       case GoogleLinkResult.recovered:
+        unawaited(SosPush.gravarPresenca());
         // Uid antigo voltou: o perfil dele manda sobre o que está na tela.
         final p = await DriverProfileService.fetchRemote();
         if (p != null) _fill(p);

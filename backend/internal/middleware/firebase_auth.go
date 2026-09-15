@@ -7,22 +7,33 @@ import (
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
+	"firebase.google.com/go/v4/messaging"
 )
 
 type contextKey string
 
 const uidKey contextKey = "uid"
 
-var firebaseAuthClient *auth.Client
+var (
+	firebaseAuthClient *auth.Client
+	firebaseMessaging  *messaging.Client
+)
 
 func InitFirebaseAuth(ctx context.Context) error {
 	app, err := firebase.NewApp(ctx, &firebase.Config{ProjectID: "truck-router1"})
 	if err != nil {
 		return err
 	}
-	firebaseAuthClient, err = app.Auth(ctx)
+	if firebaseAuthClient, err = app.Auth(ctx); err != nil {
+		return err
+	}
+	firebaseMessaging, err = app.Messaging(ctx)
 	return err
 }
+
+// MessagingClient envia push do S.O.S. Precisa de roles/firebasecloudmessaging.admin
+// na service account (projeto truck-router1).
+func MessagingClient() *messaging.Client { return firebaseMessaging }
 
 // AuthClient expõe o cliente do Auth pra quem precisa de metadado do usuário
 // (idade da conta, provedores) — o S.O.S. usa pra gate de perfil novo.

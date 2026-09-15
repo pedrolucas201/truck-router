@@ -8,6 +8,7 @@ import '../../screens/driver_profile_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/driver_profile_service.dart';
 import '../../services/field_log.dart';
+import '../../services/sos_push.dart';
 import '../../services/sos_service.dart';
 import '../../utils/phone_mask.dart';
 
@@ -249,11 +250,25 @@ class _SosFichaSheetState extends State<SosFichaSheet> {
 
   Widget _botoesPassante(SosRequest s, bool souAjudante) {
     if (souAjudante && s.atendendo) {
-      return OutlinedButton.icon(
-        onPressed: _busy ? null : () => _run(() => SosService.desistir(s.id)),
-        icon: const Icon(Icons.undo),
-        label: const Text('Não vou conseguir ajudar'),
-      );
+      final ir = SosPush.irAteLa;
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (ir != null)
+          FilledButton.icon(
+            onPressed: () {
+              FieldLog.event('sos_go', {'id': s.id});
+              Navigator.pop(context);
+              ir(s);
+            },
+            icon: const Icon(Icons.navigation),
+            label: const Text('Ir até lá'),
+          ),
+        if (ir != null) const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _busy ? null : () => _run(() => SosService.desistir(s.id)),
+          icon: const Icon(Icons.undo),
+          label: const Text('Não vou conseguir ajudar'),
+        ),
+      ]);
     }
     if (!s.aberto || !s.ativo) return const SizedBox.shrink();
     return SizedBox(

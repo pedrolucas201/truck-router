@@ -19,6 +19,7 @@ import 'screens/splash_screen.dart';
 import 'providers/theme_controller.dart';
 import 'services/field_log.dart';
 import 'services/auth_service.dart';
+import 'services/sos_push.dart';
 
 const _backendUrl = String.fromEnvironment('BACKEND_URL');
 
@@ -61,6 +62,9 @@ void main() async {
       // uid identifica a INSTALAÇÃO (anônimo, estável): sem ele, dois motoristas
       // na mesma versão são indistinguíveis e a pergunta "quem" fica em aberto.
       FieldLog.event('app_start', {'uid': uid == null ? 'none' : uid.substring(0, 6)});
+      // Push do S.O.S.: presença (token + posição) e toque na notificação.
+      // Depois do sign-in porque a regra de `presence` exige o uid do token.
+      return SosPush.init();
     }));
 
     final prefs = await SharedPreferences.getInstance();
@@ -103,6 +107,7 @@ class TruckRouterApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeMode = context.watch<ThemeController>().value;
     return MaterialApp(
+      navigatorKey: SosPush.navigatorKey,
       title: 'No Trecho',
       debugShowCheckedModeBanner: false,
       // Date/time pickers e textos do Material em português (o calendário do

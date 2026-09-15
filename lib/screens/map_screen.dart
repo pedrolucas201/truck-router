@@ -26,6 +26,7 @@ import '../providers/route_provider.dart';
 import '../providers/truck_profile_provider.dart';
 import '../services/here_geocoding_service.dart';
 import '../services/field_log.dart';
+import '../services/sos_push.dart';
 import '../services/radar_service.dart';
 import '../services/firestore_radar_service.dart';
 import '../services/highway_truck_cap.dart';
@@ -153,6 +154,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _primeInitialCamera();
+    // Notificação de S.O.S. tocada com o app fechado: a ficha sobe aqui,
+    // depois do splash, não em cima dele.
+    WidgetsBinding.instance.addPostFrameCallback((_) => SosPush.uiPronta());
+    // "Ir até lá" na ficha do S.O.S., fora da navegação: vira o destino da rota.
+    SosPush.irAteLa = (s) => _routeTo(s.position, 'S.O.S. de ${s.nome}', lembrar: false);
     _loadPoiIcons();
     // Ícone de clima (mesmo ⛈️ da nav), cacheado; reusa o builder de POI.
     buildPoiIcon(Colors.deepOrange.shade600, Icons.thunderstorm)
@@ -739,14 +745,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   // Seta o destino, garante a origem (localização atual) e calcula.
-  Future<void> _routeTo(LatLng dest, String label) async {
+  Future<void> _routeTo(LatLng dest, String label, {bool lembrar = true}) async {
     setState(() {
       _destination      = dest;
       _destinationLabel = label;
       _destinationKey   = ValueKey('dest_map_${DateTime.now().millisecondsSinceEpoch}');
     });
-    // Salva no histórico de destino pra reaparecer no input depois.
-    PlacesService.record('destination', label, dest);
+    // Salva no histórico de destino pra reaparecer no input depois. S.O.S. não:
+    // nome de motorista não vira sugestão de endereço.
+    if (lembrar) PlacesService.record('destination', label, dest);
     if (_origin == null) {
       await _useCurrentLocation(); // seta a origem (e limpa a rota anterior)
     }
