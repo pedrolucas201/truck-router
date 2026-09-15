@@ -16,6 +16,9 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/bridge_restriction.dart';
 import '../models/police_alert.dart';
+import '../models/sos_request.dart';
+import '../services/sos_service.dart';
+import '../widgets/sos/sos_sheets.dart';
 import '../models/radar_point.dart';
 import '../models/route_maneuver.dart';
 import '../models/route_result.dart';
@@ -438,6 +441,12 @@ class _NavigationScreenState extends State<NavigationScreen>
   final Set<String> _actionedRestrictions = {};
   LatLng? _snappedPos;
   PoliceAlert? _nearestPoliceAlert;
+
+  // S.O.S. entre motoristas: ativos dentro de kSosRaioM da posição atual,
+  // mais perto primeiro. Voz UMA vez por id (regra da tela limpa).
+  StreamSubscription<List<SosRequest>>? _sosSub;
+  List<SosRequest> _sosNearby = const [];
+  final Set<String> _sosAnnounced = {};
   bool _hasFirstFix = false;
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
 
@@ -618,6 +627,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _destination      = widget.destination;
     _destinationLabel = widget.destinationLabel;
     widget.incomingLocation?.addListener(_onIncomingLocation);
+    _sosSub = SosService.streamAtivos().listen(_onSosAtivos);
     // Telemetria: marca o início do drive — garante rastro mesmo num trajeto
     // limpo (sem reroute), pra diagnosticar "travou" onde o heartbeat parar.
     FieldLog.event('nav_start', {
@@ -703,6 +713,7 @@ class _NavigationScreenState extends State<NavigationScreen>
 
   @override
   void dispose() {
+    _sosSub?.cancel();
     // No fecho (chegada OU X manual): onde o caminhão estava, a quantos metros
     // EM LINHA RETA do destino, e quanto o app achava que faltava PELA ROTA.
     // straightToDestM pequeno + remainingRouteM grande = distância de rota (H-D),
@@ -2696,6 +2707,77 @@ class _NavigationScreenState extends State<NavigationScreen>
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
+  // ── S.O.S. entre motoristas ──────────────────────────────────────────────────
+
+  double _sosDist(SosRequest s) {
+    final p = _currentPos;
+    if (p == null) return double.infinity;
+    return RadarService.haversine(p.latitude, p.longitude, s.lat, s.lng);
+  }
+
+  void _onSosAtivos(List<SosRequest> todos) {
+    if (!mounted) return;
+    final me = AuthService.currentUid;
+    final perto = todos
+        .where((s) => s.uid != me && _sosDist(s) <= kSosRaioM)
+        .toList()
+      ..sort((a, b) => _sosDist(a).compareTo(_sosDist(b)));
+    for (final s in perto) {
+      // Só anuncia pedido ainda sem ajudante; e nunca repete o mesmo id.
+      if (s.aberto && _sosAnnounced.add(s.id)) {
+        final km = _sosDist(s) / 1000;
+        _speak(sosSpeech(s, km));
+        FieldLog.event('sos_seen', {'id': s.id, 'distKm': km.round()});
+      }
+    }
+    setState(() => _sosNearby = perto);
+  }
+
+  void _mostrarSosFicha(String id, double? distM) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SosFichaSheet(sosId: id, distM: distM),
+    );
+  }
+
+  Future<void> _abrirSos() async {
+    // Já tenho um aberto nesta instalação? Mostra a ficha em vez de outro.
+    final meu = await SosService.meuId();
+    if (meu != null) {
+      final s = await SosService.streamUm(meu).first;
+      if (s != null && s.ativo) {
+        if (mounted) _mostrarSosFicha(meu, null);
+        return;
+      }
+      await SosService.limparMeuId();
+    }
+    if (!mounted || !await sosPerfilOk(context) || !mounted) return;
+    final r = await showModalBottomSheet<(SosTipo, String)>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const SosAbrirSheet(),
+    );
+    if (r == null || !mounted) return;
+    final pos = _currentPos;
+    if (pos == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ainda sem posição do GPS. Tente de novo.')));
+      return;
+    }
+    try {
+      final id = await SosService.abrir(
+          lat: pos.latitude, lng: pos.longitude, tipo: r.$1, texto: r.$2);
+      _speak('S.O.S. aberto. Motoristas próximos vão ser avisados.');
+      if (mounted) _mostrarSosFicha(id, null);
+    } on SosException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(sosFalhaTexto(e))));
+      if (e.falha == SosFalha.jaAberto && e.id != null) _mostrarSosFicha(e.id!, null);
+    }
+  }
+
   // ── Marcar restrição / radar — fluxo crosshair ───────────────────────────────
 
   // Um FAB só: escolhe o que marcar antes de entrar no crosshair (UI glanceável).
@@ -2716,10 +2798,17 @@ class _NavigationScreenState extends State<NavigationScreen>
             subtitle: const Text('Radar fixo ou lombada'),
             onTap: () => Navigator.pop(context, 'radar'),
           ),
+          ListTile(
+            leading: Icon(Icons.sos, color: Colors.red.shade700),
+            title: const Text('Pedir ajuda'),
+            subtitle: const Text('S.O.S. pra motoristas próximos'),
+            onTap: () => Navigator.pop(context, 'sos'),
+          ),
         ]),
       ),
     );
     if (kind == null || !mounted) return;
+    if (kind == 'sos') { _abrirSos(); return; }
     _enterMarkingMode(radar: kind == 'radar');
   }
 
@@ -3209,6 +3298,15 @@ class _NavigationScreenState extends State<NavigationScreen>
       ));
     }
 
+    for (final s in _sosNearby) {
+      markers.add(Marker(
+        markerId: MarkerId('sos_${s.id}'),
+        position: s.position,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        onTap: () => _mostrarSosFicha(s.id, _sosDist(s)),
+      ));
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -3454,6 +3552,43 @@ class _NavigationScreenState extends State<NavigationScreen>
                           ],
                         ),
                       ),
+                      ),
+                    ),
+                  // ponytail: divide o topo com o banner de polícia (raro, TTL
+                  // 30 min): polícia ganha, S.O.S. volta quando ela some.
+                  if (_sosNearby.isNotEmpty && _nearestPoliceAlert == null && !_markingMode)
+                    Positioned(
+                      top: 0, left: 0, right: 0,
+                      child: Material(
+                        color: Colors.red.shade700,
+                        child: SafeArea(
+                          bottom: false,
+                          child: InkWell(
+                            onTap: () => _mostrarSosFicha(
+                                _sosNearby.first.id, _sosDist(_sosNearby.first)),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.sos, color: Colors.white, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '${_sosNearby.first.nome} pede ajuda · ${_sosNearby.first.tipo.label}',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          color: Colors.white, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                  Text(
+                                    sosDistText(_sosDist(_sosNearby.first)),
+                                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   if (_nearestPoliceAlert != null && !_markingMode)

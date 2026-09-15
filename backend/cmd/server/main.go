@@ -45,6 +45,14 @@ func main() {
 		r.Post("/restrictions/{id}/confirm", h.Confirm)
 		r.Post("/restrictions/{id}/report", h.Report)
 
+		// S.O.S. entre motoristas: escrita passa por aqui porque os gates
+		// (perfil com telefone, conta Google, conta com 24 h, um aberto por
+		// uid) só são confiáveis no servidor. Leitura é stream direto no
+		// Firestore. Ver docs/sos-rede-motoristas.md.
+		sos := handlers.NewSos(fsClient)
+		r.Post("/sos", sos.Create)
+		r.Post("/sos/{id}/aceitar", sos.Aceitar)
+
 		// HERE geocoding proxy
 		r.Get("/here/autocomplete", handlers.HereAutocomplete)
 		r.Get("/here/geocode", handlers.HereGeocode)

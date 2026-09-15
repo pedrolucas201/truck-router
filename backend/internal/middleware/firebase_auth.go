@@ -24,6 +24,10 @@ func InitFirebaseAuth(ctx context.Context) error {
 	return err
 }
 
+// AuthClient expõe o cliente do Auth pra quem precisa de metadado do usuário
+// (idade da conta, provedores) — o S.O.S. usa pra gate de perfil novo.
+func AuthClient() *auth.Client { return firebaseAuthClient }
+
 func UIDFromContext(ctx context.Context) string {
 	uid, _ := ctx.Value(uidKey).(string)
 	return uid

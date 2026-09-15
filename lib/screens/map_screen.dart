@@ -39,6 +39,9 @@ import '../widgets/map/marker_icons.dart';
 import '../widgets/map/marking_onboarding_sheet.dart';
 import '../widgets/map/poi_sheet.dart';
 import '../widgets/map/police_sheets.dart';
+import '../widgets/sos/sos_sheets.dart';
+import '../models/sos_request.dart';
+import '../services/sos_service.dart';
 import '../widgets/map/restriction_detail_sheet.dart';
 import '../widgets/map/result_card.dart';
 import '../widgets/nav/nav_ui_defs.dart';
@@ -904,6 +907,53 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     );
   }
 
+  // ── S.O.S. fora da navegação (parado no acostamento, app aberto no mapa) ───
+  void _fichaSos(String id) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SosFichaSheet(sosId: id),
+    );
+  }
+
+  Future<void> _abrirSos() async {
+    final meu = await SosService.meuId();
+    if (meu != null) {
+      final s = await SosService.streamUm(meu).first;
+      if (s != null && s.ativo) {
+        if (mounted) _fichaSos(meu);
+        return;
+      }
+      await SosService.limparMeuId();
+    }
+    if (!mounted || !await sosPerfilOk(context) || !mounted) return;
+    final r = await showModalBottomSheet<(SosTipo, String)>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const SosAbrirSheet(),
+    );
+    if (r == null || !mounted) return;
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
+      ).timeout(const Duration(seconds: 15));
+      final id = await SosService.abrir(
+          lat: pos.latitude, lng: pos.longitude, tipo: r.$1, texto: r.$2);
+      if (mounted) _fichaSos(id);
+    } on SosException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(sosFalhaTexto(e))));
+      if (e.falha == SosFalha.jaAberto && e.id != null) _fichaSos(e.id!);
+    } catch (e, st) {
+      FieldLog.error('sos_pos', e, st);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Não consegui sua posição. Ligue o GPS e tente de novo.')));
+      }
+    }
+  }
+
   /// Abre o app de navegação externo. Guard único dos 4 call-sites: launchUrl
   /// pode retornar false ou lançar (nenhum handler p/ o esquema) — antes o toque
   /// não fazia nada, sem sinal pro motorista nem pra nós.
@@ -1654,6 +1704,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     builder: (_) => const VoiceSettingsScreen(),
                                   ));
                                 }
+                                if (value == 'sos') { _abrirSos(); }
                                 if (value == 'driver') {
                                   Navigator.push(context, MaterialPageRoute(
                                     builder: (_) => const DriverProfileScreen(),
@@ -1678,6 +1729,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     Icon(Icons.history, color: Colors.teal.shade700, size: 20),
                                     const SizedBox(width: 12),
                                     const Text('Histórico'),
+                                  ]),
+                                ),
+                                PopupMenuItem(
+                                  value: 'sos',
+                                  child: Row(children: [
+                                    Icon(Icons.sos, color: Colors.red.shade700, size: 20),
+                                    const SizedBox(width: 12),
+                                    const Text('Pedir ajuda'),
                                   ]),
                                 ),
                                 PopupMenuItem(
