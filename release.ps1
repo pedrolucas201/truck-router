@@ -67,22 +67,42 @@ Write-Host "Subindo para GCS..." -ForegroundColor Cyan
 gcloud storage cp $apk $dest --project=maps-route-495614
 gcloud storage cp $apk $latest --project=maps-route-495614
 
+if (-not $Notes) {
+    # O commit de bump e SEMPRE o ultimo antes do release, entao o fallback ingenuo
+    # (git log -1) mandava "chore: bump versao para X" como nota — o motorista abre a
+    # notificacao, le isso e nao tem motivo nenhum pra instalar. Pega o primeiro
+    # commit de verdade abaixo dele.
+    $Notes = git log -10 --pretty=%s | Where-Object { $_ -notmatch "^chore: bump" } | Select-Object -First 1
+    if (-not $Notes) { $Notes = git log -1 --pretty=%s }
+    # Tira o prefixo Conventional ("fix(busca): ", "feat(terra): "). Ele existe
+    # pro historico do git, nao pro motorista — na v2.4.45 a nota saiu com
+    # "feat(terra):" na frente e teve que ser corrigida a mao pela API depois.
+    $Notes = $Notes -replace '^[a-z]+(\([^)]+\))?!?:\s*', ''
+}
+
+# version.json = fonte da verdade da atualizacao in-app (placa amarela na abertura).
+# O app compara `build` com o proprio; `sha256` e conferido pelo plugin antes de
+# instalar (mata o "pacote invalido" de download corrompido). URL versionada, nao a
+# latest: json e APK nunca desencontram. no-cache pra checagem ver a versao nova.
+$buildNum = if ($version -match '\+(\d+)') { [int]$Matches[1] } else { 0 }
+$sha256   = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLower()
+$versionObj = [ordered]@{
+    build    = $buildNum
+    version  = ($version -split '\+')[0]
+    url      = $url
+    sha256   = $sha256
+    minBuild = 0
+    notes    = $Notes
+}
+$versionFile = Join-Path $env:TEMP "version.json"
+$versionObj | ConvertTo-Json | Out-File -FilePath $versionFile -Encoding utf8
+gcloud storage cp $versionFile "gs://truck-router-apks/version.json" `
+    --project=maps-route-495614 --cache-control="no-cache" --content-type="application/json"
+
 # Firebase App Distribution: notifica os testers e — o que mais importa — registra
 # QUEM instalou QUAL versao. Ate hoje a versao rodando no caminhao so dava pra
 # descobrir por engenharia reversa nos field_logs (quais eventos o build emitia).
 if (-not $SkipDistribution) {
-    if (-not $Notes) {
-        # O commit de bump e SEMPRE o ultimo antes do release, entao o fallback ingenuo
-        # (git log -1) mandava "chore: bump versao para X" como nota — o motorista abre a
-        # notificacao, le isso e nao tem motivo nenhum pra instalar. Pega o primeiro
-        # commit de verdade abaixo dele.
-        $Notes = git log -10 --pretty=%s | Where-Object { $_ -notmatch "^chore: bump" } | Select-Object -First 1
-        if (-not $Notes) { $Notes = git log -1 --pretty=%s }
-        # Tira o prefixo Conventional ("fix(busca): ", "feat(terra): "). Ele existe
-        # pro historico do git, nao pro motorista — na v2.4.45 a nota saiu com
-        # "feat(terra):" na frente e teve que ser corrigida a mao pela API depois.
-        $Notes = $Notes -replace '^[a-z]+(\([^)]+\))?!?:\s*', ''
-    }
     Write-Host "Distribuindo para o grupo '$testerGroup'..." -ForegroundColor Cyan
     # Nao usa $ErrorActionPreference=Stop aqui: o APK ja esta no GCS, uma falha do
     # firebase CLI nao pode derrubar um release que ja foi publicado.

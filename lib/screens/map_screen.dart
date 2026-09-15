@@ -27,6 +27,8 @@ import '../providers/truck_profile_provider.dart';
 import '../services/here_geocoding_service.dart';
 import '../services/field_log.dart';
 import '../services/sos_push.dart';
+import '../services/update_service.dart';
+import '../widgets/update_dialog.dart';
 import '../services/radar_service.dart';
 import '../services/firestore_radar_service.dart';
 import '../services/highway_truck_cap.dart';
@@ -102,6 +104,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   Key _destinationKey = const ValueKey('destination');
   StreamSubscription<Uri>? _deepLinkSub;
   bool _locatingGps = false;
+  // Atualização in-app: card direto na abertura, UMA vez por processo, só aqui
+  // (nunca na navegação); sem update/offline = nada aparece. "Depois" = volta
+  // na próxima abertura.
+  static bool _updateChecked = false;
   // Navegação empilhada por cima deste mapa. Com ela aberta, link tocado vira
   // oferta de troca de destino DENTRO da nav (via _incomingNavLocation), não
   // guardar-calado.
@@ -157,6 +163,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     // Notificação de S.O.S. tocada com o app fechado: a ficha sobe aqui,
     // depois do splash, não em cima dele.
     WidgetsBinding.instance.addPostFrameCallback((_) => SosPush.uiPronta());
+    _maybeCheckUpdate();
     // "Ir até lá" na ficha do S.O.S., fora da navegação: vira o destino da rota.
     SosPush.irAteLa = (s) => _routeTo(s.position, 'S.O.S. de ${s.nome}', lembrar: false);
     _loadPoiIcons();
@@ -745,6 +752,18 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   // Seta o destino, garante a origem (localização atual) e calcula.
+  Future<void> _maybeCheckUpdate() async {
+    if (_updateChecked) return;
+    _updateChecked = true;
+    final info = await UpdateService.check();
+    if (info == null || !mounted) return;
+    FieldLog.event('update_seen', {'build': info.build});
+    // Só com o mapa visível: se o motorista já entrou na navegação enquanto a
+    // checagem rodava, não abre o card por cima da tela de rota.
+    if (ModalRoute.of(context)?.isCurrent != true) return;
+    await showUpdateDialog(context, info);
+  }
+
   Future<void> _routeTo(LatLng dest, String label, {bool lembrar = true}) async {
     setState(() {
       _destination      = dest;
@@ -1641,7 +1660,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                 ),
                 if (!_markingMode) ...[
                 SafeArea(
-                  child: Padding(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Padding(
                     padding: const EdgeInsets.all(12),
                     child: Material(
                       color: _themeController.isNight ? const Color(0xFF1E1E1E) : Colors.white,
@@ -1940,7 +1960,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                ),
+                  ]),),
                 if (routeProvider.result != null && _panelCollapsed)
                   Positioned(
                     bottom: 16,
