@@ -164,6 +164,30 @@ class RadarService {
     return best;
   }
 
+  /// Bearing (graus, 0-360) do segmento da [path] mais próximo do ponto, no
+  /// sentido da rota. É o rumo que o motorista TERÁ ao passar pelo radar: mais
+  /// estável que o heading do GPS em curva, alça e baixa velocidade, e existe
+  /// mesmo parado. -1 se a path tem menos de 2 pontos.
+  static double bearingAtPath(double lat, double lng, List<LatLng> path) {
+    if (path.length < 2) return -1;
+    var best = double.infinity;
+    var bi = 0;
+    for (var i = 0; i < path.length - 1; i++) {
+      final d = distanceToSegment(
+        lat, lng,
+        path[i].latitude, path[i].longitude,
+        path[i + 1].latitude, path[i + 1].longitude,
+      );
+      if (d < best) { best = d; bi = i; }
+    }
+    final a = path[bi], b = path[bi + 1];
+    final dLng = (b.longitude - a.longitude) * pi / 180;
+    final y = sin(dLng) * cos(b.latitude * pi / 180);
+    final x = cos(a.latitude * pi / 180) * sin(b.latitude * pi / 180) -
+        sin(a.latitude * pi / 180) * cos(b.latitude * pi / 180) * cos(dLng);
+    return (atan2(y, x) * 180 / pi + 360) % 360;
+  }
+
   /// Distância restante (metros) ao longo da rota, somando os segmentos de
   /// [fromIdx] até o fim. Para de somar assim que passa de [capM] — barato, o
   /// chamador só quer saber se está abaixo de um teto (ex: reta final da rota).

@@ -51,16 +51,22 @@ void main() {
       // Desde 2026-09-16 a direção pode vir da GEOMETRIA DA PISTA (osm_geom: o
       // ponto está colado numa via de sentido único do OSM, medido com margem),
       // que não depende do rótulo cardeal. Qualquer OUTRA fonte aqui é vazamento.
+      // Desde a 2.4.71 a classe "Radar Fixo"/speed 0 também abriga a cobertura
+      // OFICIAL (DNIT/ANTT/DER-SP snapada na pista, merge_official_only.py):
+      // essa pode trazer direção oficial que CONCORDA com a geometria, e status
+      // ativo. O que continua proibido: direção vinda do cardeal (der_sp
+      // bidirecional/artesp) e qualquer status inativo.
       if (r.dir1 != null) {
-        expect(r.dirSrc, 'osm_geom',
+        expect(['osm_geom', 'dnit', 'antt', 'der_sp'], contains(r.dirSrc),
             reason: 'radar de cobertura ${r.lat},${r.lng} com direção de '
                 '${r.dirSrc} — o `Sentido` cardeal do ARTESP está bloqueado por '
-                'semântica igual ao DER-SP; só geometria pode dar direção aqui');
+                'semântica igual ao DER-SP');
         expect(r.dir2, isNull,
-            reason: 'osm_geom é sempre unidirecional (pista de sentido único)');
+            reason: 'cobertura é sempre unidirecional (pista de sentido único); '
+                'bidirecional aqui = cardeal vazou');
       }
-      expect(r.status, isNull,
-          reason: 'radar de cobertura ${r.lat},${r.lng} com status — só os ATIVOS '
+      expect(r.status, isNot('inactive'),
+          reason: 'radar de cobertura ${r.lat},${r.lng} inativo — só os ATIVOS '
               'entram na cobertura; inativo é outra frente (guarda de sucessão)');
     }
   });

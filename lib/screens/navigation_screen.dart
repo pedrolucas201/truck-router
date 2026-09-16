@@ -446,6 +446,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Falas descartadas por colisão (outra já tocando). Sai no nav_end: hoje esse
   // descarte é invisível em campo, então "a voz sumiu" nunca vira causa raiz.
   int _ttsDropped = 0;
+  // Contadores da viagem (vão no nav_end): quantos radares entraram no slot,
+  // quantos falaram, quantos calaram por pista oposta. É o número da sexta.
+  int _radarSlots = 0, _radarSpoken = 0, _radarOpposite = 0, _tollSpoken = 0;
   final _fila = VoiceQueue(); // falas raras que não podem sumir (S.O.S., parada)
   bool _speedAlertActive = false;
   DateTime? _lastSpeedAlertAt;
@@ -754,6 +757,10 @@ class _NavigationScreenState extends State<NavigationScreen>
       'remainingRouteM': _remainingDistanceM().round(),
       'speedKmh': _speedKmh.round(),
       'ttsDropped': _ttsDropped, // falas comidas por colisão nesta viagem
+      'radarSlots': _radarSlots,       // radares que ocuparam o slot de alerta
+      'radarSpoken': _radarSpoken,     // dos quais falaram
+      'radarOpposite': _radarOpposite, // calados por "pista oposta"
+      'tollSpoken': _tollSpoken,
     });
     WidgetsBinding.instance.removeObserver(this);
     widget.incomingLocation?.removeListener(_onIncomingLocation);
@@ -1252,7 +1259,9 @@ class _NavigationScreenState extends State<NavigationScreen>
     // radar o excesso fica só no visual (barra vermelha), sem repetir voz.
     // _upcomingRadar != null == a mensagenzinha de radar está na tela.
     final radar = _upcomingRadar;
-    if (radar == null) {
+    // Radar da pista oposta não é área de fiscalização do SEU sentido: nem flash
+    // nem voz de excesso (era o que fazia o Gilberto frear em 22/07).
+    if (radar == null || _upcomingRadarDir == RadarDirMatch.opposite) {
       _speedAlertActive = false;
       return;
     }
@@ -1708,14 +1717,19 @@ class _NavigationScreenState extends State<NavigationScreen>
       _upcomingRadar              = upcoming;
       // Classifica DEPOIS do gate ter escolhido (nunca dentro da condição do
       // gate). Só decora a UI; não altera se/como o alerta dispara.
+      // Rumo = o da ROTA no ponto do radar (o rumo que o caminhão TERÁ ali), não
+      // o heading do GPS agora: estável em curva/alça e existe parado. GPS só
+      // sem rota. Decisão do Pedro, 16/09.
       _upcomingRadarDir           = upcoming == null
           ? RadarDirMatch.unknown
           : classifyRadarDirection(
               dir1: upcoming.dir1,
               dir2: upcoming.dir2,
               dirSrc: upcoming.dirSrc,
-              userHeading: pos.heading,
-              headingAccuracy: pos.headingAccuracy,
+              userHeading: aheadPts.length >= 2
+                  ? RadarService.bearingAtPath(upcoming.lat, upcoming.lng, aheadPts)
+                  : pos.heading,
+              headingAccuracy: aheadPts.length >= 2 ? null : pos.headingAccuracy,
             );
       _nearbyBlockedRestriction   = nearestBlocked;
       _visibleRadares             = visibleRadares;
@@ -1981,25 +1995,61 @@ class _NavigationScreenState extends State<NavigationScreen>
     // EXCEÇÃO ÚNICA do invariante: radar OFICIALMENTE desativado (status inactive,
     // fonte oficial) rebaixa de fala para bip discreto. Nunca some do mapa (visual
     // "desativado" na UI). Todo o resto da lógica de voz abaixo fica intacto.
-    if (radar.status == 'inactive') {
-      SystemSound.play(SystemSoundType.click);
-      return;
-    }
     final isLombada = radar.type.toLowerCase().contains('lombada');
     final isPedagio = radar.type.toLowerCase().contains('pedagio');
+    final lim = radar.truckKmh ?? 0;
+    // Um evento por radar que entrou no slot (dedupe pela chave acima = 1 por
+    // radar por viagem, nunca hot path): o que era, de que lado, e se falou.
+    // É o rastro que faz a viagem virar número em vez de áudio no WhatsApp.
+    _radarSlots++;
+    void log(String voz) => FieldLog.event('radar_alert', {
+          'rid': dismissalKey(radar.lat, radar.lng),
+          'tipo': isPedagio ? 'pedagio' : (isLombada ? 'lombada' : 'radar'),
+          'side': _upcomingRadarDir.name,
+          'src': radar.dirSrc ?? '',
+          'kmh': _speedKmh.round(),
+          'lim': lim,
+          'voz': voz,
+        });
+    // EXCEÇÃO ÚNICA do invariante: radar OFICIALMENTE desativado (status inactive,
+    // fonte oficial) rebaixa de fala para bip discreto. Nunca some do mapa (visual
+    // "desativado" na UI). Todo o resto da lógica de voz abaixo fica intacto.
+    if (radar.status == 'inactive') {
+      SystemSound.play(SystemSoundType.click);
+      log('inativo_bip');
+      return;
+    }
+    // Radar da PISTA OPOSTA (geometria/oficial + rumo da rota, >= 145°): sem voz.
+    // O chip cinza "pista oposta" fica na tela (validação e curadoria continuam).
+    // Medido 16/09: 11 dos 15 alertas da viagem do Beto eram da outra pista e
+    // cada um fazia o caminhão carregado reduzir marcha. Não é heurística: só
+    // cala com dir_src preenchido, e `unknown` continua alerta pleno. Válvula:
+    // este evento + `side` no radar_pass mostram quantos calaram por viagem.
+    if (_upcomingRadarDir == RadarDirMatch.opposite) {
+      _radarOpposite++;
+      log('oposto');
+      return;
+    }
     if (isLombada) {
       _speak('Lombada à frente');
+      log('falou');
     } else if (isPedagio) {
+      _tollSpoken++;
       _speak(radar.name == null
           ? 'Pedágio à frente'
           : 'Pedágio ${radar.name} à frente');
+      log('falou');
     } else {
       // Silencia o TTS quando dentro do limite DE CAMINHÃO (o mesmo da barra —
       // comparar com a placa de carro calava o radar a 95 sob placa de 110).
       // truckKmh == null = dado ausente → alerta por cautela.
-      final lim = radar.truckKmh ?? 0;
-      if (lim > 0 && _speedKmh <= lim) return;
+      if (lim > 0 && _speedKmh <= lim) {
+        log('dentro_do_limite');
+        return;
+      }
+      _radarSpoken++;
       _speak(radarAlertPhrase(lim));
+      log('falou');
     }
   }
 
@@ -3222,6 +3272,17 @@ class _NavigationScreenState extends State<NavigationScreen>
   // hora. Compartilhado pela folha (toque) e pelo pop-up automático.
   Future<void> _applyRadarVerdict(RadarPoint r, bool exists, {int speed = 0}) async {
     _curatedKeys.add(dismissalKey(r.lat, r.lng));
+    // Veredito com o LADO: um "não existe" dado da pista oposta é o que a
+    // auditoria de 16/09 achou 9 vezes no histórico (e não dava pra saber).
+    FieldLog.event('radar_curate', {
+      'rid': dismissalKey(r.lat, r.lng),
+      'exists': exists,
+      'speed': speed,
+      'side': classifyRadarDirection(
+        dir1: r.dir1, dir2: r.dir2, dirSrc: r.dirSrc, userHeading: _lastHeading,
+      ).name,
+      'src': r.dirSrc ?? '',
+    });
     final uid = await AuthService.getUid();
     await FirestoreRadarService.setOverride(
         lat: r.lat, lng: r.lng, exists: exists, speedKmh: speed, uid: uid);
