@@ -69,15 +69,26 @@ void main() {
     }
   });
 
-  test('enriquecimento DER-SP: a direção entrou sem tomar radar de fonte anterior',
+  test('enriquecimento: nenhuma fonte nova apaga direção que já estava no ar',
       () async {
     final radares = await RadarService.load();
-    // dnit e antt já estavam no ar (v2.4.35) e têm prioridade sobre der_sp no
-    // sources.json. Se este número cair, o der_sp começou a ganhar desempate que
-    // não era dele — ou o SNV/prep_oficiais regrediu.
+    // Até 2026-09-16 este teste exigia dnit >= 1603 e antt >= 710 (v2.4.35). Desde
+    // o osm_geom (tools/radar-enrich/osmgeom, TODO.md) a geometria da pista é o
+    // JUIZ do casamento oficial: 115 direções oficiais estavam na pista ERRADA
+    // (o ponto oficial ficava 12-13 m à esquerda = pista oposta) e 35 conflitos
+    // não explicados viraram unknown DE PROPÓSITO — decisão do Pedro, erro mudo
+    // que viraria multa. Por isso dnit/antt caem por linha e o total sobe.
+    // Invariante que sobrevive: o TOTAL com direção nunca regride (2449 antes,
+    // 17709 depois), e as fontes oficiais seguem presentes na proveniência.
+    final comDir = radares.where((r) => r.dir1 != null).length;
     final dnit = radares.where((r) => r.dirSrc == 'dnit').length;
     final antt = radares.where((r) => r.dirSrc == 'antt').length;
-    expect(dnit, greaterThanOrEqualTo(1603));
-    expect(antt, greaterThanOrEqualTo(710));
+    final geom = radares.where((r) => r.dirSrc == 'osm_geom').length;
+    expect(comDir, greaterThanOrEqualTo(17000),
+        reason: 'direção regrediu ($comDir): asset sem osm_geom ou rebuild sem '
+            'data/osm_geom_bearings.csv (rodar `go run ./osmgeom` antes do enrich)');
+    expect(dnit, greaterThanOrEqualTo(1400));
+    expect(antt, greaterThanOrEqualTo(650));
+    expect(geom, greaterThanOrEqualTo(15000));
   });
 }

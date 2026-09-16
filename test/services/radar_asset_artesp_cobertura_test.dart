@@ -42,16 +42,23 @@ void main() {
     }
   });
 
-  test('INVARIANTE: cobertura ARTESP entra SEM direção (cardeal bloqueado)', () async {
+  test('INVARIANTE: cobertura ARTESP nunca ganha direção do cardeal (só da geometria)',
+      () async {
     final radares = await RadarService.load();
     final cov = radares.where((r) => r.type == 'Radar Fixo' && r.speedKmh == 0);
     for (final r in cov) {
       // Cardeal sem dicionário = ambiguidade fluxo-vs-face (mesma parede do DER-SP).
-      // Direção só entra depois do e-SIC (~2026-08-05) ou crowd. Ver TODO.md.
-      expect(r.dir1, isNull,
-          reason: 'radar de cobertura ${r.lat},${r.lng} vazou direção — o `Sentido` '
-              'cardeal do ARTESP está bloqueado por semântica igual ao DER-SP');
-      expect(r.dir2, isNull);
+      // Desde 2026-09-16 a direção pode vir da GEOMETRIA DA PISTA (osm_geom: o
+      // ponto está colado numa via de sentido único do OSM, medido com margem),
+      // que não depende do rótulo cardeal. Qualquer OUTRA fonte aqui é vazamento.
+      if (r.dir1 != null) {
+        expect(r.dirSrc, 'osm_geom',
+            reason: 'radar de cobertura ${r.lat},${r.lng} com direção de '
+                '${r.dirSrc} — o `Sentido` cardeal do ARTESP está bloqueado por '
+                'semântica igual ao DER-SP; só geometria pode dar direção aqui');
+        expect(r.dir2, isNull,
+            reason: 'osm_geom é sempre unidirecional (pista de sentido único)');
+      }
       expect(r.status, isNull,
           reason: 'radar de cobertura ${r.lat},${r.lng} com status — só os ATIVOS '
               'entram na cobertura; inativo é outra frente (guarda de sucessão)');

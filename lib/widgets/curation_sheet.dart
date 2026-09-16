@@ -11,15 +11,21 @@ import 'speed_plate.dart';
 /// que nasceu um "não existe" em Jacareí em 13/07 (pergunta sem sentido induz
 /// resposta errada). O card automático da nav também não sobe em pedágio
 /// (`_maybePromptCuration`): na praça o motorista está trocando de faixa.
-Future<String?> showCurationSheet(BuildContext context, RadarPoint radar) =>
+///
+/// [canRemove] = false quando o motorista está na pista OPOSTA ao radar (nav
+/// sabe pelo heading): dali ele não tem como saber se existe, e "não existe"
+/// apagaria o radar também no sentido em que ele é real.
+Future<String?> showCurationSheet(BuildContext context, RadarPoint radar,
+        {bool canRemove = true}) =>
     showModalBottomSheet<String>(
       context: context,
-      builder: (_) => CurationSheet(radar: radar),
+      builder: (_) => CurationSheet(radar: radar, canRemove: canRemove),
     );
 
 class CurationSheet extends StatelessWidget {
   final RadarPoint radar;
-  const CurationSheet({super.key, required this.radar});
+  final bool canRemove;
+  const CurationSheet({super.key, required this.radar, this.canRemove = true});
 
   @override
   Widget build(BuildContext context) {
@@ -57,11 +63,18 @@ class CurationSheet extends StatelessWidget {
           title: Text(isPedagio ? 'Existe' : 'Existe (manter velocidade)'),
           onTap: () => Navigator.pop(context, 'confirm'),
         ),
-        ListTile(
-          leading: const Icon(Icons.cancel, color: Colors.red),
-          title: const Text('Não existe aqui'),
-          onTap: () => Navigator.pop(context, 'remove'),
-        ),
+        if (canRemove)
+          ListTile(
+            leading: const Icon(Icons.cancel, color: Colors.red),
+            title: const Text('Não existe aqui'),
+            onTap: () => Navigator.pop(context, 'remove'),
+          )
+        else
+          const ListTile(
+            leading: Icon(Icons.swap_horiz, color: Colors.grey),
+            title: Text('Radar da outra pista'),
+            subtitle: Text('Só dá pra apagar passando pela pista dele'),
+          ),
       ]),
     );
   }

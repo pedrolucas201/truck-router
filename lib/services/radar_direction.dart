@@ -79,12 +79,16 @@ class RadarPassEvent {
   final double heading; // graus 0-359 no momento da passagem
   final double speedKmh;
   final DateTime ts;
+  /// Lado que a etiqueta mostrou na passagem: `same` | `opposite` | `unknown`
+  /// (nome do [RadarDirMatch]). Sem isso o heading e bimodal em pista dupla.
+  final String side;
 
   const RadarPassEvent({
     required this.radarId,
     required this.heading,
     required this.speedKmh,
     required this.ts,
+    this.side = 'unknown',
   });
 
   Map<String, dynamic> toMap() => {
@@ -97,6 +101,7 @@ class RadarPassEvent {
         // bearing, só é guardado. Clampa glitch de GPS em vez de perder o batch.
         'v': speedKmh.round().clamp(0, 200),
         'ts': ts.toUtc().millisecondsSinceEpoch,
+        'side': side,
       };
 }
 
@@ -119,6 +124,7 @@ class RadarPassLogger {
     required String radarId,
     required double heading,
     required double speedKmh,
+    String side = 'unknown',
   }) {
     if (heading < 0) return; // sem heading confiável, não polui a base
     if (!_loggedThisTrip.add(radarId)) return; // 1 write por radar por viagem
@@ -127,6 +133,7 @@ class RadarPassLogger {
       heading: heading,
       speedKmh: speedKmh,
       ts: DateTime.now(),
+      side: side,
     ));
     if (_queue.length >= batchSize) _drain();
   }

@@ -326,6 +326,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Fonte única: calculado no _onPosition e consumido pelo _reroute (o gate do
   // course). Ver o deadlock do field 2026-07-13 no _reroute.
   bool _headingReliable = false;
+  double _lastHeading = -1; // último heading do GPS (-1 = sem rumo); só pra classificar radar no toque
   double _rawSpeedKmh = 0; // velocidade física do GPS (só p/ telemetria do gate)
   double _gpsAccuracyM = -1; // raio de precisão do GPS em m (só telemetria; -1 = sem amostra)
   // Telemetria do veredito "parado": o velocímetro mostrou 0 com o caminhão andando
@@ -1732,13 +1733,18 @@ class _NavigationScreenState extends State<NavigationScreen>
     // Coleta passiva: observa o cruzamento que o gate JÁ detectou, sem tocá-lo.
     // rid = chave estável do radar (lat_lng), igual à dedupe do curador. O logger
     // dedupa 1 write por radar por viagem, então chamar todo tick é inócuo.
+    // `side` = o lado que a etiqueta mostrou nesta passagem. Sem ele o heading é
+    // bimodal em pista dupla (corredor de 22 m pega as duas pistas) e o crowd
+    // promoveria "bidirecional" no caso errado — medido no histórico, 16/09.
     if (upcoming != null) {
       _radarPassLogger.onRadarCrossed(
         radarId: dismissalKey(upcoming.lat, upcoming.lng),
         heading: pos.heading,
         speedKmh: _speedKmh,
+        side: _upcomingRadarDir.name,
       );
     }
+    _lastHeading = pos.heading;
     _checkSpeedAlert(_speedKmh);
     _syncRadarFlash();
     _maybePromptCuration(upcoming, latLng);
@@ -3194,8 +3200,17 @@ class _NavigationScreenState extends State<NavigationScreen>
   // (autoritativo, offline) + espelho no Firestore. Editável passando de novo.
   Future<void> _onRadarTap(RadarPoint r) => _curateRadar(r);
 
+  // Da pista OPOSTA o motorista não tem como saber se o radar existe, e um "não
+  // existe" dado dali apaga o radar também no sentido em que ele é real (auditoria
+  // de 16/09: 9 dos 53 "não existe" do histórico vieram só da pista contrária).
+  bool _isOppositeNow(RadarPoint r) =>
+      classifyRadarDirection(
+        dir1: r.dir1, dir2: r.dir2, dirSrc: r.dirSrc, userHeading: _lastHeading,
+      ) ==
+      RadarDirMatch.opposite;
+
   Future<void> _curateRadar(RadarPoint r) async {
-    final action = await _showCurationSheet(r);
+    final action = await showCurationSheet(context, r, canRemove: !_isOppositeNow(r));
     if (action == null || !mounted) return;
     if (action == 'remove') { await _applyRadarVerdict(r, false); return; }
     // 'confirm' (mantém velocidade) ou 'speed:X' (troca)
@@ -3237,6 +3252,16 @@ class _NavigationScreenState extends State<NavigationScreen>
     // toque errado (Jacareí, 13/07). Quem quiser marcar toca no ícone.
     if (radar.type.toLowerCase().contains('pedagio')) return;
     final key = dismissalKey(radar.lat, radar.lng);
+    // Etiqueta "pista oposta": não pergunta. O radar é da outra pista e "NÃO"
+    // aqui apagaria o alerta no sentido em que ele é real. Quem quiser marcar
+    // toca no ícone (a folha esconde o "não existe" pelo mesmo motivo).
+    if (_upcomingRadarDir == RadarDirMatch.opposite) {
+      if (!_promptedKeys.contains(key)) {
+        _promptedKeys.add(key);
+        FieldLog.event('radar_prompt_skip', {'zoom': _zoomLevel.name, 'why': 'opposite'});
+      }
+      return;
+    }
     if (RadarService.haversine(pos.latitude, pos.longitude, radar.lat, radar.lng) >
         _radarReachedM) {
       return;
@@ -3340,11 +3365,6 @@ class _NavigationScreenState extends State<NavigationScreen>
       ),
     );
   }
-
-  // Folha de curadoria (widgets/curation_sheet.dart, a mesma do mapa): chips
-  // 60/70/80/90 = velocidade real; "Existe" mantém; "Não existe" mata. Pedágio
-  // vem sem chips.
-  Future<String?> _showCurationSheet(RadarPoint r) => showCurationSheet(context, r);
 
   // ── Build ─────────────────────────────────────────────────────────────────────
 
