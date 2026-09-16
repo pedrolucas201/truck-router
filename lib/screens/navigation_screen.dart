@@ -2035,9 +2035,12 @@ class _NavigationScreenState extends State<NavigationScreen>
       log('falou');
     } else if (isPedagio) {
       _tollSpoken++;
-      _speak(radar.name == null
-          ? 'Pedágio à frente'
-          : 'Pedágio ${radar.name} à frente');
+      // Valor por extenso (nunca numeral pro TTS) e `espera`: pedágio é fala
+      // rara que não volta — colidiu com manobra, entra na fila em vez de sumir.
+      _speak(tollPhrase(radar.name, radar.priceBrl), espera: true);
+      FieldLog.event('toll_alert', {
+        'name': radar.name ?? '', 'brl': radar.priceBrl, 'kmh': _speedKmh.round(),
+      });
       log('falou');
     } else {
       // Silencia o TTS quando dentro do limite DE CAMINHÃO (o mesmo da barra —
