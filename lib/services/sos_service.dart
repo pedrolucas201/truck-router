@@ -78,14 +78,21 @@ class SosService {
     id == null ? await p.remove(_kMeuId) : await p.setString(_kMeuId, id);
   }
 
+  /// [caminhao] e [cor] vêm do perfil de caminhão ATIVO, não do perfil do
+  /// motorista: o backend não tem como saber qual caminhão está selecionado
+  /// (isso vive no aparelho), e quem roda mais de um anunciava o veículo
+  /// errado na ficha. O servidor confere tamanho e usa o que vem daqui.
   static Future<String> abrir({
     required double lat,
     required double lng,
     required SosTipo tipo,
     required String texto,
+    required String caminhao,
+    required String cor,
   }) async {
     final resp = await _post('/sos', {
       'lat': lat, 'lng': lng, 'tipo': tipo.name, 'texto': texto,
+      'caminhao': caminhao, 'cor': cor,
     });
     final id = resp['id'] as String;
     await _setMeuId(id);

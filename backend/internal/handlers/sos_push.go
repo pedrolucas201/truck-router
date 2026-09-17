@@ -113,9 +113,9 @@ func (h *Sos) notificarAbertura(ctx context.Context, id, dono string, in sosCrea
 		return
 	}
 	dest := sosDestinatarios(ps, in.Lat, in.Lng, sosRaioM, dono)
-	caminhao := p.Caminhao
-	if p.Cor != "" {
-		caminhao += " " + p.Cor
+	caminhao := in.Caminhao
+	if in.Cor != "" {
+		caminhao += " " + in.Cor
 	}
 	var msgs []*messaging.Message
 	for _, d := range dest {

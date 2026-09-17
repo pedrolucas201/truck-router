@@ -16,6 +16,12 @@ func TestValidateSos(t *testing.T) {
 		"posicao": {Lat: 0, Lng: 0, Tipo: "pneu"},
 		"tipo":    {Lat: -23.2, Lng: -45.8, Tipo: "guincho"},
 		"texto":   {Lat: -23.2, Lng: -45.8, Tipo: "outro", Texto: strings.Repeat("a", sosTextoMax+1)},
+		// Caminhão e cor passaram a vir do app (perfil ATIVO) em vez de
+		// `profiles`: o teto era da regra do Firestore e agora só existe aqui.
+		"caminhao": {Lat: -23.2, Lng: -45.8, Tipo: "pneu",
+			Caminhao: strings.Repeat("a", sosCaminhaoMax+1)},
+		"cor": {Lat: -23.2, Lng: -45.8, Tipo: "pneu",
+			Cor: strings.Repeat("a", sosCorMax+1)},
 	}
 	for quer, in := range casos {
 		err := validateSos(in)
@@ -27,6 +33,12 @@ func TestValidateSos(t *testing.T) {
 	if err := validateSos(sosCreateIn{Lat: -23.2, Lng: -45.8, Tipo: "outro",
 		Texto: strings.Repeat("ã", sosTextoMax)}); err != nil {
 		t.Errorf("120 runas acentuadas reprovou: %v", err)
+	}
+	// Caminhão vazio é válido: identidade é opcional e a ficha lida com vazio.
+	// Se isto virar obrigatório, quem não preencheu não consegue pedir ajuda.
+	if err := validateSos(sosCreateIn{Lat: -23.2, Lng: -45.8, Tipo: "pneu",
+		Caminhao: "", Cor: ""}); err != nil {
+		t.Errorf("caminhão vazio reprovou: %v", err)
 	}
 }
 

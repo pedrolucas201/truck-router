@@ -32,6 +32,32 @@ class DriverProfileService {
     }
   }
 
+  /// Identidade do caminhão como era gravada até 2.4.73 (`truck`/`color`/
+  /// `plate` dentro do perfil do MOTORISTA). Lê o JSON cru porque
+  /// [DriverProfile] não tem mais esses campos.
+  ///
+  /// Existe só pra [TruckProfileProvider.migrarIdentidade] não jogar fora o que
+  /// o motorista já digitou. Quando não houver mais perfil gravado no formato
+  /// antigo em campo, isto e a migração saem juntos.
+  static Future<({String model, String color, String plate})?>
+      legadoIdentidade() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final j = jsonDecode(raw) as Map<String, dynamic>;
+      final r = (
+        model: (j['truck'] as String?) ?? '',
+        color: (j['color'] as String?) ?? '',
+        plate: (j['plate'] as String?) ?? '',
+      );
+      if (r.model.isEmpty && r.color.isEmpty && r.plate.isEmpty) return null;
+      return r;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> _saveLocal(DriverProfile p) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(p.toJson()));
@@ -48,7 +74,6 @@ class DriverProfileService {
         SetOptions(merge: true),
       );
       FieldLog.event('profile_save', {
-        'plate': p.plate.isNotEmpty,
         'phone': p.phone.isNotEmpty,
         'google': AuthService.isGoogleLinked,
       });

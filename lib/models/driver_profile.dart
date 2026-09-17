@@ -1,46 +1,32 @@
-/// Perfil do MOTORISTA (não do caminhão: isso é `TruckProfile`). Nasce na
-/// Fase 0 do S.O.S. (docs/sos-rede-motoristas.md, 2.2): é o que o outro
-/// motorista vê quando alguém pede ajuda. Placa e telefone são dado pessoal e
-/// entram com consentimento na tela; o telefone NUNCA vai pro doc do S.O.S.
+/// Perfil do MOTORISTA — a pessoa, não o caminhão.
+///
+/// Nasce na Fase 0 do S.O.S. (docs/sos-rede-motoristas.md, 2.2): é o que o
+/// outro motorista vê quando alguém pede ajuda. O telefone é dado pessoal,
+/// entra com consentimento na tela e NUNCA vai pro doc do S.O.S. (fica em
+/// `sos/{id}/contatos/{uid}`, escrito pelo backend no aceite).
+///
+/// Modelo, cor e placa saíram daqui em 2.4.74: identidade de caminhão mora em
+/// [TruckProfile], um por caminhão, porque quem roda mais de um anunciava o
+/// veículo errado na ficha do S.O.S. A migração do campo antigo está em
+/// `DriverProfileService.legadoIdentidade`.
 class DriverProfile {
   final String name;
-  final String truck; // texto livre: "Scania R450"
-  final String color;
-  final String plate; // normalizada: "ABC1D23"
   final String phone; // só dígitos, com DDD: "11999998888"
 
   const DriverProfile({
     required this.name,
-    this.truck = '',
-    this.color = '',
-    this.plate = '',
     this.phone = '',
   });
 
   Map<String, dynamic> toJson() => {
         'name':  name,
-        'truck': truck,
-        'color': color,
-        'plate': plate,
         'phone': phone,
       };
 
   factory DriverProfile.fromJson(Map<String, dynamic> j) => DriverProfile(
         name:  (j['name']  as String?) ?? '',
-        truck: (j['truck'] as String?) ?? '',
-        color: (j['color'] as String?) ?? '',
-        plate: (j['plate'] as String?) ?? '',
         phone: (j['phone'] as String?) ?? '',
       );
-
-  /// "abc-1d23" → "ABC1D23". Não valida; ver [isValidPlate].
-  static String normalizePlate(String raw) =>
-      raw.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
-
-  /// Mercosul (AAA1A11) ou antiga (AAA1111). Vazio é válido: campo opcional.
-  static bool isValidPlate(String normalized) =>
-      normalized.isEmpty ||
-      RegExp(r'^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$').hasMatch(normalized);
 
   /// "(11) 99999-8888" → "11999998888".
   static String normalizePhone(String raw) =>

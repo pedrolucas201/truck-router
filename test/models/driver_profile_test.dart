@@ -3,15 +3,7 @@ import 'package:truck_router/models/driver_profile.dart';
 import 'package:truck_router/utils/phone_mask.dart';
 
 void main() {
-  test('placa: normaliza e valida Mercosul e antiga', () {
-    expect(DriverProfile.normalizePlate(' abc-1d23 '), 'ABC1D23');
-    expect(DriverProfile.isValidPlate('ABC1D23'), isTrue);
-    expect(DriverProfile.isValidPlate('ABC1234'), isTrue);
-    expect(DriverProfile.isValidPlate(''), isTrue); // opcional
-    expect(DriverProfile.isValidPlate('AB1234'), isFalse);
-    expect(DriverProfile.isValidPlate('ABCD123'), isFalse);
-  });
-
+  // Placa migrou pra TruckProfile em 2.4.74: ver truck_profile_test.dart.
   test('telefone: só dígitos, DDD + 8/9', () {
     expect(DriverProfile.normalizePhone('(11) 99999-8888'), '11999998888');
     expect(DriverProfile.isValidPhone('11999998888'), isTrue);
@@ -22,12 +14,19 @@ void main() {
   });
 
   test('json: ida e volta, campos ausentes viram vazio', () {
-    const p = DriverProfile(name: 'Beto', truck: 'Scania', plate: 'ABC1D23');
+    const p = DriverProfile(name: 'Beto', phone: '11999998888');
     final back = DriverProfile.fromJson(p.toJson());
     expect(back.name, 'Beto');
-    expect(back.plate, 'ABC1D23');
-    expect(back.phone, '');
-    expect(DriverProfile.fromJson({'name': 'x'}).color, '');
+    expect(back.phone, '11999998888');
+    expect(DriverProfile.fromJson({'name': 'x'}).phone, '');
+  });
+
+  test('perfil da pessoa não carrega mais caminhão', () {
+    // A identidade do veículo mudou pra TruckProfile porque um campo só
+    // anunciava o caminhão errado em quem roda mais de um. Se alguém
+    // reintroduzir 'truck'/'color'/'plate' aqui, o dado volta a ser fake.
+    expect(const DriverProfile(name: 'Beto').toJson().keys,
+        unorderedEquals(['name', 'phone']));
   });
 
   test('máscara do telefone: celular, fixo, parcial, vazio, teto de 11', () {

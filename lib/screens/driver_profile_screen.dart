@@ -21,9 +21,6 @@ class DriverProfileScreen extends StatefulWidget {
 class _DriverProfileScreenState extends State<DriverProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name  = TextEditingController();
-  final _truck = TextEditingController();
-  final _color = TextEditingController();
-  final _plate = TextEditingController();
   final _phone = TextEditingController();
 
   bool _loading = true;
@@ -49,15 +46,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
   void _fill(DriverProfile p) {
     _name.text  = p.name;
-    _truck.text = p.truck;
-    _color.text = p.color;
-    _plate.text = p.plate;
     _phone.text = PhoneMaskFormatter.mask(p.phone);
   }
 
   @override
   void dispose() {
-    for (final c in [_name, _truck, _color, _plate, _phone]) {
+    for (final c in [_name, _phone]) {
       c.dispose();
     }
     super.dispose();
@@ -98,9 +92,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     setState(() => _busy = true);
     await DriverProfileService.save(DriverProfile(
       name:  _name.text.trim(),
-      truck: _truck.text.trim(),
-      color: _color.text.trim(),
-      plate: DriverProfile.normalizePlate(_plate.text),
       phone: DriverProfile.normalizePhone(_phone.text),
     ));
     if (!mounted) return;
@@ -129,24 +120,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                             ? 'Campo obrigatório'
                             : null),
                     const SizedBox(height: 12),
-                    _field(_truck, 'Caminhão', 'Ex: Scania R450',
-                        cap: TextCapitalization.words),
-                    const SizedBox(height: 12),
-                    _field(_color, 'Cor', 'Ex: Branco',
-                        cap: TextCapitalization.words),
-                    const SizedBox(height: 12),
-                    _field(_plate, 'Placa', 'Ex: ABC1D23',
-                        cap: TextCapitalization.characters,
-                        formatters: [
-                          FilteringTextInputFormatter.allow(
-                              RegExp(r'[A-Za-z0-9-]')),
-                          LengthLimitingTextInputFormatter(8),
-                        ],
-                        validator: (v) => DriverProfile.isValidPlate(
-                                DriverProfile.normalizePlate(v ?? ''))
-                            ? null
-                            : 'Placa inválida'),
-                    const SizedBox(height: 12),
                     _field(_phone, 'Telefone (WhatsApp)', 'Ex: 11 99999-8888',
                         keyboard: TextInputType.phone,
                         formatters: [PhoneMaskFormatter()],
@@ -156,8 +129,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                             : 'Telefone inválido (DDD + número)'),
                     const SizedBox(height: 8),
                     Text(
-                      'Placa e telefone aparecem só pra quem estiver perto de '
-                      'você quando você pedir ajuda na estrada.',
+                      'Seu telefone aparece só pra quem aceitar te ajudar '
+                      'quando você pedir S.O.S. na estrada.\n\n'
+                      'Modelo, cor e placa ficam em Caminhões, um por '
+                      'caminhão. O que aparece no seu pedido de ajuda é o '
+                      'caminhão que estiver selecionado.',
                       style: TextStyle(
                           fontSize: 12, color: Colors.grey.shade600),
                     ),

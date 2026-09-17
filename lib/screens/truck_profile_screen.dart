@@ -207,6 +207,9 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
   late final TextEditingController _lengthCtrl;
   late final TextEditingController _weightCtrl;
   late final TextEditingController _axleCtrl;
+  late final TextEditingController _modelCtrl;
+  late final TextEditingController _colorCtrl;
+  late final TextEditingController _plateCtrl;
 
   bool get _isEditing => widget.existing != null;
 
@@ -220,6 +223,9 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
     _lengthCtrl = TextEditingController(text: cmToMeters(p?.lengthCm ?? 1400));
     _weightCtrl = TextEditingController(text: (p?.weightKg ?? 25000).toString());
     _axleCtrl   = TextEditingController(text: (p?.axleCount ?? 2).toString());
+    _modelCtrl  = TextEditingController(text: p?.model ?? '');
+    _colorCtrl  = TextEditingController(text: p?.color ?? '');
+    _plateCtrl  = TextEditingController(text: p?.plate ?? '');
   }
 
   @override
@@ -230,6 +236,9 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
     _lengthCtrl.dispose();
     _weightCtrl.dispose();
     _axleCtrl.dispose();
+    _modelCtrl.dispose();
+    _colorCtrl.dispose();
+    _plateCtrl.dispose();
     super.dispose();
   }
 
@@ -244,6 +253,9 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
       lengthCm:  metersToCm(_lengthCtrl.text)!,
       weightKg:  int.parse(_weightCtrl.text),
       axleCount: int.parse(_axleCtrl.text),
+      model:     _modelCtrl.text.trim(),
+      color:     _colorCtrl.text.trim(),
+      plate:     TruckProfile.normalizePlate(_plateCtrl.text),
     );
     final provider = context.read<TruckProfileProvider>();
     await provider.saveProfile(profile);
@@ -310,6 +322,59 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
                 min: 2,
                 max: 9,
               ),
+              const SizedBox(height: 28),
+              // Identidade visual: é por caminhão, não por motorista, porque é
+              // ela que vai na ficha do S.O.S. — e quem roda dois caminhões
+              // anunciava o errado quando isso morava no perfil da pessoa.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Pra te acharem na estrada',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Aparece pra quem estiver perto quando você pedir S.O.S. '
+                  'Opcional.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _field(
+                ctrl: _modelCtrl,
+                label: 'Modelo',
+                hint: 'Ex: Scania R450',
+                isText: true,
+                opcional: true,
+              ),
+              const SizedBox(height: 12),
+              _field(
+                ctrl: _colorCtrl,
+                label: 'Cor',
+                hint: 'Ex: Branco',
+                isText: true,
+                opcional: true,
+              ),
+              const SizedBox(height: 12),
+              _field(
+                ctrl: _plateCtrl,
+                label: 'Placa',
+                hint: 'Ex: ABC1D23',
+                isText: true,
+                opcional: true,
+                cap: TextCapitalization.characters,
+                formatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9-]')),
+                  LengthLimitingTextInputFormatter(8),
+                ],
+                validaTexto: (v) =>
+                    TruckProfile.isValidPlate(TruckProfile.normalizePlate(v))
+                        ? null
+                        : 'Placa inválida',
+              ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -332,6 +397,10 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
     required String hint,
     bool isText = false,
     bool meters = false, // texto em metros, limites (min/max) em cm
+    bool opcional = false,
+    TextCapitalization? cap,
+    List<TextInputFormatter>? formatters,
+    String? Function(String)? validaTexto,
     int min = 1,
     int max = 999999,
   }) {
@@ -345,16 +414,19 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
       keyboardType: isText
           ? TextInputType.text
           : TextInputType.numberWithOptions(decimal: meters),
-      textCapitalization:
-          isText ? TextCapitalization.words : TextCapitalization.none,
-      inputFormatters: isText
-          ? []
-          : meters
-              ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))]
-              : [FilteringTextInputFormatter.digitsOnly],
+      textCapitalization: cap ??
+          (isText ? TextCapitalization.words : TextCapitalization.none),
+      inputFormatters: formatters ??
+          (isText
+              ? []
+              : meters
+                  ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))]
+                  : [FilteringTextInputFormatter.digitsOnly]),
       validator: (v) {
-        if (v == null || v.trim().isEmpty) return 'Campo obrigatório';
-        if (isText) return null;
+        if (v == null || v.trim().isEmpty) {
+          return opcional ? null : 'Campo obrigatório';
+        }
+        if (isText) return validaTexto?.call(v);
         final n = meters ? metersToCm(v) : int.tryParse(v);
         if (n == null || n < min) {
           return meters ? 'Valor mínimo: ${cmToMeters(min)} m' : 'Valor mínimo: $min';

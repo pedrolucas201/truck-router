@@ -30,6 +30,8 @@ const (
 	sosTTL         = 2 * time.Hour
 	sosPerfilIdade = 24 * time.Hour // ponytail: constante calibrada; sobe se aparecer isca
 	sosTextoMax    = 120
+	sosCaminhaoMax = 60 // eram os limites da regra do Firestore em `profiles`
+	sosCorMax      = 30
 )
 
 var sosTipos = map[string]bool{
@@ -49,6 +51,11 @@ type sosCreateIn struct {
 	Lng   float64 `json:"lng"`
 	Tipo  string  `json:"tipo"`
 	Texto string  `json:"texto"`
+	// Identidade do caminhão ATIVO, enviada pelo app: o perfil selecionado vive
+	// no aparelho e o servidor não tem como saber qual é. Não abre brecha — o
+	// motorista já era dono desse texto no próprio perfil; só o tamanho importa.
+	Caminhao string `json:"caminhao"`
+	Cor      string `json:"cor"`
 }
 
 // validateSos é pura pra ser testável sem Firestore.
@@ -61,6 +68,14 @@ func validateSos(in sosCreateIn) error {
 	}
 	if utf8.RuneCountInString(in.Texto) > sosTextoMax {
 		return errors.New("texto")
+	}
+	// Mesmos tetos que a regra do Firestore impunha quando isto morava em
+	// `profiles`: sem eles o cliente enfia texto arbitrário no doc do S.O.S.
+	if utf8.RuneCountInString(in.Caminhao) > sosCaminhaoMax {
+		return errors.New("caminhao")
+	}
+	if utf8.RuneCountInString(in.Cor) > sosCorMax {
+		return errors.New("cor")
 	}
 	return nil
 }
@@ -77,8 +92,11 @@ func sosErr(w http.ResponseWriter, code int, key string, extra map[string]any) {
 	json.NewEncoder(w).Encode(body)
 }
 
+// perfil é a PESSOA. Caminhão e cor saíram daqui em 2.4.74: identidade de
+// veículo é por caminhão e o app manda a do perfil ativo no corpo do pedido
+// (ver sosCreateIn) — de `profiles` só vem o que é do motorista.
 type perfil struct {
-	Nome, Caminhao, Cor, Telefone string
+	Nome, Telefone string
 }
 
 func (h *Sos) perfil(r *http.Request, uid string) (perfil, bool) {
@@ -88,7 +106,7 @@ func (h *Sos) perfil(r *http.Request, uid string) (perfil, bool) {
 	}
 	d := doc.Data()
 	str := func(k string) string { s, _ := d[k].(string); return s }
-	p := perfil{Nome: str("name"), Caminhao: str("truck"), Cor: str("color"), Telefone: str("phone")}
+	p := perfil{Nome: str("name"), Telefone: str("phone")}
 	return p, p.Nome != "" && p.Telefone != ""
 }
 
@@ -151,8 +169,8 @@ func (h *Sos) Create(w http.ResponseWriter, r *http.Request) {
 	ref, _, err := col.Add(r.Context(), map[string]any{
 		"uid":      uid,
 		"nome":     p.Nome,
-		"caminhao": p.Caminhao,
-		"cor":      p.Cor,
+		"caminhao": in.Caminhao,
+		"cor":      in.Cor,
 		"tipo":     in.Tipo,
 		"texto":    in.Texto,
 		"lat":      in.Lat,

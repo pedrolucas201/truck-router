@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/truck_profile.dart';
+import '../services/driver_profile_service.dart';
 
 class TruckProfileProvider extends ChangeNotifier {
   static const _profilesKey = 'truck_profiles_v2';
   static const _activeKey   = 'truck_active_id';
+  static const _migradoKey  = 'truck_identity_migrated';
 
   List<TruckProfile> _profiles = [];
   String? _activeId;
@@ -52,7 +54,27 @@ class TruckProfileProvider extends ChangeNotifier {
           .toList();
       _activeId = prefs.getString(_activeKey) ?? _profiles.first.id;
     }
+    await _migrarIdentidade(prefs);
     notifyListeners();
+  }
+
+  /// Traz modelo/cor/placa do perfil do MOTORISTA (onde moravam até 2.4.73) pro
+  /// caminhão ativo. Roda uma vez por instalação: com flag, e não "só quando
+  /// está vazio", senão apagar o modelo de propósito faria ele voltar no
+  /// próximo boot.
+  Future<void> _migrarIdentidade(SharedPreferences prefs) async {
+    if (prefs.getBool(_migradoKey) ?? false) return;
+    await prefs.setBool(_migradoKey, true);
+    final legado = await DriverProfileService.legadoIdentidade();
+    if (legado == null || _profiles.isEmpty) return;
+    final i = _profiles.indexWhere((p) => p.id == _activeId);
+    final idx = i >= 0 ? i : 0;
+    _profiles[idx] = _profiles[idx].copyWith(
+      model: legado.model,
+      color: legado.color,
+      plate: legado.plate,
+    );
+    await _persist(prefs);
   }
 
   Future<void> setActive(String id) async {
