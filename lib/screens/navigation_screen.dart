@@ -2937,8 +2937,11 @@ class _NavigationScreenState extends State<NavigationScreen>
       return;
     }
     try {
+      // Caminhão ATIVO da viagem: é ele que vai na ficha, não um campo fixo do
+      // perfil da pessoa (que anunciava o veículo errado em quem roda dois).
       final id = await SosService.abrir(
-          lat: pos.latitude, lng: pos.longitude, tipo: r.$1, texto: r.$2);
+          lat: pos.latitude, lng: pos.longitude, tipo: r.$1, texto: r.$2,
+          caminhao: widget.truck.model, cor: widget.truck.color);
       _speak('S.O.S. aberto. Motoristas próximos vão ser avisados.', espera: true);
       if (mounted) _mostrarSosFicha(id, null);
     } on SosException catch (e) {
@@ -2972,7 +2975,16 @@ class _NavigationScreenState extends State<NavigationScreen>
           ListTile(
             leading: Icon(Icons.sos, color: Colors.red.shade700),
             title: const Text('Pedir ajuda'),
-            subtitle: const Text('S.O.S. pra motoristas próximos'),
+            // Sem Google a rede está desligada nos dois sentidos — inclusive
+            // pra RECEBER, que era silencioso até 2.4.73 (só erro no log).
+            subtitle: Text(
+              AuthService.isGoogleLinked
+                  ? 'S.O.S. pra motoristas próximos'
+                  : 'Entre com o Google pra ativar',
+              style: AuthService.isGoogleLinked
+                  ? null
+                  : TextStyle(color: Colors.red.shade700),
+            ),
             onTap: () => Navigator.pop(context, 'sos'),
           ),
         ]),

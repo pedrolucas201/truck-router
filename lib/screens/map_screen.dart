@@ -1006,12 +1006,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       builder: (_) => const SosAbrirSheet(),
     );
     if (r == null || !mounted) return;
+    // Caminhão ATIVO, lido antes do await: é ele que vai na ficha do S.O.S.
+    final truck = context.read<TruckProfileProvider>().profile;
     try {
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
       ).timeout(const Duration(seconds: 15));
       final id = await SosService.abrir(
-          lat: pos.latitude, lng: pos.longitude, tipo: r.$1, texto: r.$2);
+          lat: pos.latitude, lng: pos.longitude, tipo: r.$1, texto: r.$2,
+          caminhao: truck.model, cor: truck.color);
       if (mounted) _fichaSos(id);
     } on SosException catch (e) {
       if (!mounted) return;
@@ -1810,7 +1813,24 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                   child: Row(children: [
                                     Icon(Icons.sos, color: Colors.red.shade700, size: 20),
                                     const SizedBox(width: 12),
-                                    const Text('Pedir ajuda'),
+                                    // Sem Google a rede está DESLIGADA nos dois
+                                    // sentidos: ele não pede e, pior, não recebe
+                                    // pedido de ninguém (a regra do `sos` exige
+                                    // Google pra ler). Até 2.4.73 isso era mudo:
+                                    // só um erro de permissão no log. Ver o
+                                    // gate sosPerfilOk, que cobre só o pedir.
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text('Pedir ajuda'),
+                                        if (!AuthService.isGoogleLinked)
+                                          Text('Entre com o Google pra ativar',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.red.shade700)),
+                                      ],
+                                    ),
                                   ]),
                                 ),
                                 PopupMenuItem(
