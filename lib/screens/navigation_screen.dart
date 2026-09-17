@@ -370,6 +370,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   // _promptedKeys = já perguntados nesta sessão (não naga na mesma passada).
   final Set<String> _curatedKeys  = {};
   final Set<String> _promptedKeys = {};
+  // Radares cujo skip de pop-up já foi logado nesta viagem. Ver o log em
+  // _maybePromptCuration: sem isto, um write por fix de GPS.
+  final Set<String> _skipLogged   = {};
   RadarPoint? _curationPrompt;      // radar sendo perguntado agora (null = sem card)
   bool _curationSpeedStep = false;  // 2ª etapa: chips de velocidade
   Timer? _curationTimer;            // auto-some sem mudar nada
@@ -3334,10 +3337,20 @@ class _NavigationScreenState extends State<NavigationScreen>
     // não olha zoom; sem telemetria não dá pra separar bug de percepção. Loga
     // abrir e pular (dentro dos 60 m, raro) com o zoom da hora.
     if (_curatedKeys.contains(key) || _promptedKeys.contains(key)) {
-      FieldLog.event('radar_prompt_skip', {
-        'zoom': _zoomLevel.name,
-        'why': _curatedKeys.contains(key) ? 'curated' : 'prompted',
-      });
+      // UMA vez por radar. Isto roda dentro do _onPositionUpdate, ou seja a
+      // cada fix de GPS: parado a menos de 60 m de um radar já perguntado,
+      // virava rajada de writes — 63 dos 181 eventos da viagem de 17/09, mais
+      // que o próprio heartbeat, e o volume cresce com tempo PARADO, não com
+      // km. O primeiro skip já responde a pergunta do zoom (relato do Beto,
+      // 04/09); do segundo em diante é ruído que come a cota de gravação do
+      // Spark e leva junto curadoria e crowd. Mesmo padrão do ramo `opposite`
+      // acima e do _radarPassLogger.
+      if (_skipLogged.add(key)) {
+        FieldLog.event('radar_prompt_skip', {
+          'zoom': _zoomLevel.name,
+          'why': _curatedKeys.contains(key) ? 'curated' : 'prompted',
+        });
+      }
       return;
     }
     _promptedKeys.add(key);
