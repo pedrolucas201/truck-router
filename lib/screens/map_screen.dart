@@ -61,6 +61,7 @@ import '../data/map_styles.dart';
 import '../providers/theme_controller.dart';
 import '../utils/truck_glyph.dart';
 import '../widgets/route_loading_indicator.dart';
+import 'about_screen.dart';
 import 'driver_profile_screen.dart';
 import 'voice_settings_screen.dart';
 
@@ -1787,6 +1788,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     builder: (_) => const DriverProfileScreen(),
                                   ));
                                 }
+                                // Crédito das fontes: o OpenStreetMap (ODbL) e o
+                                // MapAtlas (CC BY 4.0) EXIGEM atribuição. Sem esta
+                                // tela o uso do dado está fora da licença.
+                                if (value == 'about') {
+                                  Navigator.push(context, MaterialPageRoute(
+                                    builder: (_) => const AboutScreen(),
+                                  ));
+                                }
                                 if (value == 'truck') {
                                   final truckProv = context.read<TruckProfileProvider>();
                                   final routeProv = context.read<RouteProvider>();
@@ -1847,6 +1856,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     Icon(Icons.record_voice_over, color: Colors.teal.shade700, size: 20),
                                     const SizedBox(width: 12),
                                     const Text('Voz do guia'),
+                                  ]),
+                                ),
+                                PopupMenuItem(
+                                  value: 'about',
+                                  child: Row(children: [
+                                    Icon(Icons.info_outline, color: Colors.teal.shade700, size: 20),
+                                    const SizedBox(width: 12),
+                                    const Text('Sobre'),
                                   ]),
                                 ),
                                 PopupMenuItem(

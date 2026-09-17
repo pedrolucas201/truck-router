@@ -61,9 +61,21 @@ void main() {
             reason: 'radar de cobertura ${r.lat},${r.lng} com direção de '
                 '${r.dirSrc} — o `Sentido` cardeal do ARTESP está bloqueado por '
                 'semântica igual ao DER-SP');
-        expect(r.dir2, isNull,
-            reason: 'cobertura é sempre unidirecional (pista de sentido único); '
-                'bidirecional aqui = cardeal vazou');
+        // `dir2` (bidirecional) é aceito de qualquer fonte conhecida, e isto foi
+        // refinado em 17/09/2026 — o teste estava restritivo além do invariante.
+        //
+        // Bidirecional NUNCA CALA: o radar alerta nos dois sentidos, então o
+        // erro possível é falso alarme (passável), nunca sem-alarme (multa). E
+        // no caso do cardeal ele nem é ambíguo: `{bearing, bearing+180}` é o
+        // MESMO conjunto nas duas leituras de "Norte" (fluxo-vs-face), que é
+        // exatamente por que os 394 bidirecionais do DER-SP foram aprovados em
+        // 16/07 (+136 no asset) enquanto os 568 unidirecionais seguem bloqueados.
+        //
+        // O invariante que importa é sobre UNIDIRECIONAL, e ele continua nas
+        // duas asserções em volta: direção unidirecional só de fonte cuja
+        // semântica não é ambígua. A proibição total de dir2 era acidente do
+        // escopo de 16/09, quando a cobertura vinha toda do `osmgeom -snap`,
+        // que por construção só produz unidirecional.
       }
       expect(r.status, isNot('inactive'),
           reason: 'radar de cobertura ${r.lat},${r.lng} inativo — só os ATIVOS '
