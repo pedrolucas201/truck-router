@@ -3292,15 +3292,22 @@ class _NavigationScreenState extends State<NavigationScreen>
     _curatedKeys.add(dismissalKey(r.lat, r.lng));
     // Veredito com o LADO: um "não existe" dado da pista oposta é o que a
     // auditoria de 16/09 achou 9 vezes no histórico (e não dava pra saber).
-    FieldLog.event('radar_curate', {
-      'rid': dismissalKey(r.lat, r.lng),
-      'exists': exists,
-      'speed': speed,
-      'side': classifyRadarDirection(
-        dir1: r.dir1, dir2: r.dir2, dirSrc: r.dirSrc, userHeading: _lastHeading,
-      ).name,
-      'src': r.dirSrc ?? '',
-    });
+    // `vote` (era `radar_curate` até 2.4.74): mesmo formato da blitz e da
+    // restrição, porque a pergunta que interessa é o CONFLITO no mesmo ponto —
+    // um diz que não existe, outro diz 60, outro 80 — e isso se responde com
+    // UMA consulta por `rid`, não com um evento por caminho.
+    logVote(
+      what: 'radar',
+      say: exists ? (speed > 0 ? 'velocidade' : 'existe') : 'nao_existe',
+      rid: dismissalKey(r.lat, r.lng),
+      extra: {
+        'kmh': speed,
+        'side': classifyRadarDirection(
+          dir1: r.dir1, dir2: r.dir2, dirSrc: r.dirSrc, userHeading: _lastHeading,
+        ).name,
+        'src': r.dirSrc ?? '',
+      },
+    );
     final uid = await AuthService.getUid();
     await FirestoreRadarService.setOverride(
         lat: r.lat, lng: r.lng, exists: exists, speedKmh: speed, uid: uid);

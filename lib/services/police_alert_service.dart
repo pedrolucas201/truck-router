@@ -35,7 +35,7 @@ class PoliceAlertService {
     required String uid,
   }) async {
     final now = DateTime.now();
-    await _col.add({
+    final ref = await _col.add({
       'type': type.name,
       'lat': lat,
       'lng': lng,
@@ -45,6 +45,7 @@ class PoliceAlertService {
       'confirmations': 0,
       'notThereCount': 0,
     });
+    logVote(what: 'blitz', say: 'criou', rid: ref.id, extra: {'tipo': type.name});
   }
 
   static Future<void> confirm(String id) async {
@@ -59,13 +60,16 @@ class PoliceAlertService {
         ),
       });
     });
+    logVote(what: 'blitz', say: 'confirma', rid: id);
   }
 
   static Future<void> notThere(String id) async {
     final ref = _col.doc(id);
+    var total = 0;
     await FirebaseFirestore.instance.runTransaction((tx) async {
       final snap = await tx.get(ref);
       final count = (snap['notThereCount'] as num).toInt() + 1;
+      total = count;
       if (count >= 3) {
         tx.update(ref, {
           'notThereCount': count,
@@ -75,5 +79,9 @@ class PoliceAlertService {
         tx.update(ref, {'notThereCount': count});
       }
     });
+    // `n` e `matou`: é o único lugar do app onde um limiar de votos JÁ decide
+    // (3 derrubam o alerta). Sem isto não há como saber se 3 é o número certo.
+    logVote(what: 'blitz', say: 'sumiu', rid: id,
+        extra: {'n': total, 'matou': total >= 3});
   }
 }

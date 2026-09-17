@@ -71,3 +71,28 @@ class FieldLog {
   static String _compact(Map<String, dynamic> d) =>
       d.entries.map((e) => '${e.key}=${e.value}').join(' ');
 }
+
+/// Registra QUALQUER opinião do motorista sobre um ponto: radar, blitz,
+/// restrição. Evento único (`vote`) de propósito — o que interessa é o
+/// CONFLITO no mesmo ponto, e isso exige uma consulta só, não seis.
+///
+/// Pedido do Pedro (17/09/2026): "vai ter motorista dizendo que o radar é da
+/// contramão, outro dizendo que não é, outro que não existe, outro que é 80,
+/// outro que é 60... tudo isso num ÚNICO radar". Hoje o último a falar vence e
+/// os outros não deixam rastro; sem este registro não há como decidir limiar
+/// de maioria com dado em vez de chute.
+///
+/// [what] radar | blitz | restricao. [say] o que ele disse: existe |
+/// nao_existe | confirma | sumiu | velocidade | criou. [rid] identifica o
+/// ponto — chave geográfica (`lat_lng`) no radar, porque os votos chegam por
+/// caminhos diferentes e precisam casar; id do doc na blitz e na restrição.
+///
+/// Quem votou NÃO vai aqui: o uid sai do `app_start` da sessão, como o
+/// `viagem.py` já faz. Duplicar o uid em todo voto é peso à toa.
+void logVote({
+  required String what,
+  required String say,
+  required String rid,
+  Map<String, dynamic> extra = const {},
+}) =>
+    FieldLog.event('vote', {'what': what, 'say': say, 'rid': rid, ...extra});

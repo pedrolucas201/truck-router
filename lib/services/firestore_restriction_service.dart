@@ -92,6 +92,7 @@ class FirestoreRestrictionService {
         .collection(_col)
         .doc(docId)
         .update({'confirmedBy': FieldValue.increment(1)});
+    logVote(what: 'restricao', say: 'confirma', rid: docId);
   }
 
   static Future<void> report(String docId) async {
@@ -99,5 +100,6 @@ class FirestoreRestrictionService {
         .collection(_col)
         .doc(docId)
         .update({'reportedBy': FieldValue.increment(1)});
+    logVote(what: 'restricao', say: 'nao_existe', rid: docId);
   }
 }
