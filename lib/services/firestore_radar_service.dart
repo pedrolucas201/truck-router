@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config.dart';
 import '../utils/geo_bounds.dart';
 import '../models/radar_point.dart';
+import 'auth_service.dart';
 import 'field_log.dart';
 import 'radar_service.dart';
 
@@ -12,7 +15,46 @@ import 'radar_service.dart';
 class RadarOverride {
   final bool exists;
   final int speedKmh;
-  const RadarOverride(this.exists, this.speedKmh);
+
+  /// O servidor apurou MAIORIA sobre isto (3+ votos, sem empate) e ela vale pra
+  /// todos — inclusive pra quem votou o contrário. Decisão do Pedro (17/09):
+  /// "se 90 pessoas concordam e 1 discorda, a que discorda aceita a da maioria".
+  /// Só com estes ligados o remoto passa por cima do voto local; ver
+  /// [mesclarOverrides].
+  final bool mandaExists;
+  final bool mandaKmh;
+
+  const RadarOverride(this.exists, this.speedKmh,
+      {this.mandaExists = false, this.mandaKmh = false});
+}
+
+/// Junta o que o servidor apurou com o voto DESTE aparelho. Puro/testável
+/// porque é a regra que o motorista sente na cara: ou ele vê o próprio palpite,
+/// ou vê o da maioria.
+///
+/// Sem maioria, o local manda — é o que faz a curadoria valer offline e o que
+/// impede radar negado de ressuscitar quando a cota do Firestore estoura. Com
+/// maioria, o remoto manda naquilo que foi decidido, campo por campo: dá pra ter
+/// maioria sobre "existe" e empate sobre o limite ao mesmo tempo.
+Map<String, RadarOverride> mesclarOverrides(
+  Map<String, RadarOverride> remoto,
+  Map<String, RadarOverride> local,
+) {
+  final out = Map<String, RadarOverride>.from(remoto);
+  local.forEach((k, meu) {
+    final deles = remoto[k];
+    if (deles == null) {
+      out[k] = meu;
+      return;
+    }
+    out[k] = RadarOverride(
+      deles.mandaExists ? deles.exists : meu.exists,
+      deles.mandaKmh ? deles.speedKmh : meu.speedKmh,
+      mandaExists: deles.mandaExists,
+      mandaKmh: deles.mandaKmh,
+    );
+  });
+  return out;
 }
 
 /// Chave determinística de localização (~1m). Mesma p/ Firestore e set local.
@@ -221,11 +263,23 @@ class FirestoreRadarService {
       List<LatLng> points) async {
     final fs    = await fetchOverrides(points);
     final local = await _loadLocal();
-    return {...fs, ...local};
+    return mesclarOverrides(fs, local);
   }
 
-  /// Verdicto do curador. Grava LOCAL na hora (autoritativo, offline) e espelha
-  /// no Firestore (fato global, best-effort). [speedKmh] 0 = só confirma existência.
+  /// Veredito do curador: UM voto deste motorista sobre este radar.
+  ///
+  /// Grava LOCAL na hora (autoritativo enquanto não há maioria, funciona offline
+  /// e imediato) e manda o voto pro BACKEND, que conta e publica o resultado.
+  ///
+  /// Por que não escreve mais direto no Firestore: era um `set()` num doc por
+  /// radar, então o último a votar apagava os outros — Beto dizendo 80 e
+  /// Fernando 90 nunca convergiam, e ninguém ficava sabendo que houve
+  /// discordância. E contagem feita no celular não resiste a má-fé, que é
+  /// justamente o que a maioria deve barrar (decisão do Pedro, 17/09/2026).
+  ///
+  /// Falha de rede não perde o veredito: o local já está gravado e o motorista
+  /// segue vendo o dele. O voto é que não entra na contagem — ele revota quando
+  /// passar de novo. [speedKmh] 0 = só confirma existência.
   static Future<void> setOverride({
     required double lat,
     required double lng,
@@ -233,18 +287,29 @@ class FirestoreRadarService {
     int speedKmh = 0,
     required String uid,
   }) async {
+    final rid = dismissalKey(lat, lng);
     final local = await _loadLocal();
-    local[dismissalKey(lat, lng)] = RadarOverride(exists, speedKmh);
+    local[rid] = RadarOverride(exists, speedKmh);
     await _persistLocal();
     try {
-      await _db.collection(_overridesCol).doc(dismissalKey(lat, lng)).set({
-        'lat': lat,
-        'lng': lng,
-        'exists': exists,
-        'speedKmh': speedKmh,
-        'byUid': uid,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      final resp = await http
+          .post(
+            Uri.parse('$backendUrl/radar/voto'),
+            headers: {
+              'Content-Type': 'application/json',
+              ...await AuthService.getHeaders(),
+            },
+            // `rid` vai pronto: recalcular a chave no servidor abriria a chance
+            // de a 5ª casa arredondar diferente e o voto não casar com o radar.
+            body: jsonEncode({
+              'rid': rid, 'lat': lat, 'lng': lng,
+              'exists': exists, 'kmh': speedKmh,
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+      if (resp.statusCode >= 300) {
+        FieldLog.event('voto_falhou', {'http': resp.statusCode, 'rid': rid});
+      }
     } catch (e, st) {
       FieldLog.error('radar_override', e, st);
     }
@@ -267,8 +332,15 @@ class FirestoreRadarService {
         final data = d.data();
         final lng = (data['lng'] as num).toDouble();
         if (lng < minLng - pad || lng > maxLng + pad) continue;
-        m[d.id] = RadarOverride(data['exists'] as bool? ?? true,
-            (data['speedKmh'] as num?)?.toInt() ?? 0);
+        m[d.id] = RadarOverride(
+          data['exists'] as bool? ?? true,
+          (data['speedKmh'] as num?)?.toInt() ?? 0,
+          // Docs gravados ANTES da apuração no servidor não têm estes campos.
+          // Default false = tratados como voto comum, sem força pra sobrepor o
+          // local — que é o comportamento que sempre existiu.
+          mandaExists: data['mandaExists'] as bool? ?? false,
+          mandaKmh: data['mandaKmh'] as bool? ?? false,
+        );
       }
       return m;
     } catch (e, st) {

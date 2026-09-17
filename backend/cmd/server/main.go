@@ -53,6 +53,13 @@ func main() {
 		r.Post("/sos", sos.Create)
 		r.Post("/sos/{id}/aceitar", sos.Aceitar)
 
+		// Voto de radar: a CONTAGEM é aqui porque no celular ela não resiste a
+		// má-fé (app modificado escreveria o placar que quisesse), e a decisão
+		// do Pedro foi maioria valendo pra todos. O app manda só a própria
+		// opinião; o servidor conta, decide e publica em `radar_overrides`.
+		votos := handlers.NewVotos(fsClient)
+		r.Post("/radar/voto", votos.Create)
+
 		// HERE geocoding proxy
 		r.Get("/here/autocomplete", handlers.HereAutocomplete)
 		r.Get("/here/geocode", handlers.HereGeocode)
