@@ -73,6 +73,24 @@ const kOriginFreshFor = Duration(minutes: 2);
 bool originFixIsStale(DateTime? fixAt, DateTime now) =>
     fixAt != null && now.difference(fixAt) > kOriginFreshFor;
 
+/// Já pedimos a localização alguma vez nesta instalação.
+const _kLocationAsked = 'location_asked';
+
+/// Puro/testável: o boot deve abrir o diálogo de permissão?
+///
+/// O app é um navegador — ninguém o instala pra "só olhar o mapa" — mas até
+/// 2.4.72 o único `requestPermission` ficava no toque do botão de GPS. Quem
+/// instala (ou REINSTALA: o Beto em 17/09/2026, com as prefs devolvidas pelo
+/// Auto Backup e a permissão zerada) caía na Praça da Sé e nunca via o
+/// `_primeInitialCamera` disparar — a feature que o Gilberto pediu em 07/08.
+///
+/// UMA vez por instalação, e nunca em `deniedForever`: o Android promove a
+/// SEGUNDA negação a permanente, então o boot só pode gastar uma. A outra fica
+/// pro botão de GPS, que o motorista toca com intenção — e que agora oferece
+/// os ajustes do sistema quando já está bloqueado.
+bool shouldAskLocationOnBoot(LocationPermission perm, bool alreadyAsked) =>
+    perm == LocationPermission.denied && !alreadyAsked;
+
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
 
@@ -625,13 +643,31 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
+      await (await SharedPreferences.getInstance())
+          .setBool(_kLocationAsked, true);
       permission = await Geolocator.requestPermission();
+      FieldLog.event(
+          'location_perm', {'from': 'botao', 'outcome': permission.name});
     }
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
+      // Bloqueado de vez: sem este atalho o motorista fica com um navegador que
+      // não navega e nenhuma pista de que a saída é nos ajustes do Android.
+      final bloqueado = permission == LocationPermission.deniedForever;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Permissão de localização negada')),
+          SnackBar(
+            content: Text(bloqueado
+                ? 'Localização bloqueada nos ajustes do Android'
+                : 'Permissão de localização negada'),
+            duration: Duration(seconds: bloqueado ? 8 : 4),
+            action: bloqueado
+                ? SnackBarAction(
+                    label: 'AJUSTES',
+                    onPressed: Geolocator.openAppSettings,
+                  )
+                : null,
+          ),
         );
       }
       return;
@@ -663,6 +699,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<bool> _locationAlreadyAsked() async =>
+      (await SharedPreferences.getInstance()).getBool(_kLocationAsked) ?? false;
+
   /// Abre o mapa onde o motorista está, e mostra o ponto azul dele.
   ///
   /// Pedido do Gilberto (07/08/2026): "quando abrir a tela, mostrar onde a gente
@@ -684,7 +723,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     // sem Play Services (ou com serviço de localização capado) joga exceção
     // assíncrona sem dono. Falhar aqui só significa abrir o mapa como antes.
     try {
-      final perm = await Geolocator.checkPermission();
+      var perm = await Geolocator.checkPermission();
+      if (shouldAskLocationOnBoot(perm, await _locationAlreadyAsked())) {
+        // Marca ANTES de pedir: se o processo morrer com o diálogo aberto, o
+        // próximo boot não gasta uma segunda negação.
+        await (await SharedPreferences.getInstance())
+            .setBool(_kLocationAsked, true);
+        perm = await Geolocator.requestPermission();
+        FieldLog.event('location_perm', {'from': 'boot', 'outcome': perm.name});
+      }
       if (perm != LocationPermission.always &&
           perm != LocationPermission.whileInUse) {
         return;
