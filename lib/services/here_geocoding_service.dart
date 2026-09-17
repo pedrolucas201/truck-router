@@ -508,6 +508,18 @@ class HereGeocodingService {
             : acceptsAddressResult(query, locType, formatted, types));
     FieldLog.event(tag, {
       'lt': locType, 'ok': ok, 'pm': first['partial_match'] == true,
+      // Na REJEIÇÃO, o que a Google devolveu e com que tipos. Sem isto o log
+      // dizia só "rejeitei" e as duas causas possíveis ficavam
+      // indistinguíveis: a Google devolveu outra rua (filtro certo, é buraco
+      // de cobertura — caso Carvalhal) ou devolveu a rua certa e uma palavra
+      // barrou (filtro errado, é pra afrouxar). Os consertos são opostos.
+      // Medido em 17/09: o Beto digitou 10 variações de um endereço em
+      // Jacareí, 6 rejeições com location_type=ROOFTOP, e desistiu sem
+      // escolher nada. `ty` separa rejeição por tipo de rejeição por palavra.
+      // Só no !ok: no caminho feliz seria peso à toa no doc.
+      if (!ok) 'got': formatted.length > 70 ? formatted.substring(0, 70) : formatted,
+      if (!ok) 'ty': types.take(3).join('|'),
+      if (!ok) 'q': query.length > 50 ? query.substring(0, 50) : query,
     });
     if (!ok) return null;
     return GeocodingSuggestion.place(
