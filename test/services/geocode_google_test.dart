@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:truck_router/services/here_geocoding_service.dart';
 
 /// Gate do resultado da Google pra endereço com número de casa.
@@ -87,6 +88,25 @@ void main() {
       // "Edard" × "Edouard" = 2 edições.
       expect(HereGeocodingService.acceptsAddressResult(
           'av Edard six 540', 'ROOFTOP', edouard, premise), isFalse);
+    });
+
+    test('googleSlot: HERE com o número de OUTRA rua não esconde a Google', () {
+      // Replay real de "av Eduard six 540" contra produção (18/09).
+      GeocodingSuggestion here(String t) =>
+          GeocodingSuggestion.place(title: t, pos: const LatLng(0, 0), source: 'dc');
+      final merged = [
+        here('Avenida Eduardo Lourenço, 540, São José dos Campos - SP, 12226-552, Brasil'),
+        here('Avenida Doutor Eduardo Cury, 540, Jardim Esplanada, São José dos Campos - SP'),
+        here('Avenida Roberto Eduardo Lee, 540, Caçapava - SP, 12283-290, Brasil'),
+      ];
+      // Google sabe o número (o caso do Beto) → topo.
+      expect(HereGeocodingService.googleSlot(merged, '540', exact: true), 0);
+      // Google só tem o centro da rua → logo abaixo da 1ª da HERE com o número.
+      expect(HereGeocodingService.googleSlot(merged, '540', exact: false), 1);
+      // Carvalhal: HERE sem o número pedido → topo mesmo sem saber o número.
+      expect(HereGeocodingService.googleSlot(
+          [here('Rua Antônia Helena de Carvalho Souza, 35, Caçapava - SP, Brasil')], '36',
+          exact: false), 0);
     });
 
     test('ROOFTOP com número exato → aceita', () {

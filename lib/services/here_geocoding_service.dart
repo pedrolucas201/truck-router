@@ -127,15 +127,11 @@ class HereGeocodingService {
 
     // Já está rodando desde antes do Future.wait; aqui só se colhe o resultado.
     // Km: só vira sugestão se achou o MARCO — ver [acceptsKmResult].
-    // Número de casa: só entra se nenhuma sugestão da HERE já traz ESSE número
-    // (mesma regra do OSM abaixo). Quando a HERE tem o ponto exato ele é mais
-    // preciso que o centro de rua da Google e a linha extra seria duplicata
-    // com outro rótulo ("Rua X, 36" × "R. X, 36").
+    // Número de casa: passou no [acceptsAddressResult] → posição por
+    // [googleSlot]; a Google nunca some por causa da HERE.
     final g = await googleKm;
-    final hereHasNum = houseNum != null &&
-        merged.any((s) => labelHasHouseNumber(s.title, houseNum));
-    if (g != null && !hereHasNum && seenKeys.add(g.title.toLowerCase().trim())) {
-      merged.insert(0, g);
+    if (g != null && seenKeys.add(g.s.title.toLowerCase().trim())) {
+      merged.insert(googleSlot(merged, houseNum, exact: g.exact), g.s);
     }
     // O marco entra por último pra ficar em PRIMEIRO: dado oficial contra palpite
     // de endereço. Pode vir mais de um — a quilometragem reinicia a cada estado e
@@ -350,6 +346,26 @@ class HereGeocodingService {
   static bool labelHasHouseNumber(String label, String num) =>
       RegExp(',\\s*$num(?![\\d-])').hasMatch(label);
 
+  /// Onde a sugestão da Google (já aprovada no filtro de nome) entra na lista.
+  ///
+  /// [exact] = a Google conhece o número (ROOFTOP/RANGE_INTERPOLATED): topo,
+  /// sempre. Até a 2.4.77 ela SUMIA se qualquer sugestão da HERE trouxesse o
+  /// mesmo número, e a regra só olhava o número: pro "av Eduard six 540" do
+  /// Beto (17/09) a HERE mostrava "Rua Eduardo, 540, Guarulhos" (64 km) e
+  /// escondia o "Av. Edouard Six, 540, Jacareí" ROOFTOP.
+  /// Sem [exact] (GEOMETRIC_CENTER = centro da rua, número desconhecido) e com
+  /// a HERE trazendo o número: DESCE pra logo abaixo dela, nunca some — se a
+  /// HERE errou a rua, a certa segue visível em 2º. Sem o número na HERE: topo
+  /// (Carvalhal: a HERE só tinha o 35 de OUTRA rua e o Beto foi pra lá).
+  /// Teto 4: a lista corta em 5.
+  @visibleForTesting
+  static int googleSlot(List<GeocodingSuggestion> merged, String? houseNum,
+      {required bool exact}) {
+    if (exact || houseNum == null) return 0;
+    final i = merged.indexWhere((s) => labelHasHouseNumber(s.title, houseNum));
+    return i < 0 ? 0 : (i + 1).clamp(0, 4);
+  }
+
   /// Marco quilométrico das federais, resolvido no backend a partir do SNV/DNIT.
   ///
   /// O parse do texto (número da BR, apelidos como "Fernão Dias", sufixo "+700")
@@ -517,7 +533,7 @@ class HereGeocodingService {
   // de casa ([acceptsAddressResult]). Telemetria separada por caso — é ela que
   // mede a cobertura real da Google em campo; `pm` (partial_match) entra só
   // pra confirmar em campo que não serve de gate.
-  static Future<GeocodingSuggestion?> _googleGeocode(
+  static Future<({GeocodingSuggestion s, bool exact})?> _googleGeocode(
       String query, {required bool km, LatLng? bias}) async {
     final tag   = km ? 'geocode_google_km' : 'geocode_google_addr';
     final first = await _googleFirst(query, tag, bias: bias);
@@ -547,10 +563,13 @@ class HereGeocodingService {
       if (!ok) 'q': query.length > 50 ? query.substring(0, 50) : query,
     });
     if (!ok) return null;
-    return GeocodingSuggestion.place(
-      title:  formatted.isEmpty ? query : formatted,
-      pos:    LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
-      source: 'google',
+    return (
+      s: GeocodingSuggestion.place(
+        title:  formatted.isEmpty ? query : formatted,
+        pos:    LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
+        source: 'google',
+      ),
+      exact: locType == 'ROOFTOP' || locType == 'RANGE_INTERPOLATED',
     );
   }
 
