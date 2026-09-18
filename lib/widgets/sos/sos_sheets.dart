@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/sos_request.dart';
@@ -128,6 +129,27 @@ class SosFichaSheet extends StatefulWidget {
 class _SosFichaSheetState extends State<SosFichaSheet> {
   bool _busy = false;
 
+  /// Aberta pelo toque no push (ou pelo mapa) a ficha chega sem distM, e a
+  /// distância é a única noção de "onde" antes do aceite (o ponto só aparece
+  /// no "Ir até lá"). Último fix conhecido: instantâneo, não liga o GPS.
+  Position? _eu;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.distM == null) {
+      Geolocator.getLastKnownPosition().then((p) {
+        if (mounted && p != null) setState(() => _eu = p);
+      }).catchError((_) {});
+    }
+  }
+
+  double? _dist(SosRequest s) =>
+      widget.distM ??
+      (_eu == null
+          ? null
+          : Geolocator.distanceBetween(_eu!.latitude, _eu!.longitude, s.lat, s.lng));
+
   Future<void> _whatsapp(String telefone, String texto) async {
     final url = Uri.parse('https://wa.me/55$telefone?text=${Uri.encodeComponent(texto)}');
     try {
@@ -183,8 +205,8 @@ class _SosFichaSheetState extends State<SosFichaSheet> {
                   child: Text(dono ? 'Seu pedido de ajuda' : s.nome,
                       style: Theme.of(context).textTheme.titleLarge),
                 ),
-                if (widget.distM != null)
-                  Text(sosDistText(widget.distM!),
+                if (!dono && _dist(s) != null)
+                  Text(sosDistText(_dist(s)!),
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
                           color: Colors.grey.shade700)),
               ]),
