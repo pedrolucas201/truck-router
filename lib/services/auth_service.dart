@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -60,8 +61,9 @@ class AuthService {
         // perfil/S.O.S. no aparelho do Beto, que perde a sessão do Firebase a
         // cada abertura desde 17/09 (causa em investigação, ver `store`).
         UserCredential? cred;
+        String? gmot; // por que a recuperação voltou vazia (null = nem tentou/deu certo)
         if (tentaGoogleNoLogin(from, prefs.getBool(_kGoogle) ?? false)) {
-          cred = await _recuperarGoogle();
+          (cred, gmot) = await _recuperarGoogle();
         }
         final via = cred == null ? 'anon' : 'google';
         cred ??= await auth.signInAnonymously();
@@ -73,6 +75,7 @@ class AuthService {
           'prev': _short(prev),
           'via':  via,
           'store': bootStore,
+          'gmot': ?gmot,
         });
       } catch (e, st) {
         _signIn = null; // deixa a próxima chamada tentar de novo
@@ -118,20 +121,28 @@ class AuthService {
   /// de quem nunca entrou com Google. Qualquer falha (offline, sem Play
   /// Services, timeout) devolve null e o boot segue anônimo como sempre:
   /// navegação nunca espera login.
-  static Future<UserCredential?> _recuperarGoogle() async {
+  /// Devolve (credencial, motivo). O motivo vai no `auth_signin` como `gmot`:
+  /// 18/09 13:35 a recuperação voltou vazia SEM erro nenhum (3 de 4 deram certo)
+  /// e não havia como saber se foi conta não achada, cancelada ou timeout — o
+  /// FieldLog.error de antes do login ainda nem tem auth pra gravar.
+  static Future<(UserCredential?, String?)> _recuperarGoogle() async {
     try {
       await (_googleInit ??= GoogleSignIn.instance.initialize());
-      final acc = await GoogleSignIn.instance
-          .attemptLightweightAuthentication()
-          ?.timeout(const Duration(seconds: 8));
-      final idToken = acc?.authentication.idToken;
-      if (idToken == null) return null;
-      return await FirebaseAuth.instance
+      final tentativa = GoogleSignIn.instance.attemptLightweightAuthentication();
+      if (tentativa == null) return (null, 'sem_suporte');
+      final acc = await tentativa.timeout(const Duration(seconds: 8));
+      if (acc == null) return (null, 'sem_conta'); // não achou ou o seletor foi fechado
+      final idToken = acc.authentication.idToken;
+      if (idToken == null) return (null, 'sem_token');
+      final cred = await FirebaseAuth.instance
           .signInWithCredential(GoogleAuthProvider.credential(idToken: idToken))
           .timeout(const Duration(seconds: 8));
+      return (cred, null);
+    } on TimeoutException {
+      return (null, 'timeout');
     } catch (e, st) {
       FieldLog.error('auth_google_restore', e, st);
-      return null;
+      return (null, 'erro:${e.runtimeType}');
     }
   }
 
