@@ -79,7 +79,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    'O GPS para o seu caminhão',
+                    'O GPS do seu caminhão',
                     style: TextStyle(color: neon, fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ],
