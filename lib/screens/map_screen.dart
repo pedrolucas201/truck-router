@@ -550,6 +550,44 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   void _exitMarkingMode() => setState(() => _markingMode = false);
 
+  // Voltar desfaz uma camada por vez (Beto, áudios 21/23: errou o endereço na tela
+  // de rota, apertou voltar e o app fechou). Aberto por link sem rota segue saindo
+  // direto (N4) — a volta pro WhatsApp em si é do manifest (singleTask), não daqui.
+  Future<void> _onBack() async {
+    final route = context.read<RouteProvider>();
+    if (_markingMode) {
+      _exitMarkingMode();
+      return;
+    }
+    // Sem guarda de rota velha no calculate(): limpar no meio faria a rota voltar.
+    if (route.status == RouteStatus.loading) return;
+    if (route.status != RouteStatus.idle) {
+      FieldLog.event('map_back', {'acao': 'rota'});
+      setState(() {
+        _panelCollapsed      = false;
+        _nearbyRadares       = [];
+      });
+      route.clear();
+      return;
+    }
+    if (_openedViaDeepLink) {
+      SystemNavigator.pop();
+      return;
+    }
+    final sair = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sair do app?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ficar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sair')),
+        ],
+      ),
+    );
+    FieldLog.event('map_back', {'acao': sair == true ? 'sair' : 'ficar'});
+    if (sair == true) SystemNavigator.pop();
+  }
+
   Future<void> _confirmMarkingPosition() async {
     final latLng = _cameraTarget;
     setState(() => _markingMode = false);
@@ -1553,17 +1591,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       ));
     }
 
-    // N4 (2ª iteração): se o app só existe nesta tela porque o sistema abriu
-    // via deep link (WhatsApp etc.) e o usuário não chegou a calcular rota,
-    // back deve encerrar o app de fato — não só desempilhar/minimizar — para
-    // o sistema voltar o foco pra task de origem (ex.: WhatsApp) em vez de
-    // deixar o Truck Router de pé sobre ela.
-    final exitAppOnBack = _openedViaDeepLink && routeProvider.status == RouteStatus.idle;
-
+    // Tela raiz: o voltar nunca fecha o app sozinho, quem decide é o _onBack.
     return PopScope(
-      canPop: !exitAppOnBack,
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) SystemNavigator.pop();
+        if (!didPop) _onBack();
       },
       child: Scaffold(
       // Tocar em qualquer área fora dos campos (inclusive sobre as sugestões que
