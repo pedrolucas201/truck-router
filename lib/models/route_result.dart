@@ -113,7 +113,6 @@ class RouteResult {
   final bool destinationBlocked;
   // Pontos no mapa das restrições violadas (cada uma com seu LatLng + rótulo).
   final List<RestrictionPoint> restrictionPoints;
-  final RouteResult? dirtRoadAlternative;
   final List<SpeedLimitSpan> speedLimits;
   final List<TrafficSpan> trafficSpans;
   // Trechos de terra na rota entregue. Vazio na rota TomTom: os offsets são da
@@ -137,7 +136,6 @@ class RouteResult {
     this.restrictionLabel     ,
     this.destinationBlocked   = false,
     this.restrictionPoints    = const [],
-    this.dirtRoadAlternative  ,
     this.speedLimits          = const [],
     this.trafficSpans         = const [],
     this.dirtSegments         = const [],
@@ -157,7 +155,6 @@ class RouteResult {
     String? restrictionLabel,
     bool? destinationBlocked,
     List<RestrictionPoint>? restrictionPoints,
-    RouteResult? dirtRoadAlternative,
     List<SpeedLimitSpan>? speedLimits,
     List<TrafficSpan>? trafficSpans,
     List<DirtRoadSegment>? dirtSegments,
@@ -175,7 +172,6 @@ class RouteResult {
     restrictionLabel:    restrictionLabel    ?? this.restrictionLabel,
     destinationBlocked:  destinationBlocked  ?? this.destinationBlocked,
     restrictionPoints:   restrictionPoints   ?? this.restrictionPoints,
-    dirtRoadAlternative: dirtRoadAlternative ?? this.dirtRoadAlternative,
     speedLimits:         speedLimits         ?? this.speedLimits,
     trafficSpans:        trafficSpans        ?? this.trafficSpans,
     dirtSegments:        dirtSegments        ?? this.dirtSegments,

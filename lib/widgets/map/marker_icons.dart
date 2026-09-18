@@ -102,62 +102,6 @@ Future<BitmapDescriptor> buildRadarIcon(
   return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
 }
 
-Future<BitmapDescriptor> buildRouteLabelIcon(
-    String text, Color bgColor, IconData icon) async {
-  const h = 34.0;
-  const iconPx = 13.0;
-  const fontPx = 11.5;
-  const padH = 9.0;
-  const gap = 4.0;
-
-  final iconTp = TextPainter(textDirection: TextDirection.ltr)
-    ..text = TextSpan(
-      text: String.fromCharCode(icon.codePoint),
-      style: TextStyle(
-        fontSize: iconPx,
-        fontFamily: icon.fontFamily,
-        package: icon.fontPackage,
-        color: Colors.white,
-      ),
-    )
-    ..layout();
-
-  final textTp = TextPainter(textDirection: TextDirection.ltr)
-    ..text = TextSpan(
-      text: text,
-      style: const TextStyle(
-        fontSize: fontPx,
-        fontWeight: FontWeight.bold,
-        color: Colors.white,
-      ),
-    )
-    ..layout();
-
-  final w = padH + iconTp.width + gap + textTp.width + padH;
-  final recorder = ui.PictureRecorder();
-  final canvas = Canvas(recorder);
-
-  final rRect = RRect.fromRectAndRadius(
-    Rect.fromLTWH(0, 0, w, h),
-    const Radius.circular(h / 2),
-  );
-  canvas.drawRRect(rRect, Paint()..color = bgColor);
-  canvas.drawRRect(
-    rRect,
-    Paint()
-      ..color = Colors.white.withAlpha(180)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2,
-  );
-  iconTp.paint(canvas, Offset(padH, (h - iconTp.height) / 2));
-  textTp.paint(canvas, Offset(padH + iconTp.width + gap, (h - textTp.height) / 2));
-
-  final picture = recorder.endRecording();
-  final img = await picture.toImage(w.ceil(), h.toInt());
-  final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-  return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
-}
-
 Future<BitmapDescriptor> buildRestrictionIcon(UserRestriction r) async {
   const iconH = 20.0;
   final bgColor = switch (r.type) {
