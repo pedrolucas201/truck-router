@@ -84,6 +84,7 @@ if (-not $Notes) {
 # O app compara `build` com o proprio; `sha256` e conferido pelo plugin antes de
 # instalar (mata o "pacote invalido" de download corrompido). URL versionada, nao a
 # latest: json e APK nunca desencontram. no-cache pra checagem ver a versao nova.
+# charset=utf-8: o app le com res.body, que sem charset decodifica latin1 (acento quebra).
 $buildNum = if ($version -match '\+(\d+)') { [int]$Matches[1] } else { 0 }
 $sha256   = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLower()
 $versionObj = [ordered]@{
@@ -97,7 +98,7 @@ $versionObj = [ordered]@{
 $versionFile = Join-Path $env:TEMP "version.json"
 $versionObj | ConvertTo-Json | Out-File -FilePath $versionFile -Encoding utf8
 gcloud storage cp $versionFile "gs://truck-router-apks/version.json" `
-    --project=maps-route-495614 --cache-control="no-cache" --content-type="application/json"
+    --project=maps-route-495614 --cache-control="no-cache" --content-type="application/json; charset=utf-8"
 
 # Firebase App Distribution: notifica os testers e — o que mais importa — registra
 # QUEM instalou QUAL versao. Ate hoje a versao rodando no caminhao so dava pra
