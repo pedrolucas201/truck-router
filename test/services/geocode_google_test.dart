@@ -68,6 +68,27 @@ void main() {
       );
     });
 
+    // Beto, 17/09: resposta real da Google (medida com a chave do backend).
+    const edouard =
+        'Av. Edouard Six, 540 - Jardim Paraiba, Jacareí - SP, 12327-673, Brasil';
+    const premise = ['premise', 'street_address'];
+
+    test('nome digitado de ouvido, 1 letra de diferença ("Eduard"×"Edouard") → aceita', () {
+      for (final q in ['av Eduard six 540', 'rua Eduard six 540', 'av Eduard six 540 jaca']) {
+        expect(HereGeocodingService.acceptsAddressResult(q, 'ROOFTOP', edouard, premise),
+            isTrue, reason: q);
+      }
+    });
+
+    test('tolerância não vale pra palavra curta nem pra 2 letras de diferença', () {
+      // "jaxa" (4 letras) × "jacarei": exige exata.
+      expect(HereGeocodingService.acceptsAddressResult(
+          'av Eduard six 540 jaxa', 'ROOFTOP', edouard, premise), isFalse);
+      // "Edard" × "Edouard" = 2 edições.
+      expect(HereGeocodingService.acceptsAddressResult(
+          'av Edard six 540', 'ROOFTOP', edouard, premise), isFalse);
+    });
+
     test('ROOFTOP com número exato → aceita', () {
       expect(
         HereGeocodingService.acceptsAddressResult(

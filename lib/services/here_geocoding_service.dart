@@ -399,6 +399,14 @@ class HereGeocodingService {
   /// ou bairro sozinhos são o mesmo "só achei o município" que a HERE já dá.
   /// Consulta sem palavra útil ("Rua Um, 36") não tem como ser conferida →
   /// rejeita. Rejeitado = fica o que a HERE mostrou, nunca pior do que hoje.
+  ///
+  /// Palavra de 5+ letras tolera UMA letra de diferença contra uma palavra do
+  /// rótulo: o motorista escreve nome estrangeiro de ouvido. Medido em 17/09:
+  /// o Beto digitou "av Eduard six 540" e a Google devolveu ROOFTOP "Av.
+  /// Edouard Six, 540 - Jardim Paraiba, Jacareí" nas 6 tentativas — o filtro
+  /// jogou fora o endereço certo e ele desistiu. O `every` segue valendo, então
+  /// o fuzzy de outra rua (Carvalhal) continua barrado. Só aqui, não no
+  /// [streetMatches]: no CEP a rua esperada vem do ViaCEP, sem erro de digitação.
   @visibleForTesting
   static bool acceptsAddressResult(
       String query, String locationType, String formatted, List<String> types) {
@@ -407,7 +415,24 @@ class HereGeocodingService {
     final words = _words(query).toList();
     if (words.isEmpty) return false;
     final label = _fold(formatted);
-    return words.every(label.contains);
+    final labelWords = label.split(RegExp(r'[^a-z]+'));
+    return words.every((w) =>
+        label.contains(w) ||
+        (w.length >= 5 && labelWords.any((l) => _withinOneEdit(w, l))));
+  }
+
+  /// Distância de edição ≤ 1 (troca, inserção ou remoção de uma letra).
+  static bool _withinOneEdit(String a, String b) {
+    if ((a.length - b.length).abs() > 1) return false;
+    if (a.length > b.length) return _withinOneEdit(b, a);
+    var i = 0;
+    while (i < a.length && a[i] == b[i]) {
+      i++;
+    }
+    if (i == a.length) return true; // igual ou b tem 1 letra a mais no fim
+    return a.length == b.length
+        ? a.substring(i + 1) == b.substring(i + 1) // troca
+        : a.substring(i) == b.substring(i + 1); // b tem 1 letra a mais no meio
   }
 
   /// Rua do ViaCEP × rua devolvida por HERE/TomTom no fluxo do CEP. Mesma
