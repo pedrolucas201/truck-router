@@ -471,7 +471,10 @@ class _NavigationScreenState extends State<NavigationScreen>
   List<SosRequest> _sosTodos = const [];
   List<SosRequest> _sosNearby = const [];
   final Set<String> _sosAnnounced = {};
-  String? _sosAbertoId; // pedido mostrado ABERTO no botão (10 s após chegar)
+  // Botão ABERTO por 10 s depois de QUALQUER pedido novo, sempre mostrando o
+  // mais perto. Era por id: com 3 chegando juntos abria o 1º e fechava em 2 s
+  // quando o 2º (mais longe) virava o "aberto" (teste de estresse, 18/09).
+  bool _sosAberto = false;
   Timer? _sosFecha;
   bool _hasFirstFix = false;
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
@@ -2876,10 +2879,10 @@ class _NavigationScreenState extends State<NavigationScreen>
         final km = _sosDist(s) / 1000;
         _speak(kBuzina + sosSpeech(s, km), espera: true);
         FieldLog.event('sos_seen', {'id': s.id, 'distKm': km.round()});
-        _sosAbertoId = s.id;
+        _sosAberto = true;
         _sosFecha?.cancel();
         _sosFecha = Timer(const Duration(seconds: 10), () {
-          if (mounted) setState(() => _sosAbertoId = null);
+          if (mounted) setState(() => _sosAberto = false);
         });
       }
     }
@@ -2938,6 +2941,22 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (idx != null && _closestPolylineIdx >= idx) {
       _encerrarParadaSos('reached', fala: 'Você chegou no motorista que pediu ajuda.');
     }
+  }
+
+  /// Um pedido: ficha direto. Vários: a lista (o botão mostra o número).
+  void _tocarBotaoSos() {
+    if (_sosNearby.length == 1) {
+      _mostrarSosFicha(_sosNearby.first.id, _sosDist(_sosNearby.first));
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SosListaSheet(
+        pedidos: [for (final s in _sosNearby) (s, _sosDist(s))],
+        onEscolher: (s, d) => _mostrarSosFicha(s.id, d),
+      ),
+    );
   }
 
   void _mostrarSosFicha(String id, double? distM) {
@@ -3850,10 +3869,9 @@ class _NavigationScreenState extends State<NavigationScreen>
                         child: SosBotao(
                           sos: _sosNearby.first,
                           distM: _sosDist(_sosNearby.first),
-                          aberto: _sosAbertoId == _sosNearby.first.id,
+                          aberto: _sosAberto,
                           total: _sosNearby.length,
-                          onTap: () => _mostrarSosFicha(
-                              _sosNearby.first.id, _sosDist(_sosNearby.first)),
+                          onTap: _tocarBotaoSos,
                         ),
                       ),
                     ),

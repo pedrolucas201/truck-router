@@ -348,3 +348,52 @@ class _Contato extends StatelessWidget {
     );
   }
 }
+
+/// Vários pedidos perto (o botão mostra o número): lista do mais perto pro
+/// mais longe; tocar num abre a ficha dele. Pedido de Beto (18/09, teste com 3
+/// pedidos): "o botão diz ter vários, mas quando clica não retorna uma lista".
+class SosListaSheet extends StatelessWidget {
+  final List<(SosRequest, double)> pedidos; // já ordenados por distância
+  final void Function(SosRequest s, double distM) onEscolher;
+  const SosListaSheet({super.key, required this.pedidos, required this.onEscolher});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(children: [
+              Icon(Icons.sos, color: Colors.red.shade700, size: 28),
+              const SizedBox(width: 10),
+              Text('${pedidos.length} pedidos de ajuda perto',
+                  style: Theme.of(context).textTheme.titleLarge),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          Flexible(
+            child: ListView(shrinkWrap: true, children: [
+              for (final (s, d) in pedidos)
+                ListTile(
+                  minVerticalPadding: 12,
+                  title: Text(s.nome,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                  subtitle: Text(s.atendendo
+                      ? '${s.tipo.label} · ${s.ajudanteNome ?? 'alguém'} já vai ajudar'
+                      : s.tipo.label),
+                  trailing: Text(sosDistText(d),
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    onEscolher(s, d);
+                  },
+                ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}

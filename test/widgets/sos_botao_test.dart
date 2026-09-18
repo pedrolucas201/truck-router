@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:truck_router/models/sos_request.dart';
 import 'package:truck_router/widgets/sos/sos_botao.dart';
+import 'package:truck_router/widgets/sos/sos_sheets.dart';
 
 void main() {
   final pedido = SosRequest(
@@ -32,5 +33,24 @@ void main() {
   testWidgets('mais de um pedido perto ganha o número', (t) async {
     await monta(t, aberto: false, total: 3);
     expect(find.text('3'), findsOneWidget);
+  });
+
+  testWidgets('vários pedidos: a lista mostra todos e o toque escolhe o certo', (t) async {
+    SosRequest p(String id, String nome) => SosRequest(
+          id: id, uid: 'u$id', nome: nome, caminhao: '', cor: '', tipo: SosTipo.pneu,
+          texto: '', lat: 0, lng: 0, status: 'aberto',
+          criadoEm: DateTime.now(), expireAt: DateTime.now().add(const Duration(hours: 1)));
+    String? escolhido;
+    await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SosListaSheet(
+      pedidos: [(p('a', 'Teste A'), 2000), (p('b', 'Teste B'), 7000), (p('c', 'Teste C'), 17000)],
+      onEscolher: (s, d) => escolhido = s.id,
+    ))));
+    expect(find.text('3 pedidos de ajuda perto'), findsOneWidget);
+    expect(find.text('Teste A'), findsOneWidget);
+    expect(find.text('17 km'), findsOneWidget);
+    await t.tap(find.text('Teste B'));
+    expect(escolhido, 'b');
   });
 }
