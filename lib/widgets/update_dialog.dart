@@ -37,8 +37,12 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   // Chave de assinatura trocou em 10/09/2026: quem ainda tem um build antigo
   // (chave de debug) toma erro de instalação por cima. Não dá pra distinguir
   // do resto pelo plugin, então a saída vale pra todos.
+  // Nunca mandar desinstalar: se o Android recusou a APK por assinatura
+  // diferente, desinstalar é o único gesto que desarma essa trava. A frase
+  // antiga existia pra chave de debug; todo build com este diálogo (>=2.4.69)
+  // já é assinado com o upload-keystore.
   static const _erroInstalar =
-      'Não instalou. Desinstale o No Trecho e instale de novo pelo link do grupo.';
+      'Não instalou. Tente de novo mais tarde ou fale com quem te convidou.';
 
   void _start() {
     setState(() {
