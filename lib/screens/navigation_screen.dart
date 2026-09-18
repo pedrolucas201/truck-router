@@ -20,6 +20,7 @@ import '../models/sos_request.dart';
 import '../services/sos_service.dart';
 import '../services/sos_push.dart';
 import '../utils/voice_queue.dart';
+import '../widgets/sos/sos_botao.dart';
 import '../widgets/sos/sos_sheets.dart';
 import '../models/radar_point.dart';
 import '../models/route_maneuver.dart';
@@ -28,6 +29,7 @@ import '../models/truck_profile.dart';
 import '../models/user_restriction.dart';
 import '../repositories/restriction_repository.dart';
 import '../services/auth_service.dart';
+import '../services/som.dart';
 import '../services/field_log.dart';
 import '../services/here_routing_service.dart';
 import '../services/police_alert_service.dart';
@@ -469,6 +471,8 @@ class _NavigationScreenState extends State<NavigationScreen>
   List<SosRequest> _sosTodos = const [];
   List<SosRequest> _sosNearby = const [];
   final Set<String> _sosAnnounced = {};
+  String? _sosAbertoId; // pedido mostrado ABERTO no botão (10 s após chegar)
+  Timer? _sosFecha;
   bool _hasFirstFix = false;
   LatLng _cameraTarget = const LatLng(-15.788, -47.879);
 
@@ -745,6 +749,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     SosPush.irAteLa = _irAteLaAnterior;
     _sosSub?.cancel();
     _sosRetry?.cancel();
+    _sosFecha?.cancel();
     // No fecho (chegada OU X manual): onde o caminhão estava, a quantos metros
     // EM LINHA RETA do destino, e quanto o app achava que faltava PELA ROTA.
     // straightToDestM pequeno + remainingRouteM grande = distância de rota (H-D),
@@ -1073,7 +1078,13 @@ class _NavigationScreenState extends State<NavigationScreen>
     // O Future do speak() era descartado: uma PlatformException (engine ausente,
     // pt-BR indisponível, foco de áudio negado) virava erro async não tratado e
     // deixava o _ttsActive preso em true.
-    _tts.speak(text).catchError((Object e, StackTrace st) {
+    // Buzina (S.O.S.) toca no MESMO turno do TTS, antes da fala: se veio da
+    // fila, esperou junto com ela; o watchdog de 15 s cobre as duas.
+    final buzina = text.startsWith(kBuzina);
+    final fala = buzina ? text.substring(kBuzina.length) : text;
+    (buzina ? Som.buzina() : Future<void>.value())
+        .then((_) => _tts.speak(fala))
+        .catchError((Object e, StackTrace st) {
       _ttsWatchdog?.cancel();
       FieldLog.error('tts_speak', e, st);
       _ttsLiberou();
@@ -2863,8 +2874,13 @@ class _NavigationScreenState extends State<NavigationScreen>
       // Só anuncia pedido ainda sem ajudante; e nunca repete o mesmo id.
       if (s.aberto && _sosAnnounced.add(s.id)) {
         final km = _sosDist(s) / 1000;
-        _speak(sosSpeech(s, km), espera: true);
+        _speak(kBuzina + sosSpeech(s, km), espera: true);
         FieldLog.event('sos_seen', {'id': s.id, 'distKm': km.round()});
+        _sosAbertoId = s.id;
+        _sosFecha?.cancel();
+        _sosFecha = Timer(const Duration(seconds: 10), () {
+          if (mounted) setState(() => _sosAbertoId = null);
+        });
       }
     }
     setState(() => _sosNearby = perto);
@@ -3823,40 +3839,21 @@ class _NavigationScreenState extends State<NavigationScreen>
                       ),
                       ),
                     ),
-                  // ponytail: divide o topo com o banner de polícia (raro, TTL
-                  // 30 min): polícia ganha, S.O.S. volta quando ela some.
-                  if (_sosNearby.isNotEmpty && _nearestPoliceAlert == null && !_markingMode)
-                    Positioned(
-                      top: 0, left: 0, right: 0,
-                      child: Material(
-                        color: Colors.red.shade700,
-                        child: SafeArea(
-                          bottom: false,
-                          child: InkWell(
-                            onTap: () => _mostrarSosFicha(
-                                _sosNearby.first.id, _sosDist(_sosNearby.first)),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.sos, color: Colors.white, size: 18),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      '${_sosNearby.first.nome} pede ajuda · ${_sosNearby.first.tipo.label}',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                          color: Colors.white, fontWeight: FontWeight.w600),
-                                    ),
-                                  ),
-                                  Text(
-                                    sosDistText(_sosDist(_sosNearby.first)),
-                                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                  // S.O.S. = botão no meio da lateral esquerda (opção B, Beto 18/09):
+                  // chega aberto, recolhe em 10 s. Saiu do topo, então não divide
+                  // mais espaço com o banner de polícia.
+                  if (_sosNearby.isNotEmpty && !_markingMode)
+                    Align(
+                      alignment: const Alignment(-1, 0.1),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: SosBotao(
+                          sos: _sosNearby.first,
+                          distM: _sosDist(_sosNearby.first),
+                          aberto: _sosAbertoId == _sosNearby.first.id,
+                          total: _sosNearby.length,
+                          onTap: () => _mostrarSosFicha(
+                              _sosNearby.first.id, _sosDist(_sosNearby.first)),
                         ),
                       ),
                     ),

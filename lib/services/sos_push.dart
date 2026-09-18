@@ -11,6 +11,7 @@ import '../models/sos_request.dart';
 import '../widgets/sos/sos_sheets.dart';
 import 'auth_service.dart';
 import 'field_log.dart';
+import 'som.dart';
 
 /// Push do S.O.S. (fatia 2). Duas metades:
 ///
@@ -56,6 +57,9 @@ class SosPush {
     // Navegando: o stream já falou e mostrou o banner; ficha em cima do mapa
     // dirigindo não. Fora da nav, abre a ficha.
     if (await FlutterForegroundTask.isRunningService) return;
+    // Com o app aberto o sistema não mostra a notificação (nem toca o som do
+    // canal): a buzina vem daqui, junto com a ficha.
+    unawaited(Som.buzina());
     _abrir(m, 'foreground');
   }
 
