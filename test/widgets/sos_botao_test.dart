@@ -36,20 +36,21 @@ void main() {
   });
 
   testWidgets('vários pedidos: a lista mostra todos e o toque escolhe o certo', (t) async {
-    SosRequest p(String id, String nome) => SosRequest(
+    SosRequest p(String id, String nome, [String texto = '']) => SosRequest(
           id: id, uid: 'u$id', nome: nome, caminhao: '', cor: '', tipo: SosTipo.pneu,
-          texto: '', lat: 0, lng: 0, status: 'aberto',
+          texto: texto, lat: 0, lng: 0, status: 'aberto',
           criadoEm: DateTime.now(), expireAt: DateTime.now().add(const Duration(hours: 1)));
     String? escolhido;
     await t.pumpWidget(MaterialApp(
         home: Scaffold(
             body: SosListaSheet(
-      pedidos: [(p('a', 'Teste A'), 2000), (p('b', 'Teste B'), 7000), (p('c', 'Teste C'), 17000)],
+      pedidos: [(p('a', 'Teste A', 'preciso de câmara de ar'), 2000), (p('b', 'Teste B'), 7000), (p('c', 'Teste C'), 17000)],
       onEscolher: (s, d) => escolhido = s.id,
     ))));
     expect(find.text('3 pedidos de ajuda perto'), findsOneWidget);
     expect(find.text('Teste A'), findsOneWidget);
     expect(find.text('17 km'), findsOneWidget);
+    expect(find.text('Pneu · preciso de câmara de ar'), findsOneWidget);
     await t.tap(find.text('Teste B'));
     expect(escolhido, 'b');
   });

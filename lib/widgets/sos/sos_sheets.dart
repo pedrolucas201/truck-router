@@ -369,28 +369,44 @@ class SosListaSheet extends StatelessWidget {
               Icon(Icons.sos, color: Colors.red.shade700, size: 28),
               const SizedBox(width: 10),
               Text('${pedidos.length} pedidos de ajuda perto',
-                  style: Theme.of(context).textTheme.titleLarge),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             ]),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Flexible(
-            child: ListView(shrinkWrap: true, children: [
-              for (final (s, d) in pedidos)
-                ListTile(
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: pedidos.length,
+              separatorBuilder: (_, _) => const Divider(height: 1, indent: 16, endIndent: 16),
+              itemBuilder: (_, i) {
+                final (s, d) = pedidos[i];
+                // Tipo + o que a pessoa escreveu ("preciso de câmara de ar"),
+                // uma linha só: a lista é pra bater o olho, a ficha tem o resto.
+                final linha = [
+                  s.tipo.label,
+                  if (s.atendendo) '${s.ajudanteNome ?? 'alguém'} já vai ajudar' else if (s.texto.isNotEmpty) s.texto,
+                ].join(' · ');
+                return ListTile(
                   minVerticalPadding: 12,
                   title: Text(s.nome,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                  subtitle: Text(s.atendendo
-                      ? '${s.tipo.label} · ${s.ajudanteNome ?? 'alguém'} já vai ajudar'
-                      : s.tipo.label),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  subtitle: Text(linha,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w500, color: Colors.grey.shade700)),
                   trailing: Text(sosDistText(d),
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w800, color: Colors.red.shade700)),
                   onTap: () {
                     Navigator.pop(context);
                     onEscolher(s, d);
                   },
-                ),
-            ]),
+                );
+              },
+            ),
           ),
         ]),
       ),
