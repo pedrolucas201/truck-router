@@ -20,9 +20,9 @@ class SosException implements Exception {
   const SosException(this.falha, {this.id, this.liberaEm});
 }
 
-/// Raio em que um S.O.S. é anunciado (decisão de 14/09: 50 km).
+/// Raio em que um S.O.S. é anunciado (14/09: 50 km; 18/09 Pedro: 20 km).
 /// ponytail: constante calibrada; muda com dado de campo.
-const kSosRaioM = 50000.0;
+const kSosRaioM = 20000.0;
 
 /// Escrita: backend (gates). Leitura: Firestore direto (stream).
 class SosService {

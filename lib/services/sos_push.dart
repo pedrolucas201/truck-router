@@ -15,7 +15,7 @@ import 'field_log.dart';
 /// Push do S.O.S. (fatia 2). Duas metades:
 ///
 /// 1. **Presença**: `presence/{uid}` = token FCM + posição com 2 casas
-///    (~1 km) + hora. O backend lê quem está a menos de 50 km e manda uma
+///    (~1 km) + hora. O backend lê quem está a menos de 20 km e manda uma
 ///    notificação pronta, que o Play Services exibe sem o app vivo (MIUI mata
 ///    o processo; mensagem de dados não serve). Só quem vinculou o Google
 ///    grava presença: anônimo não consegue ler o `sos`, então a notificação

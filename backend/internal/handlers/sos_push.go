@@ -20,7 +20,7 @@ import (
 // upgrade é campo `cell` + range por prefixo.
 
 const (
-	sosRaioM       = 50_000.0 // decisão de 14/09: 50 km
+	sosRaioM       = 20_000.0 // 14/09: 50 km; 18/09 Pedro: 20 km
 	presencaIdade  = 24 * time.Hour
 	sosPushTimeout = 8 * time.Second // o app espera 12 s pela resposta do POST
 	sosPushLoteMax = 500             // limite do SendEach (firebase-admin-go)

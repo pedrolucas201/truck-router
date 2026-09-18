@@ -71,7 +71,7 @@ class _SosAbrirSheetState extends State<SosAbrirSheet> {
             Text('Pedir ajuda', style: Theme.of(context).textTheme.titleLarge),
           ]),
           const SizedBox(height: 4),
-          Text('Motoristas num raio de 50 km vão ver seu pedido.',
+          Text('Motoristas num raio de 20 km vão ver seu pedido.',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
           const SizedBox(height: 14),
           Wrap(
