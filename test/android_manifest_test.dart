@@ -47,4 +47,19 @@ void main() {
       expect(xml.contains('android:host="maps.app.goo.gl"'), isTrue);
     });
   });
+
+  test('canal do push do S.O.S. tem o mesmo id no app, no manifest e no backend', () {
+    // Id divergente = o push cai no "Diversos" do FCM, que o MIUI esconde
+    // (18/09: badge no ícone e nada na barra). Falha em silêncio, só na estrada.
+    final xml = File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+    final kt = File('android/app/src/main/kotlin/com/truckrouter/truck_router/MainActivity.kt')
+        .readAsStringSync();
+    final go = File('backend/internal/handlers/sos_push.go').readAsStringSync();
+    expect(
+        RegExp(r'default_notification_channel_id"\s+android:value="sos"').hasMatch(xml),
+        isTrue);
+    expect(kt, contains('NotificationChannel("sos"'));
+    expect(kt, contains('IMPORTANCE_HIGH'));
+    expect(go, contains('ChannelID: "sos"'));
+  });
 }

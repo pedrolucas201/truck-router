@@ -166,8 +166,12 @@ func androidAlta() *messaging.AndroidConfig {
 	return &messaging.AndroidConfig{
 		Priority: "high",
 		Notification: &messaging.AndroidNotification{
-			Priority: messaging.PriorityHigh,
-			Sound:    "default",
+			// Canal de prioridade alta criado pelo app (MainActivity). Sem ele
+			// o FCM usava o "Diversos", normal, que o MIUI escondeu (18/09).
+			// App antigo sem o canal: o Android cai no canal padrão, não perde.
+			ChannelID: "sos",
+			Priority:  messaging.PriorityHigh,
+			Sound:     "default",
 		},
 	}
 }

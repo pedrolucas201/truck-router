@@ -28,6 +28,11 @@
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false"/>
+        <!-- Push sem canal explícito cai no canal "sos" (criado na MainActivity,
+             prioridade alta) em vez do "Diversos" do FCM, que o MIUI esconde. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="sos"/>
         <!-- launchMode=singleTask é O QUE FAZ O BOTÃO VOLTAR DEVOLVER PRO WHATSAPP.
              Relato do Gilberto em 12/08/2026 (4ª vez do mesmo bug): abrir uma
              localização compartilhada prendia o WhatsApp — tocar no ícone dele
