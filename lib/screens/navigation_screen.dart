@@ -462,6 +462,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   // S.O.S. entre motoristas: ativos dentro de kSosRaioM da posição atual,
   // mais perto primeiro. Voz UMA vez por id (regra da tela limpa).
   StreamSubscription<List<SosRequest>>? _sosSub;
+  Timer? _sosRetry;
   // Último snapshot: a lista "perto" depende da POSIÇÃO também, e o stream só
   // acorda por mudança no Firestore. Sem isto, snapshot antes do 1º fix (dist =
   // infinito) deixava o S.O.S. sem marcador/voz a viagem inteira (device 15/09).
@@ -650,7 +651,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _irAteLaAnterior  = SosPush.irAteLa;
     SosPush.irAteLa   = _irAteSos;
     widget.incomingLocation?.addListener(_onIncomingLocation);
-    _sosSub = SosService.streamAtivos().listen(_onSosAtivos);
+    _ouvirSos();
     // Telemetria: marca o início do drive — garante rastro mesmo num trajeto
     // limpo (sem reroute), pra diagnosticar "travou" onde o heartbeat parar.
     FieldLog.event('nav_start', {
@@ -743,6 +744,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   void dispose() {
     SosPush.irAteLa = _irAteLaAnterior;
     _sosSub?.cancel();
+    _sosRetry?.cancel();
     // No fecho (chegada OU X manual): onde o caminhão estava, a quantos metros
     // EM LINHA RETA do destino, e quanto o app achava que faltava PELA ROTA.
     // straightToDestM pequeno + remainingRouteM grande = distância de rota (H-D),
@@ -2813,6 +2815,24 @@ class _NavigationScreenState extends State<NavigationScreen>
   }
 
   // ── S.O.S. entre motoristas ──────────────────────────────────────────────────
+
+  /// A regra de `sos` só deixa ler quem tem Google, e o Firestore ENCERRA o
+  /// listener no primeiro erro. O Beto começou a nav 1 min antes de vincular
+  /// (18/09 10:50) e ficou surdo a S.O.S. a viagem inteira. Sem Google: nem
+  /// escuta (checa de novo a cada minuto, sem log). Stream caiu (rede, regra):
+  /// escuta de novo em 1 min.
+  void _ouvirSos() {
+    _sosRetry?.cancel();
+    if (!mounted) return;
+    if (!AuthService.isGoogleLinked) {
+      _sosRetry = Timer(const Duration(minutes: 1), _ouvirSos);
+      return;
+    }
+    _sosSub?.cancel();
+    _sosSub = SosService.streamAtivos().listen(_onSosAtivos, onDone: () {
+      if (mounted) _sosRetry = Timer(const Duration(minutes: 1), _ouvirSos);
+    });
+  }
 
   double _sosDist(SosRequest s) {
     final p = _currentPos;
