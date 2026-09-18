@@ -50,20 +50,23 @@ class MainActivity : FlutterActivity() {
 
     // Canal do push do S.O.S. Sem canal próprio o FCM usava o "Diversos" dele,
     // prioridade normal: sem pop-up, e o MIUI do Beto escondeu (18/09).
-    // Som e importância são fixos na CRIAÇÃO do canal — por isso a buzina é um
-    // canal NOVO ("sos_buzina") e o "sos" da 2.4.80 (som padrão) é apagado.
+    // Som e importância são fixos na CRIAÇÃO do canal. "sos" (2.4.80, som
+    // padrão) e "sos_buzina" (2.4.81, som pelo id NUMÉRICO do recurso, que pode
+    // mudar entre builds) são apagados. O "sos_buzina2" aponta o som pelo NOME
+    // (raw/buzina): trocar o arquivo muda a buzina sem precisar de canal novo.
     // O id é o mesmo do backend (sos_push.go) e do manifest; o teste
     // android_manifest_test amarra os três.
     private fun criarCanalSos() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = getSystemService(NotificationManager::class.java)
         nm.deleteNotificationChannel("sos")
-        val som = Uri.parse("android.resource://$packageName/${R.raw.buzina}")
+        nm.deleteNotificationChannel("sos_buzina")
+        val som = Uri.parse("android.resource://$packageName/raw/buzina")
         val attrs = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
-        val canal = NotificationChannel("sos_buzina", "Pedido de ajuda", NotificationManager.IMPORTANCE_HIGH).apply {
+        val canal = NotificationChannel("sos_buzina2", "Pedido de ajuda", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Motorista perto de você pedindo ajuda na estrada"
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             enableVibration(true)

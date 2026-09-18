@@ -169,9 +169,9 @@ func androidAlta() *messaging.AndroidConfig {
 			// Canal de prioridade alta criado pelo app (MainActivity). Sem ele
 			// o FCM usava o "Diversos", normal, que o MIUI escondeu (18/09).
 			// App antigo sem o canal: o Android cai no canal padrão, não perde.
-			// "sos_buzina": o canal carrega o som (Android 8+); Sound vale
+			// "sos_buzina2": o canal carrega o som (Android 8+); Sound vale
 			// pro Android 7 e abaixo. Os dois apontam pro res/raw/buzina.
-			ChannelID: "sos_buzina",
+			ChannelID: "sos_buzina2",
 			Priority:  messaging.PriorityHigh,
 			Sound:     "buzina",
 		},

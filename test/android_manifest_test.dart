@@ -56,12 +56,12 @@ void main() {
         .readAsStringSync();
     final go = File('backend/internal/handlers/sos_push.go').readAsStringSync();
     expect(
-        RegExp(r'default_notification_channel_id"\s+android:value="sos_buzina"').hasMatch(xml),
+        RegExp(r'default_notification_channel_id"\s+android:value="sos_buzina2"').hasMatch(xml),
         isTrue);
-    expect(kt, contains('NotificationChannel("sos_buzina"'));
+    expect(kt, contains('NotificationChannel("sos_buzina2"'));
     expect(kt, contains('R.raw.buzina'));
     expect(File('android/app/src/main/res/raw/buzina.wav').existsSync(), isTrue);
     expect(kt, contains('IMPORTANCE_HIGH'));
-    expect(go, contains('ChannelID: "sos_buzina"'));
+    expect(go, contains('ChannelID: "sos_buzina2"'));
   });
 }
