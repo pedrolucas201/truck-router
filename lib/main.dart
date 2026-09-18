@@ -31,6 +31,8 @@ void main() async {
   // de print do motorista. Os handlers abaixo cobrem exceções não-fatais.
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+    // ANTES do initializeApp: o SDK pode apagar a sessão que rejeita.
+    await AuthService.snapshotStore();
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
     // Erros do framework (build/layout/gestos) → Crashlytics como fatais.

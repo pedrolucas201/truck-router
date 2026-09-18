@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'field_log.dart';
@@ -51,13 +55,24 @@ class AuthService {
       try {
         final prefs = await SharedPreferences.getInstance();
         final prev  = prefs.getString(_kLastUid) ?? '';
-        final cred  = await auth.signInAnonymously();
+        // Instalação que já vinculou Google e acordou sem usuário: volta pro
+        // uid da conta Google em vez de nascer anônimo de novo. É o que segura
+        // perfil/S.O.S. no aparelho do Beto, que perde a sessão do Firebase a
+        // cada abertura desde 17/09 (causa em investigação, ver `store`).
+        UserCredential? cred;
+        if (tentaGoogleNoLogin(from, prefs.getBool(_kGoogle) ?? false)) {
+          cred = await _recuperarGoogle();
+        }
+        final via = cred == null ? 'anon' : 'google';
+        cred ??= await auth.signInAnonymously();
         final uid   = cred.user?.uid ?? '';
         if (uid.isNotEmpty) await prefs.setString(_kLastUid, uid);
         FieldLog.event('auth_signin', {
           'from': from,
           'uid':  _short(uid),
           'prev': _short(prev),
+          'via':  via,
+          'store': bootStore,
         });
       } catch (e, st) {
         _signIn = null; // deixa a próxima chamada tentar de novo
@@ -81,12 +96,71 @@ class AuthService {
       // o `prev` do próximo auth_signin acusa como perdido.
       final uid = currentUid;
       if (uid != null) {
-        (await SharedPreferences.getInstance()).setString(_kLastUid, uid);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_kLastUid, uid);
+        // Quem vinculou antes desta versão ganha a marca no 1º boot que ainda
+        // tem a sessão; sem ela a recuperação acima nunca tenta.
+        if (isGoogleLinked) await prefs.setBool(_kGoogle, true);
       }
     } catch (_) {}
   }
 
+  /// Pura, pra teste. Sem a marca NUNCA: no Android o lightweight abre um
+  /// seletor de contas quando não acha conta autorizada, e isso no boot de
+  /// quem nunca entrou com Google seria um diálogo do nada. 'link' tem fluxo
+  /// próprio (o motorista tocou no botão).
+  @visibleForTesting
+  static bool tentaGoogleNoLogin(String from, bool marca) => marca && from != 'link';
+
+  /// Login Google SEM toque, só pra quem já vinculou (marca [_kGoogle]). Sem a
+  /// marca ninguém chega aqui: no Android o lightweight cai num seletor de
+  /// contas quando não há conta autorizada, e isso não pode aparecer no boot
+  /// de quem nunca entrou com Google. Qualquer falha (offline, sem Play
+  /// Services, timeout) devolve null e o boot segue anônimo como sempre:
+  /// navegação nunca espera login.
+  static Future<UserCredential?> _recuperarGoogle() async {
+    try {
+      await (_googleInit ??= GoogleSignIn.instance.initialize());
+      final acc = await GoogleSignIn.instance
+          .attemptLightweightAuthentication()
+          ?.timeout(const Duration(seconds: 8));
+      final idToken = acc?.authentication.idToken;
+      if (idToken == null) return null;
+      return await FirebaseAuth.instance
+          .signInWithCredential(GoogleAuthProvider.credential(idToken: idToken))
+          .timeout(const Duration(seconds: 8));
+    } catch (e, st) {
+      FieldLog.error('auth_google_restore', e, st);
+      return null;
+    }
+  }
+
+  /// Arquivos de sessão do Firebase Auth em shared_prefs, lidos ANTES do
+  /// initializeApp (o SDK pode apagar o que rejeita). Vai no `auth_signin`:
+  /// `sem_store` = alguém apagou o arquivo; `…:user=1` com usuário perdido =
+  /// o SDK tinha o usuário em disco e não o aceitou. Instrumento do churn do
+  /// Beto (18/09); sai quando a causa estiver fechada.
+  static String bootStore = 'nd';
+
+  static Future<void> snapshotStore() async {
+    try {
+      final base = (await getApplicationSupportDirectory()).parent.path;
+      final fs = Directory('$base/shared_prefs')
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.contains('firebase.auth'))
+          .map((f) {
+        final user = f.readAsStringSync().contains('FIREBASE_USER') ? 1 : 0;
+        return '${f.lengthSync()}b:user=$user';
+      }).toList();
+      bootStore = fs.isEmpty ? 'sem_store' : fs.join(',');
+    } catch (e) {
+      bootStore = 'erro:${e.runtimeType}';
+    }
+  }
+
   static const _kLastUid = 'auth_last_uid';
+  static const _kGoogle = 'auth_google_linked';
   static String _short(String uid) =>
       uid.isEmpty ? 'none' : uid.substring(0, uid.length < 6 ? uid.length : 6);
 
@@ -156,7 +230,9 @@ class AuthService {
       }
       final uid = auth.currentUser?.uid ?? '';
       if (uid.isNotEmpty) {
-        (await SharedPreferences.getInstance()).setString(_kLastUid, uid);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_kLastUid, uid);
+        await prefs.setBool(_kGoogle, true);
       }
       FieldLog.event('auth_link', {
         'outcome': result.name,
