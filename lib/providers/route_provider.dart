@@ -24,6 +24,17 @@ class RouteProvider extends ChangeNotifier {
   String? _errorMessage;
   List<WeatherAlert> _weatherAlerts = const [];
 
+  /// Geração do cálculo. Trocar endereço (ou voltar) no meio de um cálculo
+  /// deixava a resposta ANTIGA chegar e virar a rota da tela: são até 2 chamadas
+  /// HERE + asset + Firestore + TomTom em série, segundos de janela, e nada
+  /// descartava a perdedora. Mesmo padrão do `_rerouteSeq` da navegação.
+  int _calcSeq = 0;
+
+  /// Só pra teste: a parte sutil do guarda é o [clear] invalidar o cálculo em
+  /// curso, e isso é fácil de apagar sem perceber.
+  @visibleForTesting
+  int get calcSeq => _calcSeq;
+
   RouteStatus get status => _status;
   RouteResult? get result => _result;
   String? get errorMessage => _errorMessage;
@@ -39,6 +50,7 @@ class RouteProvider extends ChangeNotifier {
     List<LatLng> waypoints = const [],
     List<String> manualAvoidAreas = const [],
   }) async {
+    final seq = ++_calcSeq;
     _status = RouteStatus.loading;
     _result = null;
     _errorMessage = null;
@@ -140,6 +152,13 @@ class RouteProvider extends ChangeNotifier {
         );
       }
 
+      // Chegou tarde: o motorista já pediu outra coisa (ou limpou). Publicar aqui
+      // colocaria na tela a rota do endereço ANTIGO — e quem ganhou a corrida já
+      // notificou, ou vai notificar.
+      if (seq != _calcSeq) {
+        FieldLog.event('route_stale', {'onde': 'success'});
+        return;
+      }
       _result = result;
       _status = RouteStatus.success;
       // Clima na rota: fire-and-forget. Não bloqueia o success — a rota já vai
@@ -153,6 +172,13 @@ class RouteProvider extends ChangeNotifier {
           'route_calc from=${origin.latitude},${origin.longitude}'
           ' to=${destination.latitude},${destination.longitude}',
           e, st);
+      // O erro é logado sempre (aconteceu de verdade), mas só vira tela de erro
+      // se ainda for o cálculo atual: erro de uma busca abandonada em cima da
+      // rota nova é exatamente o "erro de sistema vazando" que não pode acontecer.
+      if (seq != _calcSeq) {
+        FieldLog.event('route_stale', {'onde': 'error'});
+        return;
+      }
       _errorMessage = e.toString();
       _status = RouteStatus.error;
     }
@@ -161,6 +187,9 @@ class RouteProvider extends ChangeNotifier {
   }
 
   void clear() {
+    // Invalida o cálculo em curso: sem isto, voltar/limpar durante o cálculo
+    // deixava a rota chegar depois e reaparecer sozinha na tela.
+    _calcSeq++;
     _status = RouteStatus.idle;
     _result = null;
     _errorMessage = null;
