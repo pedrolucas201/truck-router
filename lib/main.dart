@@ -63,7 +63,12 @@ void main() async {
       final uid = AuthService.currentUid;
       // uid identifica a INSTALAÇÃO (anônimo, estável): sem ele, dois motoristas
       // na mesma versão são indistinguíveis e a pergunta "quem" fica em aberto.
-      FieldLog.event('app_start', {'uid': uid == null ? 'none' : uid.substring(0, 6)});
+      // `store` também aqui, não só no auth_signin: aquele SÓ nasce quando a
+      // sessão se perde, então nunca houve leitura de aparelho SÃO pra comparar.
+      FieldLog.event('app_start', {
+        'uid': uid == null ? 'none' : uid.substring(0, 6),
+        'store': AuthService.bootStore,
+      });
       // Push do S.O.S.: presença (token + posição) e toque na notificação.
       // Depois do sign-in porque a regra de `presence` exige o uid do token.
       return SosPush.init();

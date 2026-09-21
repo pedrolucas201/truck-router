@@ -147,10 +147,20 @@ class AuthService {
   }
 
   /// Arquivos de sessão do Firebase Auth em shared_prefs, lidos ANTES do
-  /// initializeApp (o SDK pode apagar o que rejeita). Vai no `auth_signin`:
-  /// `sem_store` = alguém apagou o arquivo; `…:user=1` com usuário perdido =
-  /// o SDK tinha o usuário em disco e não o aceitou. Instrumento do churn do
-  /// Beto (18/09); sai quando a causa estiver fechada.
+  /// initializeApp (o SDK pode apagar o que rejeita). Vai no `auth_signin` e
+  /// também no `app_start` — este só existe quando a sessão se perde, então sem
+  /// a segunda ponta não havia leitura de aparelho SÃO pra comparar: o do Beto
+  /// sempre mostrou dois arquivos e ninguém sabe se dois é o normal.
+  /// `sem_store` = alguém apagou o arquivo.
+  ///
+  /// Nome e uid entraram em 21/09 porque `3980b:user=1,529b:user=0` não separa
+  /// as duas causas possíveis, que têm cura oposta: ou o SDK GRAVA num arquivo
+  /// e LÊ de outro (o órfão sendo resto de Auto Backup — `allowBackup` é o
+  /// default `true` no manifest mesclado e nada exclui o store — ou de versão
+  /// antiga do SDK), ou ele lê o próprio arquivo e recusa o usuário que ele
+  /// mesmo escreveu. Como o snapshot roda antes do initializeApp, o uid aqui é
+  /// o que a sessão ANTERIOR deixou: igual ao `prev` = o SDK recusou o próprio.
+  /// Instrumento do churn do Beto (18/09); sai quando a causa estiver fechada.
   static String bootStore = 'nd';
 
   static Future<void> snapshotStore() async {
@@ -160,14 +170,43 @@ class AuthService {
           .listSync()
           .whereType<File>()
           .where((f) => f.path.contains('firebase.auth'))
-          .map((f) {
-        final user = f.readAsStringSync().contains('FIREBASE_USER') ? 1 : 0;
-        return '${f.lengthSync()}b:user=$user';
-      }).toList();
+          .map((f) => storeLinha(f.path, f.lengthSync(), f.readAsStringSync()))
+          .toList();
       bootStore = fs.isEmpty ? 'sem_store' : fs.join(',');
     } catch (e) {
       bootStore = 'erro:${e.runtimeType}';
     }
+  }
+
+  static const _kStorePrefix = 'com.google.firebase.auth.api.Store.';
+  static final _reUid = RegExp(r'"(?:userId|localId|uid)":"([^"]{20,40})"');
+
+  /// Uma linha do [bootStore]: `<cauda do nome>:<tam>b:user=<uid|none>`. Pura
+  /// pra teste — o I/O fica no [snapshotStore].
+  ///
+  /// Só a CAUDA do nome: a persistenceKey é base64 de "[DEFAULT]"+apiKey e
+  /// "[DEFAULT]" tem 9 bytes = 12 caracteres base64 cravados, então dois apps
+  /// [DEFAULT] têm começo IDÊNTICO e o começo não distinguiria nada. Quem não é
+  /// `...api.Store.*` sai marcado `outro:` pra não passar por store.
+  @visibleForTesting
+  static String storeLinha(String caminho, int bytes, String conteudo) {
+    // Só o Android chega aqui (caminho do getApplicationSupportDirectory).
+    final nome = caminho.split('/').last.replaceAll('.xml', '');
+    final String tag;
+    if (nome.startsWith(_kStorePrefix)) {
+      final chave = nome.substring(_kStorePrefix.length);
+      tag = chave.length <= 8 ? chave : '~${chave.substring(chave.length - 8)}';
+    } else {
+      final curto = nome.replaceFirst('com.google.firebase.', '');
+      tag = 'outro:${curto.length <= 24 ? curto : curto.substring(0, 24)}';
+    }
+    final uid = _reUid.firstMatch(conteudo)?.group(1) ?? '';
+    // Arquivo COM usuário e sem uid legível ainda é informação (formato mudou);
+    // virar 'none' aí apagaria justamente o caso que se quer enxergar.
+    final quem = uid.isNotEmpty
+        ? _short(uid)
+        : (conteudo.contains('FIREBASE_USER') ? 'ilegivel' : 'none');
+    return '$tag:${bytes}b:user=$quem';
   }
 
   static const _kLastUid = 'auth_last_uid';
