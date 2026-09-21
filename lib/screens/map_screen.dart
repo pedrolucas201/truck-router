@@ -553,14 +553,30 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // Voltar desfaz uma camada por vez (Beto, áudios 21/23: errou o endereço na tela
   // de rota, apertou voltar e o app fechou). Aberto por link sem rota segue saindo
   // direto (N4) — a volta pro WhatsApp em si é do manifest (singleTask), não daqui.
+  /// Voltar durante o cálculo é no-op, e no-op não deixa rastro: sem isto a
+  /// telemetria não enxerga o motorista apertando voltar e NADA acontecendo
+  /// (percepção de travado, que é o sintoma que ele relata).
+  /// ponytail: janela fixa de 10 s só pra um mash de toques não virar 5 writes
+  /// de cota; cálculo que passe de 10 s faz uma 2ª linha, e aí ela é informação.
+  DateTime? _backCalculando;
+
   Future<void> _onBack() async {
     final route = context.read<RouteProvider>();
     if (_markingMode) {
+      FieldLog.event('map_back', {'acao': 'marcacao'});
       _exitMarkingMode();
       return;
     }
     // Sem guarda de rota velha no calculate(): limpar no meio faria a rota voltar.
-    if (route.status == RouteStatus.loading) return;
+    if (route.status == RouteStatus.loading) {
+      final agora = DateTime.now();
+      if (_backCalculando == null ||
+          agora.difference(_backCalculando!) > const Duration(seconds: 10)) {
+        _backCalculando = agora;
+        FieldLog.event('map_back', {'acao': 'calculando'});
+      }
+      return;
+    }
     if (route.status != RouteStatus.idle) {
       FieldLog.event('map_back', {'acao': 'rota'});
       setState(() {
@@ -571,6 +587,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       return;
     }
     if (_openedViaDeepLink) {
+      // Write fire-and-forget sobrevive ao fechar: o Firestore guarda pendente
+      // no cache local e manda na próxima abertura.
+      FieldLog.event('map_back', {'acao': 'link'});
       SystemNavigator.pop();
       return;
     }
