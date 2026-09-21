@@ -171,6 +171,36 @@ int? divergeSince(int? prevSinceMs, int nowMs, double sine, bool measurable) =>
 bool divergeSustained(int? sinceMs, int nowMs) =>
     sinceMs != null && (nowMs - sinceMs) >= kDivergeSustainMs;
 
+/// Puro/testável: dá pra pedir rota nova, ou seria a MESMA pergunta de novo?
+///
+/// Recalcular da mesma posição devolve a mesma rota — a HERE parte de onde o
+/// caminhão está. Field 18/09 (sessão `mu70mph0-g8khlq`): caminhão parado ~250 m
+/// fora da rota (pátio/posto, fora de via) rendeu **105 chamadas HERE em 30 min**,
+/// com `distM=21846` e `points=520` idênticos em TODAS e `remM` cravado. O gate
+/// de off-route disparava certo (`!movingByRoute` porque ele não avança, e
+/// `bestDist > _offRouteHardM` porque está a 250 m) — o que faltava era notar que
+/// a resposta não ia mudar.
+///
+/// O 1º reroute do episódio SEMPRE passa (`ultimaOrigem == null`): é ele que
+/// desenha o caminho de volta na tela, e tirar isso deixaria o motorista parado
+/// no pátio olhando a rota velha. Do 2º em diante, sem sair do lugar, é chamada
+/// jogada fora. Some sozinho no instante em que ele anda.
+///
+/// Invariante, não velocidade: gate por km/h calaria o reroute de quem parou no
+/// acostamento justamente pra ver por onde voltar, e voltaria a martelar assim
+/// que ele engatasse a 1 km/h dentro do pátio.
+bool saiuDoLugar(LatLng? ultimaOrigem, LatLng atual) =>
+    ultimaOrigem == null ||
+    RadarService.haversine(ultimaOrigem.latitude, ultimaOrigem.longitude,
+            atual.latitude, atual.longitude) >=
+        kRerouteMovedM;
+
+/// "Não saiu do lugar" em metros. Teto: abaixo disto a HERE entra pela mesma via
+/// e devolve a mesma linha (corredor de off-route é 70 m, precisão típica 4-5 m).
+/// ponytail: se um dia segurar um reroute legítimo, o `reroute_suppressed` com
+/// `reason=sem_sair_do_lugar` mostra — é medir, não chutar pra baixo.
+const double kRerouteMovedM = 50.0;
+
 /// Frase falada do alerta de restrição da rota.
 ///
 /// Destino inalcançável fala o texto específico ("Últimos 230 metros proibidos
@@ -359,6 +389,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   int _offRouteStartIdx = 0; // bestIdx quando saiu do corredor (mede avanço p/ telemetria)
   DateTime? _offRouteSince; // instrumentação: quando o caminhão saiu do corredor
   DateTime? _rerouteGraceUntil; // janela de carência pós-reroute (anti-encadeamento)
+  LatLng? _lastRerouteFrom;     // de onde saiu o último reroute (ver saiuDoLugar)
   RadarPoint? _upcomingRadar;
   // Sentido do _upcomingRadar vs heading do motorista — DECORAÇÃO da UI, nunca
   // gate (invariante). Calculado APÓS o gate escolher o radar, no setState.
@@ -1643,6 +1674,19 @@ class _NavigationScreenState extends State<NavigationScreen>
         // do field_log (72-77m cravado, rota nova só crescendo). Só reroteia se:
         // travou (não avança), longe demais p/ ser pista paralela (_offRouteHardM),
         // OU saiu de verdade (leavingRoute — apontou pra fora E se afastando).
+        // Mesma posição do último reroute = mesma rota de volta. Cede ANTES do
+        // ramo que rerota porque as duas condições dele (`!movingByRoute` de quem
+        // está parado, `bestDist > _offRouteHardM` de quem parou longe) são
+        // exatamente o retrato do caminhão estacionado fora da via.
+        else if (!saiuDoLugar(_lastRerouteFrom, latLng)) {
+          FieldLog.event('reroute_suppressed', {
+            'distM': bestDist.round(),
+            'reason': 'sem_sair_do_lugar',
+            'rawKmh': (pos.speed * 3.6).round(),
+            'moving': movingByRoute,
+          });
+          _offRouteCount = _offRouteCountLimit - 1; // re-arma sem martelar
+        }
         else if (!movingByRoute || bestDist > _offRouteHardM || leavingRoute) {
           _reroute(fromPos: latLng, urgent: true);
         } else {
@@ -1666,7 +1710,15 @@ class _NavigationScreenState extends State<NavigationScreen>
     } else {
       _offRouteCount = 0;
       _offRouteSince = null;
-      if (bestDist <= offRouteGate) _rerouteGraceUntil = null;
+      // Este else TAMBÉM roda durante a carência pós-reroute (o `if` exige as
+      // duas condições), e é justamente quando a origem acabou de ser gravada —
+      // limpar aqui sem checar mataria a guarda no berço. Só o retorno REAL ao
+      // corredor encerra o episódio; sem isso, sair da rota de novo perto do
+      // mesmo ponto (trevo, retorno) nasceria já silenciado.
+      if (bestDist <= offRouteGate) {
+        _rerouteGraceUntil = null;
+        _lastRerouteFrom   = null;
+      }
     }
 
     // 4. Manobra atual — busca monotônica: mIdx só avança, nunca retrocede.
@@ -2299,6 +2351,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       // GPS/âncora alcançam (anti-encadeamento, field 2026-06-29).
       _rerouteGraceUntil = DateTime.now().add(
           const Duration(milliseconds: _rerouteGraceMs));
+      // De onde esta rota nasceu. Só no SUCESSO: se a chamada falhou (rede), a
+      // pergunta continua sem resposta e a próxima tentativa tem que passar.
+      _lastRerouteFrom = origin;
       // Rota nova = outra referência: o histórico de afastamento foi medido
       // contra a linha ANTIGA e o salto de bestDist na troca vira "divergência"
       // que não existe. Sem zerar, o timer sustentado atravessaria a carência e
