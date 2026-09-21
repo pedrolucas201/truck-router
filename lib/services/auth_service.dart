@@ -216,7 +216,75 @@ class AuthService {
 
   static Future<String> getUid() async {
     await _ensureUser();
+    repararIdentidade();
     return FirebaseAuth.instance.currentUser!.uid;
+  }
+
+  /// A identidade está errada? Pura, pra teste.
+  ///
+  /// `marca` (prefs `auth_google_linked`) diz que ESTE aparelho já vinculou o
+  /// Google; `temGoogle` é o usuário de agora. Marca sim + usuário não só pode
+  /// ser sessão perdida seguida do fallback anônimo — **não existe fluxo de
+  /// desvincular nem de sair da conta no app** (conferido 21/09/2026), então não
+  /// há caso legítimo em que isto seja verdade. Se um dia existir "sair da
+  /// conta", ele TEM que limpar a marca, senão o reparo briga com a escolha do
+  /// motorista.
+  @visibleForTesting
+  static bool precisaReparar(
+          {required bool marca, required bool temGoogle, required bool jaReparou}) =>
+      marca && !temGoogle && !jaReparou;
+
+  static bool _reparado = false;
+  static DateTime? _reparoEm;
+  static const _reparoEspera = Duration(minutes: 5);
+
+  /// Devolve a identidade certa NO MEIO da sessão, sem esperar o próximo boot.
+  ///
+  /// Quando a recuperação do boot falha (offline, sem Play Services), o app cai
+  /// num anônimo NOVO e segue a viagem inteira assim: o S.O.S. não é escutado
+  /// (a regra exige Google), o voto conta como outra pessoa e o perfil fica
+  /// órfão. Esperar o próximo boot custa uma viagem inteira — e a troca de uid
+  /// que assusta é a MESMA que aconteceria lá, só que tarde.
+  ///
+  /// Vive aqui, e não em quem consome: `getUid`/`getHeaders` são o funil de tudo
+  /// que é autenticado (31 chamadas), e o listener do S.O.S. é só mais um
+  /// cliente. Consertar em um caminho deixaria os outros quebrados.
+  ///
+  /// Fire-and-forget de propósito: NUNCA segurar quem chamou (o funil está no
+  /// caminho de escrita), e uma vez por sessão com cooldown pra um retry de 1
+  /// min não martelar o Google lightweight quando ele está sem rede.
+  static void repararIdentidade() {
+    if (_reparado || isGoogleLinked || currentUid == null) return;
+    final agora = DateTime.now();
+    if (_reparoEm != null && agora.difference(_reparoEm!) < _reparoEspera) return;
+    _reparoEm = agora;
+    unawaited(_reparar());
+  }
+
+  static Future<void> _reparar() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!precisaReparar(
+          marca: prefs.getBool(_kGoogle) ?? false,
+          temGoogle: isGoogleLinked,
+          jaReparou: _reparado)) {
+        return;
+      }
+      final antes = currentUid ?? '';
+      final (cred, motivo) = await _recuperarGoogle();
+      if (cred == null) {
+        // Sem rede/sem conta: segue anônimo, tenta de novo depois do cooldown.
+        FieldLog.event('auth_reparo', {'ok': false, 'gmot': ?motivo});
+        return;
+      }
+      _reparado = true;
+      final novo = cred.user?.uid ?? '';
+      if (novo.isNotEmpty) await prefs.setString(_kLastUid, novo);
+      FieldLog.event('auth_reparo',
+          {'ok': true, 'de': _short(antes), 'para': _short(novo)});
+    } catch (e, st) {
+      FieldLog.error('auth_reparo', e, st);
+    }
   }
 
   /// Uid que já está em memória, ou null se o sign-in não completou. Síncrono e
@@ -304,6 +372,7 @@ class AuthService {
 
   static Future<Map<String, String>> getHeaders() async {
     await _ensureUser();
+    repararIdentidade();
     final token = await FirebaseAuth.instance.currentUser!.getIdToken();
     return {'Authorization': 'Bearer $token'};
   }

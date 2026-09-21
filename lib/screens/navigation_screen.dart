@@ -2894,6 +2894,11 @@ class _NavigationScreenState extends State<NavigationScreen>
     _sosRetry?.cancel();
     if (!mounted) return;
     if (!AuthService.isGoogleLinked) {
+      // Pode ser que ele nunca tenha vinculado (normal) ou que a identidade
+      // tenha quebrado no meio da viagem — neste segundo caso o app ficaria
+      // surdo a S.O.S. até o próximo boot. O AuthService sabe distinguir e
+      // conserta sozinho; aqui é só o gatilho, sem esperar resposta.
+      AuthService.repararIdentidade();
       _sosRetry = Timer(const Duration(minutes: 1), _ouvirSos);
       return;
     }
