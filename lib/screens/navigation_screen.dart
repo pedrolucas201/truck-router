@@ -760,7 +760,11 @@ class _NavigationScreenState extends State<NavigationScreen>
       if (_heartbeatN++ % 10 == 0) SosPush.gravarPresenca(pos: _currentPos);
       _checarParadaSos();
       if (_sosTodos.isNotEmpty) _onSosAtivos(_sosTodos);
-      FieldLog.event('heartbeat', {
+      // `amostra` e não `event`: agrupa de 10 em 10 documentos (5 min) e
+      // qualquer outro evento esvazia o lote antes de si, então as amostras que
+      // antecedem um off_route/reroute chegam junto com ele. O intervalo de 30 s
+      // NÃO mudou — é ele que dá a resolução de ~500 m a 60 km/h.
+      FieldLog.amostra('heartbeat', {
         'idx':  _closestPolylineIdx,
         'kmh':  _speedKmh.round(),        // o que o MOTORISTA vê no velocímetro
         'rawKmh': _rawSpeedKmh.round(),   // o que o GPS realmente diz

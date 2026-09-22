@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 
 /// Telemetria de campo do caminho crítico de navegação (reroute, off-route,
 /// chegada). Existe porque o motorista (Gilberto) não consegue capturar logcat
@@ -42,10 +43,77 @@ class FieldLog {
 
   /// Registra um breadcrumb. [data] é um mapa pequeno de contexto (números/strings).
   static void event(String name, [Map<String, dynamic> data = const {}]) {
-    final crumb = data.isEmpty ? name : '$name ${_compact(data)}';
+    // Qualquer evento esvazia o buffer ANTES de si: é isso que faz o
+    // agrupamento não custar diagnóstico. Quando algo interessante acontece
+    // (off_route, reroute, chegada, erro), as amostras que levaram até ele
+    // chegam junto, no mesmo instante — que é exatamente quando elas valem.
+    _flush();
+    _crumb(name, data);
+    _escrever(name, data);
+  }
+
+  /// Amostra periódica e repetitiva (hoje só o `heartbeat`, de 30 em 30 s).
+  ///
+  /// Um documento por amostra era o maior consumidor de escrita do projeto:
+  /// ~960 por motorista em 8 h de viagem, contra o teto de 20.000/dia do plano
+  /// Spark — ou seja, ~20 motoristas e a telemetria morre (e o Firestore aqui
+  /// não tem billing, então não vira conta, vira silêncio). Agrupadas de
+  /// [_loteMax] em [_loteMax], o mesmo dado cabe em 1 documento.
+  ///
+  /// **O intervalo NÃO muda.** Foi a resolução de 30 s que revelou os 105
+  /// recálculos com o caminhão parado; aumentá-la perderia achado, agrupar não
+  /// perde nenhuma amostra.
+  ///
+  /// O Crashlytics continua recebendo CADA amostra na hora (o breadcrumb é o
+  /// que sobrevive a um ANR), então o rastro fino não depende deste buffer.
+  static void amostra(String name, Map<String, dynamic> data) {
+    // Trocar de tipo de amostra fecha o lote anterior: misturar dois nomes num
+    // documento só faria o `event` do documento mentir sobre o que tem dentro.
+    if (_lote.isNotEmpty && name != _loteNome) _flush();
+    _loteNome = name;
+    _crumb(name, data);
+    _lote.add(data);
+    if (_lote.length >= _loteMax) _flush();
+  }
+
+  /// ponytail: 10 × 30 s = 5 min de janela. Teto do que se perde num freeze
+  /// TOTAL sem nenhum evento junto — e mesmo aí as amostras estão no
+  /// Crashlytics. Se um dia precisar de mais fôlego, este é o número a subir.
+  static const _loteMax = 10;
+  static final List<Map<String, dynamic>> _lote = [];
+  static String _loteNome = 'heartbeat';
+
+  static void _flush() {
+    if (_lote.isEmpty) return;
+    final amostras = List<Map<String, dynamic>>.from(_lote);
+    _lote.clear();
+    _escrever(_loteNome, {'n': amostras.length, 'hb': amostras});
+  }
+
+  static void _crumb(String name, Map<String, dynamic> data) {
     try {
-      FirebaseCrashlytics.instance.log(crumb);
+      FirebaseCrashlytics.instance
+          .log(data.isEmpty ? name : '$name ${_compact(data)}');
     } catch (_) {}
+  }
+
+  /// Desvia os writes num teste. A ordem em que eles saem É a feature aqui (o
+  /// lote tem que sair ANTES do evento que o fechou), e isso não dá pra provar
+  /// por função pura — só olhando a sequência.
+  @visibleForTesting
+  static void Function(String name, Map<String, dynamic> data)? sinkDeTeste;
+
+  @visibleForTesting
+  static void limparLoteParaTeste() => _lote.clear();
+
+  /// Só o write. O breadcrumb é responsabilidade de quem chama: no lote as
+  /// amostras já foram para o Crashlytics UMA a UMA, na hora em que
+  /// aconteceram, e repetir o lote inteiro aqui duplicaria o rastro.
+  static void _escrever(String name, Map<String, dynamic> data) {
+    if (sinkDeTeste != null) {
+      sinkDeTeste!(name, data);
+      return;
+    }
     try {
       // Fire-and-forget: não aguardamos o write (estamos no caminho do GPS).
       _collection.add({

@@ -33,7 +33,13 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBnzJdTZGvVPLz8BZ4_WX4c1LzoG8mYYEs"></script>
+  <!-- Chave REMOVIDA em 22/09/2026. Estava em texto puro e commitada, e este
+       build web nunca é gerado (o app é Android por sideload). Uma chave do
+       Maps JS aqui não passa pela restrição de pacote+SHA-1 do Android, então
+       toda chamada dela volta 403 — foi a principal suspeita dos 349 `403` de
+       geocoding/mês medidos no Monitoring. Se um dia o build web voltar, a
+       chave entra por --dart-define, nunca no HTML. -->
+  <!-- <script src="https://maps.googleapis.com/maps/api/js?key=SUA_CHAVE"></script> -->
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
