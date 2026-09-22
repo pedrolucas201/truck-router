@@ -322,6 +322,36 @@ class NavigationScreen extends StatefulWidget {
     }
     return closestKeep ?? closest; // oposto só ganha se for o único no raio
   }
+
+  /// O caminhão já passou por este radar? Pura, pra teste.
+  ///
+  /// Pergunta "eu me afastei dele?", **não** "ele está à frente?" — e isso é
+  /// deliberado. Índice na rota erraria em alça, retorno e pista paralela, que
+  /// são exatamente os lugares onde o snap deste projeto já erra, e errar ali
+  /// significa **calar radar de verdade**. Rumo do GPS não serve: é não
+  /// confiável em baixa velocidade e não existe parado. Distância é local, não
+  /// depende de snap, de índice nem de rumo, e sobrevive a reroute.
+  ///
+  /// ⭐ **Duas condições, e as duas são obrigatórias:**
+  /// 1. `dMin <= [_NavigationScreenState._radarReachedM]` — o caminhão CHEGOU
+  ///    no radar. É o mesmo limiar do pop-up de curadoria, então o chip some
+  ///    junto com a mensagem, que foi o pedido literal do Beto.
+  /// 2. `d > dMin + [_NavigationScreenState._radarAfastouM]` — e depois se
+  ///    AFASTOU.
+  ///
+  /// A condição 1 é o cinto de segurança: **radar em que o caminhão nunca
+  /// chegou NUNCA é suprimido**, então nada que ele esteja se aproximando some
+  /// da tela — nem com GPS pulando 40 m parado no trânsito. Sem alarme é multa;
+  /// falso alarme é passável.
+  ///
+  /// Limitação conhecida e aceita: num retorno que traz o caminhão de volta ao
+  /// mesmo radar, ele só reaparece a ~100 m. A voz já se comporta assim hoje
+  /// (`_lastRadarAlertKey` fala uma vez por radar por viagem e nunca reseta),
+  /// então isto NÃO cria classe nova de alerta perdido — alinha o visual ao que
+  /// a voz já faz.
+  static bool radarPassou({required double d, required double dMin}) =>
+      dMin <= _NavigationScreenState._radarReachedM &&
+      d > dMin + _NavigationScreenState._radarAfastouM;
 }
 
 class _NavigationScreenState extends State<NavigationScreen>
@@ -485,6 +515,13 @@ class _NavigationScreenState extends State<NavigationScreen>
   // Contadores da viagem (vão no nav_end): quantos radares entraram no slot,
   // quantos falaram, quantos calaram por pista oposta. É o número da sexta.
   int _radarSlots = 0, _radarSpoken = 0, _radarOpposite = 0, _tollSpoken = 0;
+  // Menor distância já vista até cada radar nesta viagem, e quantos saíram da
+  // tela por terem ficado pra trás. Vai no nav_end: é o veredito do pedido do
+  // Beto (22/09) na próxima viagem. Cresce com radares da viagem (23 numa de
+  // 44 km), não com o tempo — não é hot path nem vaza memória de verdade.
+  final Map<String, double> _radarDistMin = {};
+  final Set<String> _radarPassadoVisto = {};
+  int _radarPassados = 0;
   final _fila = VoiceQueue(); // falas raras que não podem sumir (S.O.S., parada)
   bool _speedAlertActive = false;
   DateTime? _lastSpeedAlertAt;
@@ -677,6 +714,16 @@ class _NavigationScreenState extends State<NavigationScreen>
   static const _radarCorridorM      = 22.0;
   // Distância pra o pop-up de curadoria surgir (chegou no radar). Tunável em campo.
   static const _radarReachedM       = 60.0;
+  // Quanto o caminhão precisa se AFASTAR do ponto mais próximo que chegou de um
+  // radar pra ele sumir da tela. Pedido do Beto (22/09): "o vermelhinho ainda
+  // continua, porque ele ainda pega o raio depois que você passou; tem como
+  // sumir junto com a mensagem?".
+  //
+  // ponytail: 40 m ≈ 5-10× o accM típico medido em campo (4-8 m) e ~2 s a
+  // 67 km/h, que é o "no mesmo tempo que passou" que ele pediu. Teto: se o campo
+  // mostrar chip sumindo cedo com GPS ruim, o upgrade é escalar com
+  // _gpsAccuracyM em vez de subir a constante.
+  static const _radarAfastouM       = 40.0;
   static const _prefAudioLevel = 'nav_audio_level';
   static const _prefZoomLevel  = 'nav_zoom_level';
 
@@ -806,6 +853,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       'speedKmh': _speedKmh.round(),
       'ttsDropped': _ttsDropped, // falas comidas por colisão nesta viagem
       'radarSlots': _radarSlots,       // radares que ocuparam o slot de alerta
+      'radarPassados': _radarPassados, // sumiram da tela por ficar pra trás
       'radarSpoken': _radarSpoken,     // dos quais falaram
       'radarOpposite': _radarOpposite, // calados por "pista oposta"
       'tollSpoken': _tollSpoken,
@@ -1759,9 +1807,35 @@ class _NavigationScreenState extends State<NavigationScreen>
         RadarService.distanceToPath(r.lat, r.lng, aheadPts) <= _radarCorridorM
     ).toList();
 
+    // 5b. Tira do páreo o radar que o caminhão JÁ PASSOU.
+    //
+    // O corredor acima já parte de `bestIdx` (só olha pra frente), mas
+    // `distanceToPath` mede perpendicular ao SEGMENTO: um radar logo atrás
+    // projeta antes do primeiro vértice e herda a distância até ele, que é
+    // pequena justo depois de passar. Com os 22 m de corredor, a pista oposta
+    // de uma via dupla entra — foi o print do Beto na Dutra (22/09), radar da
+    // contramão preso na tela depois de passar.
+    //
+    // Não mexo no `distanceToPath`: ele é usado em outros caminhos e o risco de
+    // mudá-lo é maior que o do bug. Ver [NavigationScreen.radarPassou].
+    final naoPassados = <RadarPoint>[];
+    for (final r in visibleRadares) {
+      final k = dismissalKey(r.lat, r.lng);
+      final d = RadarService.haversine(
+          latLng.latitude, latLng.longitude, r.lat, r.lng);
+      final anterior = _radarDistMin[k];
+      final dMin = (anterior == null || d < anterior) ? d : anterior;
+      _radarDistMin[k] = dMin;
+      if (NavigationScreen.radarPassou(d: d, dMin: dMin)) {
+        if (_radarPassadoVisto.add(k)) _radarPassados++;
+      } else {
+        naoPassados.add(r);
+      }
+    }
+
     // 6. Radar à frente — restrito ao corredor da rota (sem falso positivo em paralelas)
     final upcoming = NavigationScreen.pickUpcomingRadar(
-      visibleRadares, latLng, pos.heading, pos.headingAccuracy);
+      naoPassados, latLng, pos.heading, pos.headingAccuracy);
 
     // 7. Restrição bloqueada à frente
     final userBlocked = _userRestrictions
