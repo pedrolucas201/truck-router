@@ -63,6 +63,47 @@ void main() {
       expect(prefs.getBool('truck_editado'), isTrue);
     });
 
+    test('⭐ instalação que JÁ existia antes da flag nasce marcada', () async {
+      // Regressão do bug que o primeiro campo pegou (22/09, v2.4.87): quem já
+      // tinha caminhão configurado caía no ramo `raw != null` com a flag
+      // ausente e ficava MUDO pra sempre. Resultado medido: zero
+      // `truck_mirror_save` numa viagem inteira do Beto. O espelho estava morto
+      // pra todo usuário existente, que é justamente quem tem o que espelhar.
+      final real = TruckProfile(
+        id: '1700000000000', name: 'Carreta',
+        heightCm: 440, lengthCm: 1800, weightKg: 40000,
+      );
+      SharedPreferences.setMockInitialValues({
+        'truck_profiles_v2': [jsonEncode(real.toJson())],
+        'truck_active_id': real.id,
+        // sem `truck_editado`: é o estado de quem atualizou o app
+      });
+      final p = TruckProfileProvider();
+      await p.load();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('truck_editado'), isTrue,
+          reason: 'sem isto o caminhão dele nunca sobe pro banco');
+      expect(p.profile.heightCm, 440);
+    });
+
+    test('2º boot de instalação limpa NÃO se confunde com antiga', () async {
+      // O outro lado da mesma moeda: depois do 1º boot o `truck_profiles_v2`
+      // existe. Se a flag não tivesse sido cravada como falsa, este boot se
+      // acharia instalação antiga e mataria a restauração de quem trocou de
+      // celular.
+      SharedPreferences.setMockInitialValues({});
+      await TruckProfileProvider().load();
+
+      final p2 = TruckProfileProvider();
+      await p2.load();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('truck_editado'), isFalse);
+      expect(
+          TruckProfileProvider.podeRestaurar(editado: false, temGoogle: true),
+          isTrue);
+    });
+
     test('salvar um caminhão marca o aparelho e fecha a porta do banco',
         () async {
       SharedPreferences.setMockInitialValues({});

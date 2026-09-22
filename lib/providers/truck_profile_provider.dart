@@ -48,6 +48,16 @@ class TruckProfileProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_profilesKey);
     _editado = prefs.getBool(_editadoKey) ?? false;
+    // A flag nasceu depois do app. Ausente = este boot é o PRIMEIRO que a
+    // enxerga, e é a única chance de decidir o que esta instalação é: ter
+    // `truck_profiles_v2` sem nunca ter tido a flag só acontece se ela já
+    // rodou numa versão anterior, logo o caminhão dela é real.
+    //
+    // Sem esta decisão o espelho ficava MORTO pra todo usuário existente:
+    // `_editado` continuava falso até ele tocar na tela de caminhões, e o
+    // primeiro campo (22/09, v2.4.87) mostrou exatamente isso — zero
+    // `truck_mirror_save` numa viagem inteira.
+    final semFlag = !prefs.containsKey(_editadoKey);
 
     if (raw == null) {
       // Migra perfil único do formato antigo (ou cria padrão).
@@ -67,7 +77,14 @@ class TruckProfileProvider extends ChangeNotifier {
       // isto o espelho o trataria como aparelho novo e poderia trocar a
       // altura real dele pela de outro aparelho. Marca ANTES do persist pra
       // que a configuração real dele suba já neste boot.
-      if (legadoAltura != null) await _marcarEditado(prefs);
+      if (legadoAltura != null) {
+        await _marcarEditado(prefs);
+      } else if (semFlag) {
+        // Instalação limpa de verdade: CRAVA o falso. Sem gravar, o próximo
+        // boot veria `truck_profiles_v2` sem flag e se acharia uma instalação
+        // antiga — matando a restauração justo em quem trocou de celular.
+        await prefs.setBool(_editadoKey, false);
+      }
       await _persist(prefs);
     } else {
       _profiles = raw
@@ -75,6 +92,12 @@ class TruckProfileProvider extends ChangeNotifier {
               jsonDecode(s) as Map<String, dynamic>))
           .toList();
       _activeId = prefs.getString(_activeKey) ?? _profiles.first.id;
+      // Já tinha caminhão antes da flag existir: é aparelho configurado.
+      // Marca ANTES do persist pra que os caminhões dele subam neste boot.
+      if (semFlag) {
+        await _marcarEditado(prefs);
+        await _persist(prefs);
+      }
     }
     await _migrarIdentidade(prefs);
     notifyListeners();
