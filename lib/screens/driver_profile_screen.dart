@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../models/driver_profile.dart';
+import '../providers/truck_profile_provider.dart';
 import '../services/auth_service.dart';
 import '../services/sos_push.dart';
 import '../services/driver_profile_service.dart';
@@ -40,6 +42,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         ? await DriverProfileService.fetchRemote()
         : null;
     if (!mounted) return;
+    // Aparelho limpo com o Google já restaurado pelo SDK: os caminhões também
+    // só existem no banco. O gate mora no provider — ele só aceita enquanto
+    // ninguém configurou caminhão neste aparelho.
+    if (AuthService.isGoogleLinked) {
+      unawaited(context.read<TruckProfileProvider>().restaurarDoBanco());
+    }
     if (p != null) _fill(p);
     setState(() => _loading = false);
   }
@@ -73,6 +81,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         unawaited(SosPush.gravarPresenca());
       case GoogleLinkResult.recovered:
         unawaited(SosPush.gravarPresenca());
+        // Caso que justifica o espelho: celular novo, uid antigo de volta, os
+        // caminhões dele só existem no banco. Fire-and-forget — o motorista não
+        // espera rede pra ver o perfil.
+        unawaited(context.read<TruckProfileProvider>().restaurarDoBanco());
         // Uid antigo voltou: o perfil dele manda sobre o que está na tela.
         final p = await DriverProfileService.fetchRemote();
         if (p != null) _fill(p);
