@@ -8,6 +8,7 @@ import '../utils/geo_bounds.dart';
 import '../models/radar_point.dart';
 import 'auth_service.dart';
 import 'field_log.dart';
+import 'install_id.dart';
 import 'radar_service.dart';
 
 /// Verdicto do curador sobre um ponto: existe ou não, e a velocidade real
@@ -304,6 +305,9 @@ class FirestoreRadarService {
             body: jsonEncode({
               'rid': rid, 'lat': lat, 'lng': lng,
               'exists': exists, 'kmh': speedKmh,
+              // Identidade do APARELHO. O uid segue sendo quem autentica; isto
+              // so colapsa votos do mesmo celular na contagem.
+              'install': await InstallId.get(),
             }),
           )
           .timeout(const Duration(seconds: 12));

@@ -56,12 +56,59 @@ type votoIn struct {
 	Lng    float64 `json:"lng"`
 	Exists bool    `json:"exists"`
 	Kmh    int     `json:"kmh"` // 0 = não opinou sobre o limite
+	// Identidade do APARELHO (32 hex), opcional: o app anterior não manda.
+	// NÃO autentica nada — o uid do token segue sendo a chave de escrita. Só
+	// COLAPSA votos do mesmo celular na contagem, então valor forjado não infla
+	// placar: o pior caso é um id por voto, que é o comportamento de hoje.
+	Install string `json:"install"`
 }
 
-// voto é o que UM motorista disse. Um por (radar, uid).
+var installRe = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+// dono é quem CONTA como um votante: o aparelho quando ele se identificou, o
+// uid quando não. O uid do Firebase não serve sozinho porque a sessão do Auth
+// se perde em alguns aparelhos e nasce um uid novo por abertura — o mesmo
+// motorista viraria três votantes e atravessaria o piso de 3 sozinho, que é a
+// má-fé que o piso foi escrito pra barrar.
+func dono(install, uid string) string {
+	if installRe.MatchString(install) {
+		return install
+	}
+	return uid
+}
+
+// voto é o que UM motorista disse. Um doc por (radar, uid), mas quem conta como
+// votante é o [dono] — ver [colapsarPorDono].
 type voto struct {
 	Exists bool
 	Kmh    int
+	Dono   string
+	At     time.Time
+}
+
+// colapsarPorDono deixa UM voto por aparelho, o mais recente. Pura, pra teste.
+//
+// Colapsar só REDUZ a contagem, nunca aumenta, então não abre brecha nova: quem
+// quisesse inflar já conseguia criando uids, e segue conseguindo se mandar um
+// install diferente por voto. O ganho é no caso honesto, que é o único que
+// acontece.
+//
+// Sem hora (docs gravados antes deste campo existir) o desempate é arbitrário:
+// são opiniões do mesmo motorista sobre o mesmo radar, e a atual vence assim
+// que ele votar de novo.
+func colapsarPorDono(vs []voto) []voto {
+	porDono := make(map[string]voto, len(vs))
+	for _, v := range vs {
+		if ant, ok := porDono[v.Dono]; ok && ant.At.After(v.At) {
+			continue
+		}
+		porDono[v.Dono] = v
+	}
+	out := make([]voto, 0, len(porDono))
+	for _, v := range porDono {
+		out = append(out, v)
+	}
+	return out
 }
 
 // placar é o que o servidor publica pro app.
@@ -82,6 +129,9 @@ type placar struct {
 // Empate não muda nada: o asset só tem limite oficial em 5,5% dos radares
 // (medido em 17/09), então não serve de fiel da balança.
 func decidirVotos(vs []voto) placar {
+	// Conta APARELHOS, não documentos: um motorista cujo uid troca a cada
+	// abertura grava N docs e é UM votante só.
+	vs = colapsarPorDono(vs)
 	p := placar{N: len(vs)}
 	if len(vs) == 0 {
 		return p
@@ -163,9 +213,10 @@ func (h *Votos) Create(w http.ResponseWriter, r *http.Request) {
 		"uid":    uid,
 		"lat":    in.Lat,
 		"lng":    in.Lng,
-		"exists": in.Exists,
-		"kmh":    in.Kmh,
-		"at":     time.Now(),
+		"exists":  in.Exists,
+		"kmh":     in.Kmh,
+		"at":      time.Now(),
+		"install": in.Install,
 	}); err != nil {
 		log.Printf("voto %s: set: %v", in.Rid, err)
 		sosErr(w, http.StatusInternalServerError, "interno", nil)
@@ -221,6 +272,11 @@ func (h *Votos) lerVotos(ctx context.Context, rid string) ([]voto, error) {
 		d := doc.Data()
 		ex, _ := d["exists"].(bool)
 		kmh, _ := d["kmh"].(int64)
-		out = append(out, voto{Exists: ex, Kmh: int(kmh)})
+		inst, _ := d["install"].(string)
+		u, _ := d["uid"].(string)
+		at, _ := d["at"].(time.Time)
+		out = append(out, voto{
+			Exists: ex, Kmh: int(kmh), Dono: dono(inst, u), At: at,
+		})
 	}
 }

@@ -87,7 +87,14 @@ func (h *Restrictions) vote(w http.ResponseWriter, r *http.Request, action strin
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	if err := fs.Vote(r.Context(), h.client, id, uid, action); err != nil {
+	// Corpo OPCIONAL: o APK em campo manda vazio e segue contando por uid.
+	// Corpo inválido não derruba o voto — quem autentica é o token, e o
+	// `install` só colapsa votos do mesmo aparelho na contagem.
+	var body struct {
+		Install string `json:"install"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := fs.Vote(r.Context(), h.client, id, uid, body.Install, action); err != nil {
 		log.Printf("Vote %s %s %s: %v", id, uid, action, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

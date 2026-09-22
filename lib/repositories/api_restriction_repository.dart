@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/auth_service.dart';
 import '../services/field_log.dart';
+import '../services/install_id.dart';
 import '../models/bridge_restriction.dart';
 import '../models/user_restriction.dart';
 import 'restriction_repository.dart';
@@ -84,16 +85,24 @@ class ApiRestrictionRepository implements RestrictionRepository {
   }
 
   @override
-  Future<void> confirm(String id) async {
-    await http
-        .post(Uri.parse('$baseUrl/restrictions/$id/confirm'), headers: await AuthService.getHeaders(), body: '')
-        .timeout(const Duration(seconds: 10));
-  }
+  Future<void> confirm(String id) => _votar(id, 'confirm');
 
   @override
-  Future<void> report(String id) async {
+  Future<void> report(String id) => _votar(id, 'report');
+
+  /// O `install` identifica o APARELHO e só serve pra colapsar votos do mesmo
+  /// celular na contagem — o uid do token continua sendo quem autentica. Sem
+  /// ele (versão antiga do app) o servidor conta por uid, como sempre contou.
+  Future<void> _votar(String id, String acao) async {
     await http
-        .post(Uri.parse('$baseUrl/restrictions/$id/report'), headers: await AuthService.getHeaders(), body: '')
+        .post(
+          Uri.parse('$baseUrl/restrictions/$id/$acao'),
+          headers: {
+            'Content-Type': 'application/json',
+            ...await AuthService.getHeaders(),
+          },
+          body: jsonEncode({'install': await InstallId.get()}),
+        )
         .timeout(const Duration(seconds: 10));
   }
 }
