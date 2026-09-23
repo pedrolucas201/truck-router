@@ -105,6 +105,12 @@ class AuthService {
         // tem a sessão; sem ela a recuperação acima nunca tenta.
         if (isGoogleLinked) await prefs.setBool(_kGoogle, true);
       }
+      // A recuperação do _ensureUser só roda com currentUser == null. Se ela
+      // estourou o timeout, o anônimo que nasceu PERSISTE (auth 24+ volta a
+      // gravar o store) e o boot seguinte já não tenta mais o Google: sem isto,
+      // quem só abre o app, sem buscar nem navegar, fica no anônimo. Medido no
+      // aparelho do Pedro em 23/09 (gmot=timeout no 1º boot da 24).
+      repararIdentidade();
     } catch (_) {}
   }
 
