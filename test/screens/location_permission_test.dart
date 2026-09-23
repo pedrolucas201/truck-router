@@ -33,4 +33,30 @@ void main() {
       expect(shouldAskLocationOnBoot(p, true), isFalse);
     }
   });
+
+  group('marca de "já pedimos" é por INSTALAÇÃO', () {
+    const inst = 1000, outra = 2000;
+
+    test('reinstalação com prefs do backup pergunta de novo', () {
+      // Auto Backup devolve a marca da instalação antiga; a permissão veio zerada.
+      expect(locationAskedThisInstall(marcadoEm: inst, instalacao: outra, legado: true),
+          isFalse);
+    });
+
+    test('mesma instalação (atualização por cima) não insiste', () {
+      expect(locationAskedThisInstall(marcadoEm: inst, instalacao: inst, legado: true),
+          isTrue);
+    });
+
+    test('migração: marca antiga sem hora vale pra instalação atual', () {
+      // Quem negou de propósito não pode tomar o diálogo de novo só por atualizar.
+      expect(locationAskedThisInstall(instalacao: inst, legado: true), isTrue);
+      expect(locationAskedThisInstall(instalacao: inst, legado: false), isFalse);
+    });
+
+    test('sem hora de instalação vale a regra antiga', () {
+      expect(locationAskedThisInstall(legado: true), isTrue);
+      expect(locationAskedThisInstall(legado: false), isFalse);
+    });
+  });
 }
