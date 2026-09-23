@@ -25,4 +25,14 @@ void main() {
     expect(currentBuild('dev'), isNull);
     expect(currentBuild('2.4.67-sos2'), isNull);
   });
+
+  test('APK do OTA só sai depois de instalado', () {
+    final instalado = DateTime(2026, 9, 23, 14);
+    expect(UpdateService.apkJaInstalado(DateTime(2026, 9, 23, 13), instalado), isTrue,
+        reason: 'baixado antes da instalação atual = já instalado');
+    expect(UpdateService.apkJaInstalado(DateTime(2026, 9, 23, 15), instalado), isFalse,
+        reason: 'baixado depois = instalador pode estar esperando o toque');
+    expect(UpdateService.apkJaInstalado(DateTime(2026, 9, 23, 13), null), isFalse,
+        reason: 'sem hora de instalação, na dúvida mantém');
+  });
 }

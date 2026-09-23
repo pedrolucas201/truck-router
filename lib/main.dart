@@ -20,6 +20,7 @@ import 'providers/theme_controller.dart';
 import 'services/field_log.dart';
 import 'services/auth_service.dart';
 import 'services/sos_push.dart';
+import 'services/update_service.dart';
 
 const _backendUrl = String.fromEnvironment('BACKEND_URL');
 
@@ -69,6 +70,7 @@ void main() async {
         'uid': uid == null ? 'none' : uid.substring(0, 6),
         'store': AuthService.bootStore,
       });
+      unawaited(UpdateService.limparApkInstalado());
       // Push do S.O.S.: presença (token + posição) e toque na notificação.
       // Depois do sign-in porque a regra de `presence` exige o uid do token.
       return SosPush.init();

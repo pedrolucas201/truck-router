@@ -1,6 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'field_log.dart';
 
@@ -72,5 +76,37 @@ class UpdateService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// O `ota_update` baixa em `files/ota_update/` e nunca apaga depois de
+  /// instalar: 66 MB esquecidos no celular, e o Auto Backup (teto de 25 MB por
+  /// app) falhava inteiro por causa deles — medido em 23/09/2026 no aparelho do
+  /// Pedro (`bmgr backupnow` → "Size quota exceeded").
+  ///
+  /// Não dá pra apagar sempre: o plugin instala por ACTION_INSTALL_PACKAGE e o
+  /// instalador do sistema lê o arquivo NA HORA do toque em "Instalar"; com o
+  /// diálogo pendente, apagar quebraria a instalação.
+  @visibleForTesting
+  static bool apkJaInstalado(DateTime baixado, DateTime? instalado) =>
+      instalado != null && baixado.isBefore(instalado);
+
+  /// Nunca lança e nunca segura o boot. Chamar depois do sign-in (FieldLog).
+  static Future<void> limparApkInstalado() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final dir = Directory('${(await getApplicationSupportDirectory()).path}/ota_update');
+      if (!dir.existsSync()) return;
+      final instalado = (await PackageInfo.fromPlatform()).updateTime;
+      var bytes = 0;
+      for (final f in dir.listSync().whereType<File>()) {
+        final st = f.statSync();
+        if (!apkJaInstalado(st.modified, instalado)) continue;
+        f.deleteSync();
+        bytes += st.size;
+      }
+      if (bytes > 0) {
+        FieldLog.event('ota_limpo', {'mb': (bytes / 1e6).round()});
+      }
+    } catch (_) {}
   }
 }
