@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:truck_router/models/radar_point.dart';
 import 'package:truck_router/screens/navigation_screen.dart';
+import 'package:truck_router/services/firestore_radar_service.dart' show dismissalKey;
 
 /// Esta é a única lógica do app que **cala um alerta de radar**, então o teste
 /// existe pra provar o cinto de segurança, não a feature: radar em que o
@@ -71,18 +72,46 @@ void main() {
       return LatLng(o.lat + metros * math.cos(b) / 111320,
           o.lng + metros * math.sin(b) / (111320 * math.cos(o.lat * math.pi / 180)));
     }
-    final distMin = <String, double>{};
+    final distMin = <String, (double, double)>{};
     final vistos = <String>{};
     // Ida: de 300 m antes a 300 m depois do radar da ida, rumo 62°.
     for (var m = -300.0; m <= 300; m += 10) {
-      NavigationScreen.tiraPassados([ida, volta], mover(ida, m, 62), distMin, vistos);
+      NavigationScreen.tiraPassados([ida, volta], mover(ida, m, 62), 62, distMin, vistos);
     }
     // Volta, rumo 242°, pela pista do radar da volta: a 200 m dele tem que avisar.
     final naVolta = NavigationScreen.tiraPassados(
-        [ida, volta], mover(volta, -200, 242), distMin, vistos);
+        [ida, volta], mover(volta, -200, 242), 242, distMin, vistos);
     expect(naVolta, contains(volta),
         reason: 'a 200 m do radar da pista dele, ele não pode estar suprimido');
-  }, skip: 'PARTE 2 PENDENTE (23/09): falha hoje (lista vazia a 200 m) — o radar '
-      'da volta fica marcado como passado desde a ida e só reaparece a dMin + 40 m. '
-      'Tirar o skip junto com o fix.');
+  });
+
+  test('⭐ pedido de 22/09 segue valendo: passou no mesmo sentido e parou, não volta', () {
+    // Dutra: radar da pista oposta preso na tela depois de passar. Rumo da rota
+    // constante (inclusive parado) = o mesmo "passou" continua valendo.
+    const oposto = RadarPoint(lat: -23.123118, lng: -45.728154, type: 'Radar Fixo',
+        speedKmh: 110, dir1: 243, dirSrc: 'antt');
+    LatLng em(double metros) => LatLng(oposto.lat + metros * math.cos(62 * math.pi / 180) / 111320,
+        oposto.lng + metros * math.sin(62 * math.pi / 180) / (111320 * math.cos(oposto.lat * math.pi / 180)));
+    final distMin = <String, (double, double)>{};
+    final vistos = <String>{};
+    for (var m = -300.0; m <= 100; m += 10) {
+      NavigationScreen.tiraPassados([oposto], em(m), 62, distMin, vistos);
+    }
+    for (var i = 0; i < 30; i++) { // parado 100 m depois, GPS no mesmo ponto
+      expect(NavigationScreen.tiraPassados([oposto], em(100), 62, distMin, vistos), isEmpty);
+    }
+    expect(vistos, hasLength(1));
+  });
+
+  test('sem rota (rumo < 0) nunca reinicia; com rota invertida, reinicia', () {
+    const r = RadarPoint(lat: -23.0, lng: -45.0, type: 'Radar Fixo', speedKmh: 60);
+    final k = dismissalKey(r.lat, r.lng);
+    const longe = LatLng(-23.0018, -45.0); // ~200 m
+    Map<String, (double, double)> passou() => {k: (10.0, 62.0)};
+    final semRota = passou();
+    expect(NavigationScreen.tiraPassados([r], longe, -1, semRota, <String>{}), isEmpty);
+    expect(semRota[k], (10.0, 62.0));
+    final voltando = passou();
+    expect(NavigationScreen.tiraPassados([r], longe, 242, voltando, <String>{}), [r]);
+  });
 }

@@ -344,28 +344,37 @@ class NavigationScreen extends StatefulWidget {
   /// da tela — nem com GPS pulando 40 m parado no trânsito. Sem alarme é multa;
   /// falso alarme é passável.
   ///
-  /// Limitação conhecida e aceita: num retorno que traz o caminhão de volta ao
-  /// mesmo radar, ele só reaparece a ~100 m. A voz já se comporta assim hoje
-  /// (`_lastRadarAlertKey` fala uma vez por radar por viagem e nunca reseta),
-  /// então isto NÃO cria classe nova de alerta perdido — alinha o visual ao que
-  /// a voz já faz.
+  /// Retorno que traz o caminhão de volta pelo outro sentido: `dMin` reinicia
+  /// (ver [tiraPassados]). Até 23/09 isto era "limitação aceita" e calava o
+  /// radar da OUTRA pista, que ele tinha roçado na ida — o Beto em Caçapava.
   static bool radarPassou({required double d, required double dMin}) =>
       dMin <= _NavigationScreenState._radarReachedM &&
       d > dMin + _NavigationScreenState._radarAfastouM;
 
-  /// Os [visiveis] que ainda NÃO ficaram pra trás, atualizando a menor
-  /// distância de cada um em [distMin] e marcando em [vistos] os que passaram.
-  /// Os dois mapas vivem a viagem inteira (não zeram no reroute). Pura fora
-  /// desses dois, pra teste.
+  /// Os [visiveis] que ainda NÃO ficaram pra trás, atualizando em [distMin] a
+  /// menor distância de cada um (com o [rumo] da rota em que ela foi medida) e
+  /// marcando em [vistos] os que passaram. Os mapas vivem a viagem inteira (não
+  /// zeram no reroute). Pura fora deles, pra teste.
+  ///
+  /// "Passou" só vale enquanto o caminhão segue no sentido em que passou: rumo
+  /// da rota a mais de 90° do da passagem = está voltando, e a aproximação é
+  /// NOVA. Caso do Beto em Caçapava (23/09): a rota tinha o retorno embutido, na
+  /// ida ele passou a ~13 m do radar da outra pista e, na volta, ele estava
+  /// calado até ~50 m. Rumo da ROTA (não o do GPS): existe parado, então o card
+  /// que some depois de passar (pedido de 22/09) não volta com o caminhão
+  /// parado. [rumo] < 0 = sem rota: nunca reinicia, como antes.
   static List<RadarPoint> tiraPassados(List<RadarPoint> visiveis, LatLng pos,
-      Map<String, double> distMin, Set<String> vistos) {
+      double rumo, Map<String, (double, double)> distMin, Set<String> vistos) {
     final naoPassados = <RadarPoint>[];
     for (final r in visiveis) {
       final k = dismissalKey(r.lat, r.lng);
       final d = RadarService.haversine(pos.latitude, pos.longitude, r.lat, r.lng);
-      final anterior = distMin[k];
-      final dMin = (anterior == null || d < anterior) ? d : anterior;
-      distMin[k] = dMin;
+      final ant = distMin[k];
+      final voltando = ant != null && rumo >= 0 && ant.$2 >= 0 &&
+          angleDiff(rumo, ant.$2) > 90;
+      final (dMin, rumoMin) =
+          (ant == null || voltando || d < ant.$1) ? (d, rumo) : ant;
+      distMin[k] = (dMin, rumoMin);
       if (radarPassou(d: d, dMin: dMin)) {
         vistos.add(k);
       } else {
@@ -541,7 +550,7 @@ class _NavigationScreenState extends State<NavigationScreen>
   // tela por terem ficado pra trás. Vai no nav_end: é o veredito do pedido do
   // Beto (22/09) na próxima viagem. Cresce com radares da viagem (23 numa de
   // 44 km), não com o tempo — não é hot path nem vaza memória de verdade.
-  final Map<String, double> _radarDistMin = {};
+  final Map<String, (double, double)> _radarDistMin = {}; // (dMin, rumo da rota ali)
   final Set<String> _radarPassadoVisto = {};
   int _radarPassados = 0;
   final _fila = VoiceQueue(); // falas raras que não podem sumir (S.O.S., parada)
@@ -1840,8 +1849,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     //
     // Não mexo no `distanceToPath`: ele é usado em outros caminhos e o risco de
     // mudá-lo é maior que o do bug. Ver [NavigationScreen.radarPassou].
-    final naoPassados = NavigationScreen.tiraPassados(
-        visibleRadares, latLng, _radarDistMin, _radarPassadoVisto);
+    final naoPassados = NavigationScreen.tiraPassados(visibleRadares, latLng,
+        pts.length >= 2 ? routeBearing : -1, _radarDistMin, _radarPassadoVisto);
     _radarPassados = _radarPassadoVisto.length;
 
     // 6. Radar à frente — restrito ao corredor da rota (sem falso positivo em paralelas)
