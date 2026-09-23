@@ -352,6 +352,28 @@ class NavigationScreen extends StatefulWidget {
   static bool radarPassou({required double d, required double dMin}) =>
       dMin <= _NavigationScreenState._radarReachedM &&
       d > dMin + _NavigationScreenState._radarAfastouM;
+
+  /// Os [visiveis] que ainda NÃO ficaram pra trás, atualizando a menor
+  /// distância de cada um em [distMin] e marcando em [vistos] os que passaram.
+  /// Os dois mapas vivem a viagem inteira (não zeram no reroute). Pura fora
+  /// desses dois, pra teste.
+  static List<RadarPoint> tiraPassados(List<RadarPoint> visiveis, LatLng pos,
+      Map<String, double> distMin, Set<String> vistos) {
+    final naoPassados = <RadarPoint>[];
+    for (final r in visiveis) {
+      final k = dismissalKey(r.lat, r.lng);
+      final d = RadarService.haversine(pos.latitude, pos.longitude, r.lat, r.lng);
+      final anterior = distMin[k];
+      final dMin = (anterior == null || d < anterior) ? d : anterior;
+      distMin[k] = dMin;
+      if (radarPassou(d: d, dMin: dMin)) {
+        vistos.add(k);
+      } else {
+        naoPassados.add(r);
+      }
+    }
+    return naoPassados;
+  }
 }
 
 class _NavigationScreenState extends State<NavigationScreen>
@@ -1818,20 +1840,9 @@ class _NavigationScreenState extends State<NavigationScreen>
     //
     // Não mexo no `distanceToPath`: ele é usado em outros caminhos e o risco de
     // mudá-lo é maior que o do bug. Ver [NavigationScreen.radarPassou].
-    final naoPassados = <RadarPoint>[];
-    for (final r in visibleRadares) {
-      final k = dismissalKey(r.lat, r.lng);
-      final d = RadarService.haversine(
-          latLng.latitude, latLng.longitude, r.lat, r.lng);
-      final anterior = _radarDistMin[k];
-      final dMin = (anterior == null || d < anterior) ? d : anterior;
-      _radarDistMin[k] = dMin;
-      if (NavigationScreen.radarPassou(d: d, dMin: dMin)) {
-        if (_radarPassadoVisto.add(k)) _radarPassados++;
-      } else {
-        naoPassados.add(r);
-      }
-    }
+    final naoPassados = NavigationScreen.tiraPassados(
+        visibleRadares, latLng, _radarDistMin, _radarPassadoVisto);
+    _radarPassados = _radarPassadoVisto.length;
 
     // 6. Radar à frente — restrito ao corredor da rota (sem falso positivo em paralelas)
     final upcoming = NavigationScreen.pickUpcomingRadar(
