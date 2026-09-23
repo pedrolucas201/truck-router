@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../utils/geo_bounds.dart';
 import '../models/radar_point.dart';
+import 'radar_direction.dart' show angleDiff;
 
 class RadarService {
   static List<RadarPoint>? _cache;
@@ -64,23 +65,49 @@ class RadarService {
     return result;
   }
 
+  /// Descarta um radar a menos de [minDistanceMeters] de outro já aceito — mas
+  /// só quando o aceito COBRE todos os sentidos em que o descartado avisaria.
+  ///
+  /// Até 23/09/2026 era cego à direção (nasceu no initial commit, antes de a base
+  /// ter sentido): o radar da pista do motorista sumia e sobrava o da outra pista
+  /// como "sentido oposto". Áudio do Beto em Caçapava (BR-116): radares de 62° e
+  /// 243° a 19 m, o da volta descartado. Na base inteira eram 4.313 assim.
   static List<RadarPoint> deduplicateNearby(
     List<RadarPoint> radares, {
     double minDistanceMeters = 150,
   }) {
     final result = <RadarPoint>[];
     for (final r in radares) {
-      var tooClose = false;
+      var coberto = false;
       for (final kept in result) {
-        if (haversine(r.lat, r.lng, kept.lat, kept.lng) < minDistanceMeters) {
-          tooClose = true;
+        if (haversine(r.lat, r.lng, kept.lat, kept.lng) < minDistanceMeters &&
+            cobre(kept, r)) {
+          coberto = true;
           break;
         }
       }
-      if (!tooClose) { result.add(r); }
+      if (!coberto) { result.add(r); }
     }
     return result;
   }
+
+  /// [kept] avisa em todo sentido em que [r] avisaria? Pura, pra teste.
+  ///
+  /// Só radar de sentido ÚNICO com fonte vira "oposto" (ver
+  /// `classifyRadarDirection`); sem direção ou bidirecional avisa sempre, e aí
+  /// cobre qualquer vizinho — inclusive a praça da HERE, que vem sem direção e
+  /// precisa vencer o ponto do CSV. Dois de sentido único só são o mesmo radar
+  /// se apontam pro mesmo lado.
+  /// ponytail: 45° separa "mesma pista" de "outra via"; se aparecer duplicata
+  /// de fontes com rumo mais torto, subir — nunca perto de 145° (oposto).
+  @visibleForTesting
+  static bool cobre(RadarPoint kept, RadarPoint r) {
+    if (!_sentidoUnico(kept)) return true;
+    return _sentidoUnico(r) && angleDiff(kept.dir1!, r.dir1!) <= 45;
+  }
+
+  static bool _sentidoUnico(RadarPoint r) =>
+      r.dir1 != null && r.dir2 == null && (r.dirSrc?.isNotEmpty ?? false);
 
   static List<RadarPoint> filterNearRoute(
     List<RadarPoint> all,
