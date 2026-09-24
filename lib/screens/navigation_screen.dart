@@ -35,6 +35,7 @@ import '../services/here_routing_service.dart';
 import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
 import '../services/rota_compara.dart';
+import '../services/plano_rota.dart';
 import '../services/radar_direction.dart';
 import '../services/firestore_radar_service.dart';
 import '../services/highway_truck_cap.dart';
@@ -447,6 +448,14 @@ class _NavigationScreenState extends State<NavigationScreen>
   int _heartbeatN = 0;
   DateTime? _lastRerouteAt;
   LatLng? _lastRefreshPos; // onde estava no último refresh periódico (ver _periodicRefresh)
+  // Plano da rota em vigor e quando ela chegou: o atraso é (agora − chegou) −
+  // previsto até o ponto atual. Renovam juntos a cada rota nova. Na rota
+  // inicial "chegou" é o início da nav, não o cálculo no mapa: o motorista pode
+  // olhar o card por minutos antes de sair, e isso não é atraso de trânsito.
+  late PlanoRota _plano;
+  DateTime _rotaRecebidaEm = DateTime.now();
+  int get _atrasoS => _plano.atrasoS(
+      idx: _closestPolylineIdx, decorrido: DateTime.now().difference(_rotaRecebidaEm));
   int _offRouteCount = 0;
   int _offRouteStartIdx = 0; // bestIdx quando saiu do corredor (mede avanço p/ telemetria)
   DateTime? _offRouteSince; // instrumentação: quando o caminhão saiu do corredor
@@ -763,6 +772,9 @@ class _NavigationScreenState extends State<NavigationScreen>
   void initState() {
     super.initState();
     _result  = widget.result;
+    _plano   = PlanoRota.de(_result.maneuvers, _result.polylinePoints,
+        rotaDurS: _result.durationSeconds);
+    _rotaRecebidaEm = DateTime.now();
     _destination      = widget.destination;
     _destinationLabel = widget.destinationLabel;
     _irAteLaAnterior  = SosPush.irAteLa;
@@ -775,6 +787,9 @@ class _NavigationScreenState extends State<NavigationScreen>
       'points': _result.polylinePoints.length,
       'distM':  _result.distanceMeters,
       'durS':   _result.durationSeconds,
+      // Soma das durações por manobra. Longe do durS = a fonte não deu duração
+      // por manobra e o atrasoS do heartbeat não vale pra esta viagem.
+      'perfilS': _plano.perfilS,
       // Rota que já NASCE com o fim proibido pra caminhão: sem isto o storm de
       // reroute perto do pino (Lorena, 19/08) é indistinguível de GPS ruim.
       'destBlocked': _result.destinationBlocked,
@@ -821,7 +836,13 @@ class _NavigationScreenState extends State<NavigationScreen>
         vsync: this, duration: const Duration(milliseconds: 650));
     _flashAnim = Tween<double>(begin: 0.12, end: 0.40).animate(
         CurvedAnimation(parent: _flashController, curve: Curves.easeInOut));
-    _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _periodicRefresh());
+    // Refresh preventivo: trânsito e bloqueio À FRENTE que a HERE já sabe e o
+    // caminhão ainda não sentiu. Era 10 min desde o 1º commit, sem medição, e
+    // virou a linha mais cara da conta (cada refresh paga rota + pedágio; ~70%
+    // das chamadas em rodovia livre devolviam a mesma rota, medido 24/09).
+    // ponytail: 30 min é teto provisório; o gatilho por atraso (atrasoS no
+    // heartbeat, Fase A) decide o desenho final e este timer vira só fallback.
+    _refreshTimer = Timer.periodic(const Duration(minutes: 30), (_) => _periodicRefresh());
     WakelockPlus.enable();
     _loadRoutePois();
     _policeTimelineTimer = Timer.periodic(
@@ -853,6 +874,7 @@ class _NavigationScreenState extends State<NavigationScreen>
         'accM': _gpsAccuracyM.round(),    // raio de precisão do GPS (hipótese pista paralela: offM alto + accM alto = GPS ruim)
         'rerot': _isRerouting,            // a amostra caiu DENTRO de um recálculo?
         'remM': _remainingDistanceM().round(),
+        'atrasoS': _atrasoS,              // contra o plano por manobra da HERE; <0 = adiantado
       });
     });
     // Ciclo de vida da nav: nav_start aqui, nav_end no dispose (com arrived),
@@ -2428,6 +2450,7 @@ class _NavigationScreenState extends State<NavigationScreen>
           ? const <LatLng>[]
           : velha.sublist(_closestPolylineIdx.clamp(0, velha.length - 1));
       final pracasAnteriores = _result.tolls;
+      final atrasoAntes = _atrasoS; // contra o plano que está saindo
       setState(() {
         // Rota nova chegou: agora (e só agora) o destino trocado vira oficial —
         // destino e polyline mudam no MESMO frame, nunca dessincronizados.
@@ -2436,6 +2459,9 @@ class _NavigationScreenState extends State<NavigationScreen>
           _destinationLabel = destOverride.label;
         }
         _result                  = newResult;
+        _plano                   = PlanoRota.de(newResult.maneuvers,
+            newResult.polylinePoints, rotaDurS: newResult.durationSeconds);
+        _rotaRecebidaEm          = DateTime.now();
         _paradaSosIdx            = _paradaSos == null
             ? null : nearestVertexIdx(newResult.polylinePoints, _paradaSos!.position);
         _radares                 = applyHighwayCaps(
@@ -2517,6 +2543,8 @@ class _NavigationScreenState extends State<NavigationScreen>
           'points':   newResult.polylinePoints.length,
           'distM':    newResult.distanceMeters.round(),
           'durS':     newResult.durationSeconds,
+          'atrasoS':  atrasoAntes,
+          'perfilS':  _plano.perfilS,
           // Reroutes urgentes com distM crescendo E destBlocked=true = HERE
           // tentando devolver o caminhão a um pino inalcançável (não é GPS).
           'destBlocked': newResult.destinationBlocked,
