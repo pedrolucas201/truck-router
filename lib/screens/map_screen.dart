@@ -111,6 +111,25 @@ bool locationAskedThisInstall({int? marcadoEm, int? instalacao, required bool le
 bool shouldAskLocationOnBoot(LocationPermission perm, bool alreadyAsked) =>
     perm == LocationPermission.denied && !alreadyAsked;
 
+/// Voltar pro app com a rota velha (> 15 min) recalcula — mas só com o MAPA na
+/// frente. O mapa segue montado por baixo da navegação e recebe o mesmo resume:
+/// sem o [mapOnTop], cada vez que o motorista acendia a tela na viagem saía um
+/// cálculo completo (3 rotas HERE + pedágio + TomTom + ~6 de clima) que a nav
+/// nem usa. Medido 24/09: 68 de 99 cálculos completos de setembro; na viagem do
+/// Beto de 16/09, 4 fantasmas numa nav só.
+bool shouldAutoRecalculate({
+  required bool mapOnTop,
+  required DateTime? calculatedAt,
+  required bool scheduledDeparture,
+  required bool hasOriginAndDestination,
+  required DateTime now,
+}) =>
+    mapOnTop &&
+    calculatedAt != null &&
+    !scheduledDeparture &&
+    hasOriginAndDestination &&
+    now.difference(calculatedAt) >= const Duration(minutes: 15);
+
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
 
@@ -427,11 +446,16 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) return;
-    if (_routeCalculatedAt == null) return;
-    if (_departureTime != null) return;
-    if (_origin == null || _destination == null) return;
-    if (DateTime.now().difference(_routeCalculatedAt!) < const Duration(minutes: 15)) return;
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    if (!shouldAutoRecalculate(
+      mapOnTop: ModalRoute.of(context)?.isCurrent == true,
+      calculatedAt: _routeCalculatedAt,
+      scheduledDeparture: _departureTime != null,
+      hasOriginAndDestination: _origin != null && _destination != null,
+      now: DateTime.now(),
+    )) {
+      return;
+    }
     _autoRecalculate();
   }
 
