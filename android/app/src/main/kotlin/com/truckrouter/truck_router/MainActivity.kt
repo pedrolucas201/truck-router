@@ -3,7 +3,9 @@ package com.truckrouter.truck_router
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -26,6 +28,16 @@ class MainActivity : FlutterActivity() {
     // ficar esperando uma buzina que não toca).
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Fabricante e tela de "início automático" da MIUI, pro onboarding.
+        // Nenhum plugin instalado expõe isso; canal de 2 métodos evita dependência.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "notrecho/sistema")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "fabricante" -> result.success(Build.MANUFACTURER ?: "")
+                    "abrirAutostart" -> result.success(abrirAutostartMiui())
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "notrecho/som")
             .setMethodCallHandler { call, result ->
                 if (call.method != "buzina") return@setMethodCallHandler result.notImplemented()
@@ -46,6 +58,20 @@ class MainActivity : FlutterActivity() {
                     result.success(false)
                 }
             }
+    }
+
+    // Tela de início automático da MIUI. Não existe intent pública: é o
+    // componente do Security Center, que muda entre versões — por isso o
+    // try/catch devolve false e o app só orienta em texto.
+    private fun abrirAutostartMiui(): Boolean = try {
+        startActivity(Intent().apply {
+            component = ComponentName(
+                "com.miui.securitycenter",
+                "com.miui.permcenter.autostart.AutoStartManagementActivity")
+        })
+        true
+    } catch (e: Exception) {
+        false
     }
 
     // Canal do push do S.O.S. Sem canal próprio o FCM usava o "Diversos" dele,
