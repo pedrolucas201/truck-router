@@ -34,6 +34,7 @@ import '../services/field_log.dart';
 import '../services/here_routing_service.dart';
 import '../services/police_alert_service.dart';
 import '../services/radar_service.dart';
+import '../services/rota_compara.dart';
 import '../services/radar_direction.dart';
 import '../services/firestore_radar_service.dart';
 import '../services/highway_truck_cap.dart';
@@ -1252,7 +1253,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _fila.limpar(); // stop = descarta o que estava esperando
     _lastRerouteAt = null; // fura o throttle: precisa reorientar já
     if (mounted) setState(() {});
-    if (_currentPos != null) _reroute(fromPos: _currentPos, urgent: true);
+    if (_currentPos != null) _reroute(fromPos: _currentPos, urgent: true, gatilho: 'parada');
   }
 
   void _finalizeArrival() {
@@ -1771,7 +1772,7 @@ class _NavigationScreenState extends State<NavigationScreen>
           _offRouteCount = _offRouteCountLimit - 1; // re-arma sem martelar
         }
         else if (!movingByRoute || bestDist > _offRouteHardM || leavingRoute) {
-          _reroute(fromPos: latLng, urgent: true);
+          _reroute(fromPos: latLng, urgent: true, gatilho: 'desvio');
         } else {
           FieldLog.event('reroute_suppressed', {
             'distM': bestDist.round(),
@@ -2247,7 +2248,7 @@ class _NavigationScreenState extends State<NavigationScreen>
       return;
     }
     _lastRefreshPos = _currentPos;
-    await _reroute();
+    await _reroute(gatilho: 'periodico');
   }
 
   // ── Link tocado com a nav aberta: popup "de X → para Y" ───────────────────
@@ -2315,7 +2316,8 @@ class _NavigationScreenState extends State<NavigationScreen>
     // Troca de verdade só acontece dentro do _reroute, e só se a HERE responder:
     // falhou = nada muda (nem destino, nem rota) e o motorista fica sabendo.
     final ok = await _reroute(
-        urgent: true, destOverride: (pos: geo.coords, label: label));
+        urgent: true, destOverride: (pos: geo.coords, label: label),
+        gatilho: 'destino');
     FieldLog.event('nav_dest_swap', {
       'ok': ok,
       'toLat': geo.coords.latitude,
@@ -2333,6 +2335,10 @@ class _NavigationScreenState extends State<NavigationScreen>
     bool urgent = false,
     ({LatLng pos, String label})? destOverride,
     bool explicito = false, // parada nova (S.O.S.): ação do motorista, sem throttle
+    // Quem pediu, pro reroute_done: a análise do recálculo periódico (esperar
+    // mais quando a HERE devolve igual) só pode olhar os 'periodico' — desvio
+    // misturado na conta baixaria a proporção de "veio igual".
+    required String gatilho,
   }) async {
     final origin = fromPos ?? _currentPos;
     if (_isRerouting || origin == null) return false;
@@ -2416,6 +2422,12 @@ class _NavigationScreenState extends State<NavigationScreen>
       // radar NEGADO ressuscitaria na tela durante a janela do enrichment.
       final localOverrides = await FirestoreRadarService.loadLocalOverrides();
       if (!mounted || seq != _rerouteSeq) return false;
+      // Foto da rota que sai, pra comparar com a nova DEPOIS de destravar a tela.
+      final velha = _result.polylinePoints;
+      final restanteAnterior = velha.isEmpty
+          ? const <LatLng>[]
+          : velha.sublist(_closestPolylineIdx.clamp(0, velha.length - 1));
+      final pracasAnteriores = _result.tolls;
       setState(() {
         // Rota nova chegou: agora (e só agora) o destino trocado vira oficial —
         // destino e polyline mudam no MESMO frame, nunca dessincronizados.
@@ -2480,17 +2492,40 @@ class _NavigationScreenState extends State<NavigationScreen>
       // round-trips de Firestore que hoje rodam em background.
       debugPrint('[REROUTE] urgent=$urgent detecção=${detectMs}ms '
           'here=${hereMs}ms destravou=${recalcSw.elapsedMilliseconds}ms');
-      FieldLog.event('reroute_done', {
-        'urgent':   urgent,
-        'detectMs': detectMs,
-        'hereMs':   hereMs,
-        'recalcMs': recalcSw.elapsedMilliseconds,
-        'points':   newResult.polylinePoints.length,
-        'distM':    newResult.distanceMeters.round(),
-        // Reroutes urgentes com distM crescendo E destBlocked=true = HERE
-        // tentando devolver o caminhão a um pino inalcançável (não é GPS).
-        'destBlocked': newResult.destinationBlocked,
-      });
+      final recalcMs = recalcSw.elapsedMilliseconds;
+      // Gravado num Future: a comparação de traçado roda depois do finally, com
+      // a seta já destravada — nunca soma no recalcMs que o motorista espera.
+      unawaited(Future(() {
+        // Telemetria nova não pode custar o evento antigo: falhou, grava sem.
+        ({int desvioMaxM, int pracasNovas, int pracasSumiram})? cmp;
+        try {
+          cmp = compararRotas(
+            restanteAnterior: restanteAnterior,
+            nova: newResult.polylinePoints,
+            pracasAnteriores: pracasAnteriores,
+            pracasNovas: newResult.tolls,
+          );
+        } catch (e, st) {
+          FieldLog.error('reroute_cmp', e, st);
+        }
+        FieldLog.event('reroute_done', {
+          'urgent':   urgent,
+          'gatilho':  gatilho,
+          'detectMs': detectMs,
+          'hereMs':   hereMs,
+          'recalcMs': recalcMs,
+          'points':   newResult.polylinePoints.length,
+          'distM':    newResult.distanceMeters.round(),
+          'durS':     newResult.durationSeconds,
+          // Reroutes urgentes com distM crescendo E destBlocked=true = HERE
+          // tentando devolver o caminhão a um pino inalcançável (não é GPS).
+          'destBlocked': newResult.destinationBlocked,
+          'desvioMaxM':    cmp?.desvioMaxM,
+          'tolls':         newResult.tolls.length,
+          'pracasNovas':   cmp?.pracasNovas,
+          'pracasSumiram': cmp?.pracasSumiram,
+        });
+      }));
       _announceRestriction(newResult);
       _loadRoutePois();
       _refreshPoliceTimeline();
@@ -3067,7 +3102,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     if (!mounted) return;
     // urgent=false de propósito: "Rota recalculada" é só pra desvio real (P0 nº 7).
     // Aqui a fala é a da parada/encerramento; explicito já pula o throttle.
-    final ok = await _reroute(fromPos: _currentPos, explicito: true);
+    final ok = await _reroute(fromPos: _currentPos, explicito: true, gatilho: 'sos');
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Sem rota nova agora. A próxima atualização inclui a parada.')));
@@ -3436,7 +3471,7 @@ class _NavigationScreenState extends State<NavigationScreen>
     _restrictionIconCache[key] = icon;
     setState(() => _userRestrictions.add(r));
     _recenter();
-    if (_currentPos != null) await _reroute(fromPos: _currentPos, urgent: true);
+    if (_currentPos != null) await _reroute(fromPos: _currentPos, urgent: true, gatilho: 'restricao');
   }
 
   Future<void> _confirmRadarMark(LatLng pos) async {
