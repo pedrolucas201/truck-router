@@ -13,9 +13,9 @@ const _vermelho = Color(0xFFFF3B3B);
 const _branco = Color(0xFFFFF4D6);
 const _vermelhoEscuro = Color(0xFF8A1F1F);
 
-/// Radar: velocidade do herói em função do avanço do evento. Chega a 98 e
-/// cai pra 90 entre -1.35 e -.95, antes de a câmera (em -.85) fotografar.
-double kmhRadar(double avanco) => (98 - 8 * ((avanco + 1.35) / .4).clamp(0.0, 1.0)).roundToDouble();
+/// Radar: velocidade do herói em função do avanço do evento. Chega a 88 e
+/// cai pra 80 entre -1.35 e -.95, antes de a câmera (em -.85) fotografar.
+double kmhRadar(double avanco) => (88 - 8 * ((avanco + 1.35) / .4).clamp(0.0, 1.0)).roundToDouble();
 
 /// Cena de uma tela de apresentação: side-scroller visto de lado, à noite.
 /// O nosso caminhão (sprite `heroi.webp`, com o alien na janela) fica parado
@@ -116,7 +116,7 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
 
   double _velocidade() {
     if (widget.tela.cena == Cena.abertura && !_estatico) return ((_tempo - 1.0) / .6).clamp(0.0, 1.0);
-    if (widget.tela.cena == Cena.radar) return .85 + .15 * (kmhRadar(_dist - _x0) - 90) / 8;
+    if (widget.tela.cena == Cena.radar) return .85 + .15 * (kmhRadar(_dist - _x0) - 80) / 8;
     if (widget.tela.cena == Cena.pedagio) {
       // Folga entre o para-choque e a cancela (pivô em x0 + .25): freia até
       // um quarto da velocidade, espera a cancela subir, arranca.
@@ -616,7 +616,7 @@ class _FrentePainter extends CustomPainter {
         _selo(c, 'Passa', kNeon, gatilho: q.avanco - .55 + _Geo.heroDirF, icone: Icons.check_rounded);
       case Cena.radar:
         // História: o app avisa ANTES de o radar aparecer, o velocímetro cai
-        // de 98 (vermelho piscando) a 90 (verde), a câmera fotografa em cima
+        // de 88 (vermelho piscando) a 80 (verde), a câmera fotografa em cima
         // da cabine e o chip some quando o poste fica pra trás.
         _flash(c, s);
         _velocimetro(c);
@@ -649,13 +649,13 @@ class _FrentePainter extends CustomPainter {
   /// ganha o check.
   void _velocimetro(Canvas c) {
     final kmh = kmhRadar(q.avanco).round();
-    final acima = kmh > 90;
+    final acima = kmh > 80;
     final pisca = q.estatico || (q.tempo % .5) < .3;
     final cor = acima ? (pisca ? _vermelho : _vermelhoEscuro) : kNeon;
     const g0 = 1.45;
     _selo(c, '$kmh km/h', cor, gatilho: q.avanco + g0, fim: g0, dx: -g.w * .05,
         icone: q.avanco > -.85 ? Icons.check_rounded : null);
-    _selo(c, '90', kNeon, gatilho: q.avanco + g0, fim: g0, sub: 'km/h', anel: true, escala: .6, dx: g.w * .16);
+    _selo(c, '80', kNeon, gatilho: q.avanco + g0, fim: g0, sub: 'km/h', anel: true, escala: .6, dx: g.w * .16);
   }
 
   /// Selo acima do herói, entrando com mola quando [gatilho] passa de zero e,
