@@ -149,7 +149,21 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
         final g = _Geo(Size(box.maxWidth, box.maxHeight), sos: cena == Cena.sos);
         g.heroDx = -(g.w * _Geo.heroEsqF + g.heroLarg) * (1 - _entrada());
         final bob = _estatico ? 0.0 : math.sin(_tempo * 2 * math.pi * 1.3) * 2 * _v;
-        return Stack(fit: StackFit.expand, children: [
+        // Câmera: aproxima devagar quando o herói para no S.O.S. e dá um
+        // pulo curto no flash do radar; o resto do tempo fica em 1.
+        var zoom = 1.0;
+        if (!_estatico) {
+          if (cena == Cena.sos && _tParou != null) {
+            zoom = 1 + .14 * Curves.easeOutCubic.transform(((_tempo - _tParou!) / 1.6).clamp(0.0, 1.0));
+          } else if (cena == Cena.radar) {
+            final k = ((_dist - _x0) + .85) / .15;
+            if (k >= 0 && k <= 1) zoom = 1 + .04 * (1 - k);
+          }
+        }
+        return Transform.scale(
+          scale: zoom,
+          alignment: const Alignment(.55, .75), // entre o herói e o parado
+          child: Stack(fit: StackFit.expand, children: [
           CustomPaint(painter: _FundoPainter(q, g)),
           // Parou atrás do S.O.S.: o alien acena (mesmo sprite, braço fora).
           _Sprite(asset: cena == Cena.sos && _v == 0 ? 'acena' : 'heroi',
@@ -158,7 +172,8 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
           if (cena == Cena.sos)
             _Sprite(asset: 'parado', esq: g.x(q.x0), larg: g.paradoLarg, chao: g.chao, dy: 0, g: g),
           CustomPaint(painter: _FrentePainter(q, g)),
-        ]);
+        ]),
+        );
       }),
     );
   }
