@@ -81,6 +81,7 @@ flutter:
   assets:
     - assets/brand/icone.png
     - assets/brand/abertura.jpg
+    - assets/onboarding/
     - assets/maparadar.csv
     - assets/balancas.csv
     - assets/restricoes.csv
