@@ -115,7 +115,8 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
         final bob = _estatico ? 0.0 : math.sin(_tempo * 2 * math.pi * 1.3) * 2 * _v;
         return Stack(fit: StackFit.expand, children: [
           CustomPaint(painter: _FundoPainter(q, g)),
-          _Sprite(asset: 'heroi', esq: g.heroEsq, larg: g.heroLarg, chao: g.chao, dy: bob, g: g),
+          _Sprite(asset: 'heroi', esq: g.heroEsq, larg: g.heroLarg, chao: g.chao, dy: bob, g: g,
+              rodas: _Roda.heroi, giro: _dist * g.w / (g.heroLarg * _Roda.pneuF)),
           if (cena == Cena.sos)
             _Sprite(asset: 'parado', esq: g.x(q.x0), larg: g.paradoLarg, chao: g.chao, dy: 0, g: g),
           CustomPaint(painter: _FrentePainter(q, g)),
@@ -131,7 +132,12 @@ class _Sprite extends StatelessWidget {
   final String asset;
   final double esq, larg, chao, dy;
   final _Geo g;
-  const _Sprite({required this.asset, required this.esq, required this.larg, required this.chao, required this.dy, required this.g});
+  /// Aros que giram: cópia do próprio sprite recortada em círculo e rodada
+  /// em [giro] radianos (positivo = horário = caminhão indo pra direita).
+  final List<_Roda> rodas;
+  final double giro;
+  const _Sprite({required this.asset, required this.esq, required this.larg, required this.chao, required this.dy, required this.g,
+      this.rodas = const [], this.giro = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -155,8 +161,38 @@ class _Sprite extends StatelessWidget {
         ),
       ),
       Positioned(left: esq, bottom: g.s.height - chao - dy, width: larg, child: img),
+      for (final r in rodas)
+        Positioned(
+          left: esq + larg * r.cx - larg * r.r, top: chao + dy - alt + alt * r.cy - larg * r.r,
+          width: larg * r.r * 2, height: larg * r.r * 2,
+          child: ClipOval(
+            child: Transform.rotate(
+              angle: giro,
+              child: OverflowBox(
+                alignment: Alignment.topLeft, minWidth: 0, maxWidth: larg, minHeight: 0, maxHeight: alt,
+                child: Transform.translate(offset: Offset(larg * r.r - larg * r.cx, larg * r.r - alt * r.cy), child: img),
+              ),
+            ),
+          ),
+        ),
     ]);
   }
+
+  double get alt => larg * (567 / 1200);
+}
+
+/// Um aro do sprite: centro em frações (já espelhadas) do sprite e raio em
+/// fração da largura. Medidos no `heroi.webp` (1200×567): aros em x=330,
+/// 930 e 1045, y=487; raio do aro 40/35 px, do pneu 78 px.
+class _Roda {
+  final double cx, cy, r;
+  const _Roda(this.cx, this.cy, this.r);
+  static const pneuF = 78 / 1200;
+  static const heroi = [
+    _Roda(1 - 330 / 1200, 487 / 567, 38 / 1200),
+    _Roda(1 - 930 / 1200, 487 / 567, 33 / 1200),
+    _Roda(1 - 1045 / 1200, 487 / 567, 33 / 1200),
+  ];
 }
 
 /// Geometria da cena em frações do box. Tudo que é posição mora aqui.
