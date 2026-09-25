@@ -11,6 +11,11 @@ const kFundoEscuro = Color(0xFF050A14);
 const _ambar = Color(0xFFFFB300);
 const _vermelho = Color(0xFFFF3B3B);
 const _branco = Color(0xFFFFF4D6);
+const _vermelhoEscuro = Color(0xFF8A1F1F);
+
+/// Radar: velocidade do herói em função do avanço do evento. Chega a 98 e
+/// cai pra 90 entre -1.35 e -.95, antes de a câmera (em -.85) fotografar.
+double kmhRadar(double avanco) => (98 - 8 * ((avanco + 1.35) / .4).clamp(0.0, 1.0)).roundToDouble();
 
 /// Cena de uma tela de apresentação: side-scroller visto de lado, à noite.
 /// O nosso caminhão (sprite `heroi.webp`, com o alien na janela) fica parado
@@ -95,6 +100,7 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
   /// No S.O.S. o nosso caminhão freia atrás do parado; nas outras telas a
   /// pista corre sempre.
   double _velocidade() {
+    if (widget.tela.cena == Cena.radar) return .85 + .15 * (kmhRadar(_dist - _x0) - 90) / 8;
     if (widget.tela.cena != Cena.sos) return 1;
     final folga = (_x0 - _dist) - _Geo.heroDirSosF - .04; // distância até o parado
     if (folga < .012) return 0;
@@ -561,11 +567,11 @@ class _FrentePainter extends CustomPainter {
         // Check verde quando o pórtico passa por cima do caminhão.
         _selo(c, 'Passa', kNeon, gatilho: q.avanco - .55 + _Geo.heroDirF, icone: Icons.check_rounded);
       case Cena.radar:
-        // História: o app avisa ANTES de o radar aparecer (selo entra com o
-        // poste ainda fora da tela), o radar chega, a câmera fotografa em cima
-        // da cabine, e o selo some assim que o poste fica pra trás.
+        // História: o app avisa ANTES de o radar aparecer, o velocímetro cai
+        // de 98 (vermelho piscando) a 90 (verde), a câmera fotografa em cima
+        // da cabine e o chip some quando o poste fica pra trás.
         _flash(c, s);
-        _selo(c, '90', kNeon, gatilho: q.avanco + 1.35, fim: 1.35, sub: 'km/h', anel: true);
+        _velocimetro(c);
       case Cena.pedagio:
         _selo(c, 'R\$ 28,50', kNeon, gatilho: q.avanco - .12);
       case Cena.sos:
@@ -588,19 +594,35 @@ class _FrentePainter extends CustomPainter {
     c.drawRect(Offset.zero & s, Paint()..color = Colors.white.withValues(alpha: .30 * (1 - k)));
   }
 
+  /// Velocímetro do radar: número caindo até o limite, vermelho piscando
+  /// acima dele e verde no limite; ao lado, a placa do radar. Depois da foto,
+  /// ganha o check.
+  void _velocimetro(Canvas c) {
+    final kmh = kmhRadar(q.avanco).round();
+    final acima = kmh > 90;
+    final pisca = q.estatico || (q.tempo % .5) < .3;
+    final cor = acima ? (pisca ? _vermelho : _vermelhoEscuro) : kNeon;
+    const g0 = 1.45;
+    _selo(c, '$kmh km/h', cor, gatilho: q.avanco + g0, fim: g0, dx: -g.w * .05,
+        icone: q.avanco > -.85 ? Icons.check_rounded : null);
+    _selo(c, '90', kNeon, gatilho: q.avanco + g0, fim: g0, sub: 'km/h', anel: true, escala: .6, dx: g.w * .16);
+  }
+
   /// Selo acima do herói, entrando com mola quando [gatilho] passa de zero e,
   /// se [fim] for dado, encolhendo até sumir quando o gatilho passa dele.
   void _selo(Canvas c, String texto, Color cor,
-      {required double gatilho, double? fim, String? sub, bool anel = false, IconData? icone}) {
+      {required double gatilho, double? fim, String? sub, bool anel = false, IconData? icone,
+      double dx = 0, double escala = 1}) {
     if (gatilho < 0 && !q.estatico) return; // quadro parado mostra o selo sempre
     var k = q.estatico ? 1.0 : Curves.elasticOut.transform((gatilho / .12).clamp(0.0, 1.0));
     if (fim != null && !q.estatico) k *= 1 - ((gatilho - fim) / .1).clamp(0.0, 1.0);
     if (k <= 0) return;
-    final centro = Offset(g.heroEsq + g.heroLarg * .5, g.heroTopo - g.h * .11);
+    final centro = Offset(g.heroEsq + g.heroLarg * .5 + dx, g.heroTopo - g.h * .11);
     c.save();
     c.translate(centro.dx, centro.dy);
-    c.scale(k);
+    c.scale(k * escala);
     final r = g.w * (anel ? .065 : .085);
+    final tcor = cor == _vermelho || cor == _vermelhoEscuro ? Colors.white : const Color(0xFF06140A);
     _luz(c, Offset.zero, r * 1.6, cor, .35 + .15 * q.seno);
     if (anel) {
       c.drawCircle(Offset.zero, r, Paint()..color = Colors.white);
@@ -609,7 +631,7 @@ class _FrentePainter extends CustomPainter {
       if (sub != null) _texto(c, sub, Offset(0, r * .5), r * .28, cor: const Color(0xFF0B1119), peso: FontWeight.w600);
     } else {
       final tp = TextPainter(
-        text: TextSpan(text: texto, style: TextStyle(color: const Color(0xFF06140A), fontSize: r * .55, fontWeight: FontWeight.w800)),
+        text: TextSpan(text: texto, style: TextStyle(color: tcor, fontSize: r * .55, fontWeight: FontWeight.w800)),
         textDirection: TextDirection.ltr,
       )..layout();
       final larg = tp.width + r * .9 + (icone != null ? r * .7 : 0);
@@ -619,7 +641,7 @@ class _FrentePainter extends CustomPainter {
       if (icone != null) {
         final ic = TextPainter(
           text: TextSpan(text: String.fromCharCode(icone.codePoint),
-              style: TextStyle(fontFamily: icone.fontFamily, package: icone.fontPackage, fontSize: r * .7, color: const Color(0xFF06140A))),
+              style: TextStyle(fontFamily: icone.fontFamily, package: icone.fontPackage, fontSize: r * .7, color: tcor)),
           textDirection: TextDirection.ltr,
         )..layout();
         ic.paint(c, Offset(x, -ic.height / 2));
