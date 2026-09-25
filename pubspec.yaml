@@ -55,6 +55,7 @@ dependencies:
   firebase_messaging: ^16.7.0
   ota_update: ^7.1.0
   package_info_plus: ^9.0.1
+  video_player: ^2.11.1
 
 dev_dependencies:
   flutter_test:

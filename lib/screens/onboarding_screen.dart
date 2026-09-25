@@ -6,6 +6,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
 
 import '../providers/truck_profile_provider.dart';
 import '../services/field_log.dart';
@@ -247,10 +248,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                     child: Column(children: [
                       Expanded(
                         flex: 11,
-                        child: CenaOnboarding(
-                          cena: kTelasOnboarding[_pagina.clamp(0, kTelasOnboarding.length - 1)].cena,
-                          visivel: _pagina < kTelasOnboarding.length,
-                        ),
+                        child: kFilmeOnboarding
+                            ? _FilmeOnboarding(pagina: _pagina.clamp(0, kTelasOnboarding.length - 1), visivel: _pagina < kTelasOnboarding.length)
+                            : CenaOnboarding(
+                                cena: kTelasOnboarding[_pagina.clamp(0, kTelasOnboarding.length - 1)].cena,
+                                visivel: _pagina < kTelasOnboarding.length,
+                              ),
                       ),
                       const Expanded(flex: 9, child: SizedBox()),
                     ]),
@@ -552,6 +555,83 @@ class _CartaoPermissao extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+
+/// Experimento (build de teste, `--dart-define=ONB_FILME=true`): no lugar da
+/// cena ao vivo, o filme renderizado por código (`docs/marca/onboarding/
+/// filme.py`), um capítulo de 6 s por página. Ao trocar de página, pula pro
+/// capítulo; dentro dele, repete.
+const kFilmeOnboarding = bool.fromEnvironment('ONB_FILME');
+
+class _FilmeOnboarding extends StatefulWidget {
+  final int pagina;
+  final bool visivel;
+  const _FilmeOnboarding({required this.pagina, required this.visivel});
+
+  @override
+  State<_FilmeOnboarding> createState() => _FilmeOnboardingState();
+}
+
+class _FilmeOnboardingState extends State<_FilmeOnboarding> {
+  static const _cap = Duration(seconds: 6);
+  late final VideoPlayerController _c = VideoPlayerController.asset('assets/onboarding/filme.mp4');
+  bool _pronto = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _c.initialize().then((_) {
+      if (!mounted) return;
+      setState(() => _pronto = true);
+      _c.setVolume(0);
+      _c.addListener(_loopCapitulo);
+      _c.play();
+    });
+  }
+
+  void _loopCapitulo() {
+    final fim = _cap * (widget.pagina + 1);
+    if (_c.value.position >= fim - const Duration(milliseconds: 80)) {
+      _c.seekTo(_cap * widget.pagina);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _FilmeOnboarding old) {
+    super.didUpdateWidget(old);
+    if (widget.pagina != old.pagina && _pronto) {
+      _c.seekTo(_cap * widget.pagina);
+      if (!_c.value.isPlaying) _c.play();
+    }
+    if (widget.visivel != old.visivel && _pronto) {
+      widget.visivel ? _c.play() : _c.pause();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.removeListener(_loopCapitulo);
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_pronto) return const ColoredBox(color: kFundo);
+    return AnimatedOpacity(
+      opacity: widget.visivel ? 1 : 0,
+      duration: const Duration(milliseconds: 350),
+      child: ClipRect(
+        child: SizedBox.expand(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(width: _c.value.size.width, height: _c.value.size.height, child: VideoPlayer(_c)),
+          ),
+        ),
       ),
     );
   }
