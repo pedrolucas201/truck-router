@@ -97,16 +97,32 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
     super.didUpdateWidget(old);
     if (widget.cena != old.cena) {
       _mundoAntes = _mundo();
-      if (!_estatico) {
+      // O evento anterior só continua se JÁ está na tela; se estava rearmado
+      // à direita (fora da tela), some, senão entraria junto com o novo.
+      if (!_estatico && _x0 - _dist < 1.0) {
         _cenaAnt = old.cena;
         _x0Ant = _x0;
+      } else {
+        _cenaAnt = null;
       }
       _armaEvento();
+      // O novo nasce depois do fim do anterior, sem sobrepor.
+      if (_cenaAnt != null) _x0 = math.max(_x0, _x0Ant + _largura(_cenaAnt!) + .4);
       if (_estatico) _x0 = .75;
     }
     if (widget.visivel && !old.visivel && !_estatico && !_ticker.isActive) _ticker.start();
     if (!widget.visivel && old.visivel) _ticker.stop();
   }
+
+  /// Largura do objeto de cada evento, em larguras de tela (a partir de x0).
+  static double _largura(Cena c) => switch (c) {
+        Cena.abertura => .4,
+        Cena.rota => .55,
+        Cena.radar => .1,
+        Cena.pedagio => 1.15,
+        Cena.sos => .4,
+        Cena.fechamento => 0,
+      };
 
   void _armaEvento() {
     _tempo = 0;
