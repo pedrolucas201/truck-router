@@ -260,6 +260,29 @@ class _Geo {
   double _distAtual = 0;
 }
 
+/// Cenário de cada tela (camadas de fundo). Os eventos não mudam; o mundo
+/// em volta muda, pra as cinco telas não serem a mesma estrada.
+class _Mundo {
+  final double morros;      // altura dos morros, 0 = horizonte chapado
+  final bool predios;       // skyline de cidade no horizonte
+  final double luzes;       // densidade das luzes de cidade, 0..1
+  final double arvores;     // densidade das árvores, 0..1
+  final double postes;      // passo dos postes em larguras; 0 = sem poste
+  final bool guardRail;
+  final bool cactos;
+  final int estrelas;
+  const _Mundo({this.morros = 1, this.predios = false, this.luzes = .45, this.arvores = .3, this.postes = 1.1,
+      this.guardRail = false, this.cactos = false, this.estrelas = 40});
+
+  static _Mundo de(Cena c) => switch (c) {
+        Cena.abertura => const _Mundo(morros: .4, predios: true, luzes: .8, arvores: .15, postes: .8),
+        Cena.rota => const _Mundo(morros: 1.8, luzes: .1, arvores: .7, postes: 1.6),
+        Cena.radar => const _Mundo(morros: 0, luzes: .05, arvores: .08, postes: 1.0, guardRail: true),
+        Cena.pedagio => const _Mundo(morros: .5, predios: true, luzes: .9, arvores: .2, postes: .6),
+        Cena.sos => const _Mundo(morros: .3, luzes: 0, arvores: 0, postes: 0, cactos: true, estrelas: 90),
+      };
+}
+
 /// Estado de um quadro: o que o painter precisa pra desenhar.
 class _Quadro {
   final Cena cena;
@@ -277,6 +300,7 @@ class _Quadro {
   /// cruza o centro do herói (em larguras de tela).
   double get avanco => dist - x0;
   double get seno => .5 + .5 * math.sin(tempo * 2 * math.pi);
+  _Mundo get mundo => _Mundo.de(cena);
 }
 
 Paint _glow(Color c, double w, {double blur = 10}) => Paint()
@@ -354,7 +378,7 @@ class _FundoPainter extends CustomPainter {
   }
 
   void _estrelas(Canvas c, double w, double h) {
-    for (var i = 0; i < 40; i++) {
+    for (var i = 0; i < q.mundo.estrelas; i++) {
       final x = _hash(i) * w, y = _hash(i + 100) * g.horizonte * .85;
       final cint = .25 + .45 * (.5 + .5 * math.sin(q.tempo * 1.5 + i));
       c.drawCircle(Offset(x, y), i % 6 == 0 ? 1.5 : 1, Paint()..color = Colors.white.withValues(alpha: cint));
@@ -370,11 +394,18 @@ class _FundoPainter extends CustomPainter {
     c.drawCircle(centro + Offset(r * .35, -r * .2), r * .92, Paint()..color = kFundoEscuro);
   }
 
-  /// Camada longe (12% da pista): silhueta de morros e luzes de cidade.
+  /// Camada longe (12% da pista): silhueta de morros, prédios e luzes de
+  /// cidade, na dose que o cenário da tela pede.
   void _morrosECidade(Canvas c, double w, double h) {
     const k = .12;
     final base = g.horizonte;
-    final alt = h * .10;
+    final m = q.mundo;
+    if (m.predios) _predios(c, w, h, k);
+    final alt = h * .10 * m.morros;
+    if (alt <= 0) {
+      c.drawLine(Offset(0, base), Offset(w, base), _linha(kNeon.withValues(alpha: .15), 1));
+      return;
+    }
     final p = Path()..moveTo(0, base + 2);
     for (var i = 0; i <= 48; i++) {
       final x = w * i / 48;
@@ -390,7 +421,7 @@ class _FundoPainter extends CustomPainter {
     final ini = (q.dist * k * w / passo).floor();
     for (var i = ini; i < ini + (w / passo).ceil() + 1; i++) {
       final hx = _hash(i);
-      if (hx > .55) continue;
+      if (hx > m.luzes) continue;
       final x = i * passo - q.dist * k * w;
       final u = (x / w + q.dist * k) * 2 * math.pi;
       final topo = base - alt * (.45 + .3 * math.sin(u * .9) + .2 * math.sin(u * 2.3 + 1.2) + .1 * math.sin(u * 5.1));
@@ -401,13 +432,46 @@ class _FundoPainter extends CustomPainter {
     }
   }
 
-  /// Camada do meio (45%): árvores em silhueta com um fio de neon.
+  /// Skyline atrás dos morros (mesma velocidade): prédios de alturas
+  /// variadas com janelas acesas.
+  void _predios(Canvas c, double w, double h, double k) {
+    final base = g.horizonte;
+    final passo = w * .055;
+    final ini = (q.dist * k * w / passo).floor() - 1;
+    for (var i = ini; i < ini + (w / passo).ceil() + 2; i++) {
+      if (_hash(i + 900) > .8) continue;
+      final x = i * passo - q.dist * k * w;
+      final larg = passo * (.6 + .5 * _hash(i + 910));
+      final alt = h * (.05 + .13 * _hash(i + 920));
+      final r = Rect.fromLTWH(x, base - alt, larg, alt);
+      c.drawRect(r, Paint()..color = const Color(0xFF0B1520));
+      c.drawRect(r, _linha(kNeon.withValues(alpha: .18), 1));
+      final cols = (larg / 6).floor(), rows = (alt / 9).floor();
+      for (var cx = 0; cx < cols; cx++) {
+        for (var ry = 0; ry < rows; ry++) {
+          if (_hash(i * 131 + cx * 17 + ry) > .35) continue;
+          final acesa = .4 + .6 * (.5 + .5 * math.sin(q.tempo * .8 + cx + ry + i));
+          c.drawRect(Rect.fromLTWH(x + 2 + cx * 6, base - alt + 3 + ry * 9, 2.5, 4),
+              Paint()..color = (ry % 4 == 0 ? _ambar : Colors.white).withValues(alpha: acesa * .8));
+        }
+      }
+    }
+  }
+
+  /// Camada do meio (45%): árvores em silhueta com um fio de neon, ou
+  /// mandacarus no sertão.
   void _arvores(Canvas c, double w, double h) {
     const k = .45;
+    final m = q.mundo;
+    if (m.cactos) {
+      _cactos(c, w, h, k);
+      return;
+    }
+    if (m.arvores <= 0) return;
     final passo = w * .19;
     final ini = (q.dist * k * w / passo).floor() - 1;
     for (var i = ini; i < ini + (w / passo).ceil() + 2; i++) {
-      if (_hash(i + 300) > .7) continue;
+      if (_hash(i + 300) > m.arvores) continue;
       final x = i * passo + (_hash(i + 400) - .5) * passo * .6 - q.dist * k * w;
       final alt = h * (.08 + .07 * _hash(i + 500));
       final base = g.pistaTopo - h * .01;
@@ -426,6 +490,27 @@ class _FundoPainter extends CustomPainter {
     }
   }
 
+  /// Mandacaru: tronco com dois braços, silhueta e fio neon.
+  void _cactos(Canvas c, double w, double h, double k) {
+    final passo = w * .30;
+    final ini = (q.dist * k * w / passo).floor() - 1;
+    for (var i = ini; i < ini + (w / passo).ceil() + 2; i++) {
+      if (_hash(i + 700) > .6) continue;
+      final x = i * passo + (_hash(i + 710) - .5) * passo * .5 - q.dist * k * w;
+      final alt = h * (.06 + .06 * _hash(i + 720));
+      final base = g.pistaTopo - h * .01;
+      final e = alt * .12;
+      final p = Path()
+        ..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x - e, base - alt, e * 2, alt), Radius.circular(e)))
+        ..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x - e * 4, base - alt * .62, e * 1.6, alt * .38), Radius.circular(e)))
+        ..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x - e * 4, base - alt * .62, e * 4, e * 1.6), Radius.circular(e)))
+        ..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x + e * 2.4, base - alt * .75, e * 1.6, alt * .5), Radius.circular(e)))
+        ..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, base - alt * .42, e * 4, e * 1.6), Radius.circular(e)));
+      c.drawPath(p, Paint()..color = const Color(0xFF0A1622));
+      c.drawPath(p, _linha(kNeon.withValues(alpha: .35), 1));
+    }
+  }
+
   /// Pista: banda de asfalto, linha neon em cima, tracejado correndo.
   void _pista(Canvas c, double w, double h) {
     final topo = g.pistaTopo;
@@ -433,6 +518,18 @@ class _FundoPainter extends CustomPainter {
         begin: Alignment.topCenter, end: Alignment.bottomCenter,
         colors: [Color(0xFF111A24), Color(0xFF070C13)]).createShader(Rect.fromLTRB(0, topo, w, h)));
     _neon(c, Path()..moveTo(0, topo)..lineTo(w, topo), w: 2.5);
+    if (q.mundo.guardRail) {
+      // Guard-rail na beira: lâmina dupla com mourões passando.
+      final y = topo - h * .022;
+      c.drawLine(Offset(0, y), Offset(w, y), _linha(const Color(0xFF8A96A3), 3));
+      c.drawLine(Offset(0, y + 5), Offset(w, y + 5), _linha(const Color(0xFF5A6673), 2));
+      final passo = w * .09;
+      final ini = (q.dist * w / passo).floor() - 1;
+      for (var i = ini; i < ini + (w / passo).ceil() + 2; i++) {
+        final x = i * passo - q.dist * w;
+        c.drawLine(Offset(x, y + 5), Offset(x, topo), _linha(const Color(0xFF5A6673), 3));
+      }
+    }
     // Tracejado da faixa da frente.
     final y = h * .945;
     final passo = w * .22, comp = w * .10;
@@ -446,7 +543,8 @@ class _FundoPainter extends CustomPainter {
 
   /// Postes de luz na beira da pista, na velocidade da pista, atrás do herói.
   void _postes(Canvas c, double w, double h) {
-    final passo = w * 1.1;
+    if (q.mundo.postes <= 0) return;
+    final passo = w * q.mundo.postes;
     final ini = (q.dist * w / passo).floor() - 1;
     for (var i = ini; i < ini + (w / passo).ceil() + 2; i++) {
       final mundo = (i * passo + w * .35) / w;
