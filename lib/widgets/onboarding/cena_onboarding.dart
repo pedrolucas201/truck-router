@@ -62,6 +62,7 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
   void didChangeDependencies() {
     super.didChangeDependencies();
     _estatico = MediaQuery.of(context).disableAnimations;
+    if (widget.tela.cena == Cena.sos) precacheImage(const AssetImage('assets/onboarding/acena.webp'), context);
     if (_estatico) {
       _ticker.stop();
       _dist = 0;
@@ -150,7 +151,9 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
         final bob = _estatico ? 0.0 : math.sin(_tempo * 2 * math.pi * 1.3) * 2 * _v;
         return Stack(fit: StackFit.expand, children: [
           CustomPaint(painter: _FundoPainter(q, g)),
-          _Sprite(asset: 'heroi', esq: g.heroEsq, larg: g.heroLarg, chao: g.chao, dy: bob, g: g,
+          // Parou atrás do S.O.S.: o alien acena (mesmo sprite, braço fora).
+          _Sprite(asset: cena == Cena.sos && _v == 0 ? 'acena' : 'heroi',
+              esq: g.heroEsq, larg: g.heroLarg, chao: g.chao, dy: bob, g: g,
               rodas: _Roda.heroi, giro: (_dist * g.w + g.heroDx) / (g.heroLarg * _Roda.pneuF)),
           if (cena == Cena.sos)
             _Sprite(asset: 'parado', esq: g.x(q.x0), larg: g.paradoLarg, chao: g.chao, dy: 0, g: g),
