@@ -46,6 +46,7 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
   double _tempo = 0;    // segundos desde que a página ficou ativa
   double _x0 = -10;     // posição (mundo) onde o evento desta tela começa
   double _v = 1;        // velocidade atual, 0..1
+  double? _tParou;      // _tempo em que a velocidade chegou a zero (S.O.S.)
   bool _estatico = false;
 
   /// Velocidade da pista, em larguras de tela por segundo.
@@ -79,6 +80,7 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
 
   void _armaEvento() {
     _tempo = 0;
+    _tParou = null;
     _x0 = _dist + 1.5; // entra pela direita ~1 s depois de abrir
   }
 
@@ -86,6 +88,11 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
     final dt = ((agora - _ultimo).inMicroseconds / 1e6).clamp(0.0, .05);
     _ultimo = agora;
     _v = _velocidade();
+    if (_v == 0) {
+      _tParou ??= _tempo;
+    } else {
+      _tParou = null;
+    }
     setState(() {
       _dist += dt * _vel * _v;
       _tempo += dt;
@@ -109,6 +116,15 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
   double _velocidade() {
     if (widget.tela.cena == Cena.abertura && !_estatico) return ((_tempo - 1.0) / .6).clamp(0.0, 1.0);
     if (widget.tela.cena == Cena.radar) return .85 + .15 * (kmhRadar(_dist - _x0) - 90) / 8;
+    if (widget.tela.cena == Cena.pedagio) {
+      // Folga entre o para-choque e a cancela (pivô em x0 + .25): freia até
+      // um quarto da velocidade, espera a cancela subir, arranca.
+      final folga = -(_dist - _x0) - .55;
+      if (folga > .45) return 1;
+      if (folga > .05) return .25 + .75 * (folga - .05) / .4;
+      if (folga > -.05) return .25;
+      return (.25 + .75 * (-folga - .05) / .3).clamp(.25, 1.0);
+    }
     if (widget.tela.cena != Cena.sos) return 1;
     final folga = (_x0 - _dist) - _Geo.heroDirSosF - .04; // distância até o parado
     if (folga < .012) return 0;
@@ -125,7 +141,8 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
   Widget build(BuildContext context) {
     final cena = widget.tela.cena;
     final q = _Quadro(cena: cena, dist: _dist, x0: _x0, tempo: _tempo, v: _v, estatico: _estatico,
-        farol: cena != Cena.abertura || _estatico || _tempo > .9);
+        farol: cena != Cena.abertura || _estatico || _tempo > .9,
+        paradoHa: _tParou == null ? -1 : _tempo - _tParou!);
     return ClipRect(
       child: LayoutBuilder(builder: (_, box) {
         final g = _Geo(Size(box.maxWidth, box.maxHeight), sos: cena == Cena.sos);
@@ -247,8 +264,12 @@ class _Quadro {
   final bool estatico;
   /// Faróis e lanternas acesos (na abertura acendem quando o herói chega).
   final bool farol;
+  /// Segundos desde que o herói parou (S.O.S.); -1 se está andando.
+  final double paradoHa;
   _Quadro({required this.cena, required this.dist, required this.x0, required this.tempo, required this.v, required this.estatico,
-      this.farol = true});
+      this.farol = true, this.paradoHa = -1});
+  /// Pisca-farol de caminhoneiro: duas piscadas logo depois de parar.
+  bool get piscaFarol => paradoHa >= 0 && ((paradoHa >= .4 && paradoHa < .6) || (paradoHa >= .8 && paradoHa < 1.0));
   /// Progresso do evento: 0 quando entra pela direita, 1 quando o centro dele
   /// cruza o centro do herói (em larguras de tela).
   double get avanco => dist - x0;
@@ -568,7 +589,8 @@ class _FrentePainter extends CustomPainter {
   /// frente. Lanternas atrás.
   void _luzes(Canvas c) {
     final farol = Offset(g.heroDir - g.heroLarg * .06, g.heroTopo + g.heroLarg * (567 / 1200) * .78);
-    _luz(c, farol, g.w * .10, _branco, .35 + .1 * q.seno);
+    final alto = q.piscaFarol ? 2.4 : 1.0;
+    _luz(c, farol, g.w * .10 * alto, _branco, (.35 + .1 * q.seno) * alto);
     final cone = Path()
       ..moveTo(farol.dx, farol.dy - 6)
       ..lineTo(farol.dx + g.w * .28, g.pistaTopo + 2)
@@ -576,7 +598,7 @@ class _FrentePainter extends CustomPainter {
       ..close();
     c.drawPath(cone, Paint()..shader = LinearGradient(
         begin: Alignment.centerLeft, end: Alignment.centerRight,
-        colors: [_branco.withValues(alpha: .16), _branco.withValues(alpha: 0)]).createShader(cone.getBounds()));
+        colors: [_branco.withValues(alpha: .16 * alto), _branco.withValues(alpha: 0)]).createShader(cone.getBounds()));
     // Lanternas do herói (traseira = esquerda).
     final lant = Offset(g.heroEsq + g.heroLarg * .005, g.heroTopo + g.heroLarg * (567 / 1200) * .78);
     _luz(c, lant, g.w * .05, _vermelho, .5 + .3 * q.seno);
@@ -596,7 +618,9 @@ class _FrentePainter extends CustomPainter {
         _flash(c, s);
         _velocimetro(c);
       case Cena.pedagio:
-        _selo(c, 'R\$ 28,50', kNeon, gatilho: q.avanco - .12);
+        // O valor aparece antes de a praça entrar na tela: "antes de sair,
+        // você sabe quanto vai gastar".
+        _selo(c, 'R\$ 28,50', kNeon, gatilho: q.avanco + 1.3);
       case Cena.sos:
         _sos(c);
     }
