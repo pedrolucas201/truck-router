@@ -349,9 +349,9 @@ class _Mundo {
         Cena.abertura => const _Mundo(morros: .4, predios: 1, luzes: .8, arvores: .15, passo: .8),
         Cena.rota => const _Mundo(morros: 1.8, luzes: .1, arvores: .7, passo: 1.6, dia: 1),
         Cena.radar => const _Mundo(morros: 0, luzes: .05, arvores: .08, passo: 1.0, guardRail: 1),
-        Cena.pedagio => const _Mundo(morros: .5, predios: 1, luzes: .9, arvores: .2, passo: .6, dia: .35),
+        Cena.pedagio => const _Mundo(morros: .5, predios: 1, luzes: .9, arvores: .2, passo: .6, dia: .45),
         Cena.sos => const _Mundo(morros: .3, luzes: 0, arvores: 0, postes: 0, passo: 1.0, cactos: 1, estrelas: 90),
-        Cena.fechamento => const _Mundo(morros: 1.2, luzes: 0, arvores: .4, postes: 0, passo: 1.0, estrelas: 20, dia: .85),
+        Cena.fechamento => const _Mundo(morros: 1.2, luzes: 0, arvores: .4, postes: 0, passo: 1.0, estrelas: 20, dia: .55),
       };
 
   static double _l(double a, double b, double t) => a + (b - a) * t;
@@ -364,6 +364,14 @@ class _Mundo {
 
   /// Cor entre a da noite e a do dia.
   Color cor(Color noite, Color dia_) => Color.lerp(noite, dia_, dia)!;
+
+  /// Cor em três paradas: noite (0), crepúsculo (.5), dia (1). O
+  /// entardecer e o amanhecer moram no meio.
+  Color cor3(Color noite, Color crepusculo, Color dia_) =>
+      dia < .5 ? Color.lerp(noite, crepusculo, dia / .5)! : Color.lerp(crepusculo, dia_, (dia - .5) / .5)!;
+
+  /// 1 no crepúsculo, 0 na noite fechada e no dia claro.
+  double get crepusculo => (1 - (dia - .5).abs() * 2).clamp(0.0, 1.0);
 }
 
 /// Estado de um quadro: o que o painter precisa pra desenhar.
@@ -442,9 +450,18 @@ class _FundoPainter extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final w = s.width, h = s.height;
-    c.drawRect(Offset.zero & s, Paint()..shader = LinearGradient(
+    // Céu: topo e horizonte em três paradas (noite, crepúsculo, dia); no
+    // crepúsculo o horizonte fica laranja e o topo, roxo.
+    final ceu = Rect.fromLTWH(0, 0, w, g.horizonte + 2);
+    c.drawRect(Offset.zero & s, Paint()..color = m.cor3(kFundo, const Color(0xFF2A2238), const Color(0xFF6FA283)));
+    c.drawRect(ceu, Paint()..shader = LinearGradient(
         begin: Alignment.topCenter, end: Alignment.bottomCenter,
-        colors: [m.cor(kFundoEscuro, const Color(0xFF4F8FCB)), m.cor(kFundo, const Color(0xFFBFDCEF))]).createShader(Offset.zero & s));
+        stops: const [0, .55, 1],
+        colors: [
+          m.cor3(kFundoEscuro, const Color(0xFF1B1F4E), const Color(0xFF4F8FCB)),
+          m.cor3(const Color(0xFF0A1220), const Color(0xFF6E3A6B), const Color(0xFF8DBDE6)),
+          m.cor3(kFundo, const Color(0xFFE8873F), const Color(0xFFBFDCEF)),
+        ]).createShader(ceu));
     _estrelas(c, w, h);
     _astro(c, w, h);
     _morrosECidade(c, w, h);
@@ -485,16 +502,19 @@ class _FundoPainter extends CustomPainter {
 
   /// Lua à noite, sol de dia (mesmo lugar; a sombra da lua some com o dia).
   void _astro(Canvas c, double w, double h) {
-    final centro = Offset(w * .82, h * .17);
-    final r = w * .055 * (1 + .3 * m.dia);
-    final cor = m.cor(const Color(0xFFE8FFE0), const Color(0xFFFFD34D));
-    final halo = m.cor(_branco, const Color(0xFFFFB347));
-    c.drawCircle(centro, r * 1.8, Paint()..shader = RadialGradient(
-        colors: [halo.withValues(alpha: .25 + .25 * m.dia), halo.withValues(alpha: 0)]).createShader(Rect.fromCircle(center: centro, radius: r * 1.8)));
+    // No crepúsculo o sol desce até perto do horizonte e fica laranja.
+    final baixo = m.crepusculo;
+    final centro = Offset(w * .82, h * .17 + (g.horizonte - h * .06 - h * .17) * baixo);
+    final r = w * .055 * (1 + .3 * m.dia + .5 * baixo);
+    final cor = m.cor3(const Color(0xFFE8FFE0), const Color(0xFFFF9A3C), const Color(0xFFFFD34D));
+    final halo = m.cor3(_branco, const Color(0xFFFF7A2F), const Color(0xFFFFB347));
+    c.drawCircle(centro, r * 2.2, Paint()..shader = RadialGradient(
+        colors: [halo.withValues(alpha: .25 + .35 * m.dia.clamp(0, .5) * 2), halo.withValues(alpha: 0)]).createShader(Rect.fromCircle(center: centro, radius: r * 2.2)));
     c.drawCircle(centro, r, Paint()..color = cor);
-    if (m.dia < 1) {
-      c.drawCircle(centro + Offset(r * .35, -r * .2), r * .92,
-          Paint()..color = m.cor(kFundoEscuro, const Color(0xFF4F8FCB)).withValues(alpha: 1 - m.dia));
+    // Sombra da lua: some conforme amanhece.
+    final sombra = (1 - m.dia * 2.2).clamp(0.0, 1.0);
+    if (sombra > 0) {
+      c.drawCircle(centro + Offset(r * .35, -r * .2), r * .92, Paint()..color = kFundoEscuro.withValues(alpha: sombra));
     }
   }
 
@@ -509,6 +529,17 @@ class _FundoPainter extends CustomPainter {
       c.drawLine(Offset(0, base), Offset(w, base), _linha(kNeon.withValues(alpha: .15), 1));
       return;
     }
+    // Serra ao longe (8% da pista): mais alta, enevoada, quase da cor do céu.
+    final longe = Path()..moveTo(0, base + 2);
+    for (var i = 0; i <= 48; i++) {
+      final x = w * i / 48;
+      final u = (x / w + q.dist * .08) * 2 * math.pi + 2.0;
+      final y = base - alt * (1.1 + .5 * math.sin(u * .7) + .3 * math.sin(u * 1.9 + .6) + .12 * math.sin(u * 4.3));
+      longe.lineTo(x, y);
+    }
+    longe..lineTo(w, base + 2)..close();
+    c.drawPath(longe, Paint()..color = m.cor3(const Color(0xFF0A1420), const Color(0xFF5A3F6E), const Color(0xFF8FB6C9)));
+    // Serra da frente: com volume (degradê do cume pro sopé) e um fio neon.
     final p = Path()..moveTo(0, base + 2);
     for (var i = 0; i <= 48; i++) {
       final x = w * i / 48;
@@ -517,8 +548,14 @@ class _FundoPainter extends CustomPainter {
       p.lineTo(x, y);
     }
     p..lineTo(w, base + 2)..close();
-    c.drawPath(p, Paint()..color = m.cor(const Color(0xFF08111B), const Color(0xFF3A6B7A)));
-    c.drawPath(p, _linha(kNeon.withValues(alpha: .15), 1));
+    final caixa = Rect.fromLTRB(0, base - alt * 1.05, w, base);
+    c.drawPath(p, Paint()..shader = LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [
+          m.cor3(const Color(0xFF0E1C2C), const Color(0xFF3B2A4A), const Color(0xFF5E9B78)),
+          m.cor3(const Color(0xFF08111B), const Color(0xFF221A30), const Color(0xFF35634C)),
+        ]).createShader(caixa));
+    c.drawPath(p, _linha(kNeon.withValues(alpha: .15 + .1 * m.dia), 1));
     // Luzes: uma a cada 3% de largura no mundo, com hash decidindo se existe.
     final vis = 1 - m.dia * .85;
     final passo = w * .03;
