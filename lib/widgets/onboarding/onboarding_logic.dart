@@ -1,30 +1,31 @@
-import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 /// Lógica pura do onboarding (testável sem widget).
 
-/// Uma tela de apresentação: cena + copy. As imagens geradas entram depois
-/// trocando [icone] por um asset, sem mexer no fluxo.
+/// Cena desenhada de cada tela de apresentação (ver `cena_onboarding.dart`).
+enum Cena { abertura, rota, radar, pedagio, sos }
+
+/// Uma tela de apresentação: cena + copy.
 class TelaOnboarding {
   final String kicker;
   final String titulo;
   final String texto;
-  final IconData icone;
-  const TelaOnboarding(this.kicker, this.titulo, this.texto, this.icone);
+  final Cena cena;
+  const TelaOnboarding(this.kicker, this.titulo, this.texto, this.cena);
 }
 
 /// Copy aprovada com o Pedro em 24/09/2026 (spec 2026-09-24-onboarding-design).
 const kTelasOnboarding = [
   TelaOnboarding('No Trecho', 'Feito pra quem vive no trecho.',
-      'Rota, radar e pedágio pensados pro pesado.', Icons.local_shipping),
+      'Rota, radar e pedágio pensados pro pesado.', Cena.abertura),
   TelaOnboarding('Rota', 'A rota que cabe no seu caminhão.',
-      'Altura, peso e eixos decidem o caminho, não o carro de passeio.', Icons.straighten),
+      'Altura, peso e eixos decidem o caminho, não o carro de passeio.', Cena.rota),
   TelaOnboarding('Radar', 'Radar no seu sentido, no limite de pesado.',
-      'O da pista contrária não te incomoda.', Icons.photo_camera),
+      'O da pista contrária não te incomoda.', Cena.radar),
   TelaOnboarding('Pedágio', 'Pedágio já com o valor do seu eixo.',
-      'Antes de sair, você sabe quanto vai gastar.', Icons.toll),
+      'Antes de sair, você sabe quanto vai gastar.', Cena.pedagio),
   TelaOnboarding('S.O.S.', 'Pediu ajuda? Quem está perto recebe.',
-      'Buzina, voz e a distância até você.', Icons.sos),
+      'Buzina, voz e a distância até você.', Cena.sos),
 ];
 
 const kPaginaCaminhao = 5;   // índice da tela "Seu caminhão"

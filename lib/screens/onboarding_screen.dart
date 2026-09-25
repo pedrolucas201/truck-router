@@ -83,6 +83,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   bool _notif = false;
   bool _bateria = false;
   bool _xiaomi = false;
+  // Início automático da MIUI: o Android não deixa LER essa chave, só abrir a
+  // tela. Então o estado é a palavra do motorista ("Já liguei"), guardada.
+  bool _autostartAberto = false;
+  bool _autostartOk = false;
+  static const _kAutostartOk = 'autostart_confirmado';
 
   @override
   void initState() {
@@ -125,13 +130,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     final r = await Future.wait<Object>([
       api.localizacao(), api.notificacaoOk(), api.bateriaIsenta(), api.ehXiaomi(),
     ]).catchError((_) => <Object>[LocationPermission.denied, false, false, false]);
+    final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
       _loc = r[0] as LocationPermission;
       _notif = r[1] as bool;
       _bateria = r[2] as bool;
       _xiaomi = r[3] as bool;
+      _autostartOk = prefs.getBool(_kAutostartOk) ?? false;
     });
+  }
+
+  Future<void> _confirmarAutostart() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kAutostartOk, true);
+    FieldLog.event('onboarding_perm', {'kind': 'autostart', 'result': 'confirmado'});
+    if (mounted) setState(() => _autostartOk = true);
   }
 
   void _irPara(int i) {
@@ -385,13 +399,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
             _CartaoPermissao(
               icone: Icons.power_settings_new,
               titulo: 'Início automático (Xiaomi)',
-              porque: 'No Xiaomi essa chave fica desligada de fábrica e o app some em segundo plano. Ligue "No Trecho" na lista.',
-              estado: PermissaoEstado.pendente,
-              rotuloEstado: 'Manual',
-              acao: ('Abrir', () async {
-                final ok = await widget.permissoes.abrirInicioAutomatico();
-                FieldLog.event('onboarding_perm', {'kind': 'autostart', 'result': ok});
-              }),
+              porque: _autostartOk
+                  ? 'Você confirmou que ligou "No Trecho" na lista. O app não consegue conferir isso sozinho.'
+                  : 'No Xiaomi essa chave fica desligada de fábrica e o app some em segundo plano. Ligue "No Trecho" na lista e volte.',
+              estado: _autostartOk ? PermissaoEstado.concedida : PermissaoEstado.pendente,
+              rotuloEstado: _autostartOk ? 'Marcada por você' : 'Manual',
+              acao: _autostartOk
+                  ? null
+                  : _autostartAberto
+                      ? ('Já liguei', _confirmarAutostart)
+                      : ('Abrir', () async {
+                          final ok = await widget.permissoes.abrirInicioAutomatico();
+                          FieldLog.event('onboarding_perm', {'kind': 'autostart', 'result': ok});
+                          if (mounted) setState(() => _autostartAberto = true);
+                        }),
             ),
           const SizedBox(height: 8),
           const _Texto('Se preferir, dá pra liberar depois: o mapa avisa o que ficou faltando.'),
