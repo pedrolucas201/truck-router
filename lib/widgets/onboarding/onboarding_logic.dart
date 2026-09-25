@@ -14,14 +14,16 @@ class TelaOnboarding {
   const TelaOnboarding(this.kicker, this.titulo, this.texto, this.cena);
 }
 
-/// Copy aprovada com o Pedro em 24/09/2026 (spec 2026-09-24-onboarding-design).
+/// Copy aprovada com o Pedro em 24/09/2026 (spec 2026-09-24-onboarding-design);
+/// telas 1-3 revisadas pelo Beto em 25/09 (kicker "GPS" pra não repetir
+/// "trecho", frases mais curtas e "sem multas" no radar).
 const kTelasOnboarding = [
-  TelaOnboarding('No Trecho', 'Feito pra quem vive no trecho.',
-      'Rota, radar e pedágio pensados pro pesado.', Cena.abertura),
+  TelaOnboarding('GPS', 'Feito pra quem vive no trecho.',
+      'Rota, radar e pedágios pensados para o seu pesado.', Cena.abertura),
   TelaOnboarding('Rota', 'A rota que cabe no seu caminhão.',
-      'Altura, peso e eixos decidem o caminho, não o carro de passeio.', Cena.rota),
+      'Altura, peso e eixos definem o seu caminho.', Cena.rota),
   TelaOnboarding('Radar', 'Radar no seu sentido, no limite de pesado.',
-      'O da pista contrária não te incomoda.', Cena.radar),
+      'Sem multas, mais dinheiro no seu bolso.', Cena.radar),
   TelaOnboarding('Pedágio', 'Pedágio já com o valor do seu eixo.',
       'Antes de sair, você sabe quanto vai gastar.', Cena.pedagio),
   TelaOnboarding('S.O.S.', 'Pediu ajuda? Quem está perto recebe.',

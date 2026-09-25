@@ -518,6 +518,7 @@ class _FundoPainter extends CustomPainter {
     final lente = caixa.centerLeft + Offset(caixa.width * .3, 0);
     c.drawCircle(lente, caixa.height * .22, Paint()..color = const Color(0xFF05080D));
     c.drawCircle(lente, caixa.height * .22, _linha(kNeon, 1.5));
+    _coruja(c, Offset(x, topo));
     // Seta no asfalto, no sentido do caminhão, um pouco antes do radar.
     final sx = x - g.w * .30, sy = g.h * .80;
     final comp = g.w * .12, alt = g.h * .035;
@@ -527,6 +528,41 @@ class _FundoPainter extends CustomPainter {
       ..lineTo(sx, sy + alt * .4)..close();
     c.drawPath(seta, _glow(kNeon, 6));
     c.drawPath(seta, Paint()..color = kNeon.withValues(alpha: .9));
+  }
+
+  /// Coruja pousada no topo do poste do radar (pedido do Beto, 25/09):
+  /// corpo em silhueta com fio neon, olhos grandes que piscam de vez em
+  /// quando e viram pro caminhão quando ele chega perto.
+  void _coruja(Canvas c, Offset poste) {
+    final r = g.w * .022; // raio do corpo
+    final centro = poste + Offset(0, -r * 1.3);
+    final corpo = Path()..addOval(Rect.fromCenter(center: centro, width: r * 2, height: r * 2.6));
+    c.drawPath(corpo, Paint()..color = const Color(0xFF0A1622));
+    _neon(c, corpo, w: 1.5);
+    // Orelhas.
+    final orelhas = Path()
+      ..moveTo(centro.dx - r * .8, centro.dy - r * .9)..lineTo(centro.dx - r * .6, centro.dy - r * 1.7)..lineTo(centro.dx - r * .2, centro.dy - r * 1.15)
+      ..moveTo(centro.dx + r * .8, centro.dy - r * .9)..lineTo(centro.dx + r * .6, centro.dy - r * 1.7)..lineTo(centro.dx + r * .2, centro.dy - r * 1.15);
+    c.drawPath(orelhas, Paint()..color = const Color(0xFF0A1622));
+    _neon(c, orelhas, w: 1.5);
+    // Olhos: piscam a cada ~3 s; a pupila segue o caminhão (que está à esquerda).
+    final pisca = !q.estatico && (q.tempo % 3.1) < .12;
+    final olhoY = centro.dy - r * .55;
+    for (final dx in [-r * .42, r * .42]) {
+      final o = Offset(centro.dx + dx, olhoY);
+      if (pisca) {
+        c.drawLine(o - Offset(r * .3, 0), o + Offset(r * .3, 0), _linha(kNeon, 2));
+        continue;
+      }
+      _luz(c, o, r * .7, kNeon, .35);
+      c.drawCircle(o, r * .34, Paint()..color = const Color(0xFFF2FFEA));
+      final perto = (g.x(q.x0) - g.heroDir) < g.w * .25;
+      c.drawCircle(o + Offset(perto ? -r * .1 : 0, r * .02), r * .16, Paint()..color = const Color(0xFF05080D));
+    }
+    // Bico.
+    final bico = Path()
+      ..moveTo(centro.dx - r * .12, centro.dy - r * .25)..lineTo(centro.dx + r * .12, centro.dy - r * .25)..lineTo(centro.dx, centro.dy)..close();
+    c.drawPath(bico, Paint()..color = _ambar);
   }
 
   // ── cena 4: praça de pedágio com cancela que sobe ───────────────────────
