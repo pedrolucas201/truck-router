@@ -99,7 +99,15 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
 
   /// No S.O.S. o nosso caminhão freia atrás do parado; nas outras telas a
   /// pista corre sempre.
+  /// Abertura: o herói entra pela esquerda (0 → 1 em 1,4 s, easeOut); a
+  /// pista só começa a correr quando ele está quase no lugar.
+  double _entrada() {
+    if (widget.tela.cena != Cena.abertura || _estatico) return 1;
+    return Curves.easeOutCubic.transform((_tempo / 1.4).clamp(0.0, 1.0));
+  }
+
   double _velocidade() {
+    if (widget.tela.cena == Cena.abertura && !_estatico) return ((_tempo - 1.0) / .6).clamp(0.0, 1.0);
     if (widget.tela.cena == Cena.radar) return .85 + .15 * (kmhRadar(_dist - _x0) - 90) / 8;
     if (widget.tela.cena != Cena.sos) return 1;
     final folga = (_x0 - _dist) - _Geo.heroDirSosF - .04; // distância até o parado
@@ -116,15 +124,17 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     final cena = widget.tela.cena;
-    final q = _Quadro(cena: cena, dist: _dist, x0: _x0, tempo: _tempo, v: _v, estatico: _estatico);
+    final q = _Quadro(cena: cena, dist: _dist, x0: _x0, tempo: _tempo, v: _v, estatico: _estatico,
+        farol: cena != Cena.abertura || _estatico || _tempo > .9);
     return ClipRect(
       child: LayoutBuilder(builder: (_, box) {
         final g = _Geo(Size(box.maxWidth, box.maxHeight), sos: cena == Cena.sos);
+        g.heroDx = -(g.w * _Geo.heroEsqF + g.heroLarg) * (1 - _entrada());
         final bob = _estatico ? 0.0 : math.sin(_tempo * 2 * math.pi * 1.3) * 2 * _v;
         return Stack(fit: StackFit.expand, children: [
           CustomPaint(painter: _FundoPainter(q, g)),
           _Sprite(asset: 'heroi', esq: g.heroEsq, larg: g.heroLarg, chao: g.chao, dy: bob, g: g,
-              rodas: _Roda.heroi, giro: _dist * g.w / (g.heroLarg * _Roda.pneuF)),
+              rodas: _Roda.heroi, giro: (_dist * g.w + g.heroDx) / (g.heroLarg * _Roda.pneuF)),
           if (cena == Cena.sos)
             _Sprite(asset: 'parado', esq: g.x(q.x0), larg: g.paradoLarg, chao: g.chao, dy: 0, g: g),
           CustomPaint(painter: _FrentePainter(q, g)),
@@ -218,9 +228,11 @@ class _Geo {
   static const heroEsqF = .10, heroEsqSosF = -.08, heroLargF = .70;
   static const heroDirF = heroEsqF + heroLargF;
   static const heroDirSosF = heroEsqSosF + heroLargF;
-  double get heroEsq => w * (sos ? heroEsqSosF : heroEsqF);
+  /// Deslocamento horizontal do herói (entrada pela esquerda na abertura).
+  double heroDx = 0;
+  double get heroEsq => w * (sos ? heroEsqSosF : heroEsqF) + heroDx;
   double get heroLarg => w * heroLargF;
-  double get heroDir => w * (sos ? heroDirSosF : heroDirF);
+  double get heroDir => w * (sos ? heroDirSosF : heroDirF) + heroDx;
   double get heroTopo => chao - heroLarg * (567 / 1200);
   double get paradoLarg => w * .36; // menor: parado mais à frente, cabine com capô à vista
   /// Posição de mundo (em larguras) → x na tela, na velocidade da pista.
@@ -233,7 +245,10 @@ class _Quadro {
   final Cena cena;
   final double dist, x0, tempo, v;
   final bool estatico;
-  _Quadro({required this.cena, required this.dist, required this.x0, required this.tempo, required this.v, required this.estatico});
+  /// Faróis e lanternas acesos (na abertura acendem quando o herói chega).
+  final bool farol;
+  _Quadro({required this.cena, required this.dist, required this.x0, required this.tempo, required this.v, required this.estatico,
+      this.farol = true});
   /// Progresso do evento: 0 quando entra pela direita, 1 quando o centro dele
   /// cruza o centro do herói (em larguras de tela).
   double get avanco => dist - x0;
@@ -545,7 +560,13 @@ class _FrentePainter extends CustomPainter {
 
   @override
   void paint(Canvas c, Size s) {
-    // Faróis do herói (frente = direita): pulsam de leve, iluminam a pista à frente.
+    if (q.farol) _luzes(c);
+    _eventos(c, s);
+  }
+
+  /// Faróis do herói (frente = direita): pulsam de leve, iluminam a pista à
+  /// frente. Lanternas atrás.
+  void _luzes(Canvas c) {
     final farol = Offset(g.heroDir - g.heroLarg * .06, g.heroTopo + g.heroLarg * (567 / 1200) * .78);
     _luz(c, farol, g.w * .10, _branco, .35 + .1 * q.seno);
     final cone = Path()
@@ -559,7 +580,9 @@ class _FrentePainter extends CustomPainter {
     // Lanternas do herói (traseira = esquerda).
     final lant = Offset(g.heroEsq + g.heroLarg * .005, g.heroTopo + g.heroLarg * (567 / 1200) * .78);
     _luz(c, lant, g.w * .05, _vermelho, .5 + .3 * q.seno);
+  }
 
+  void _eventos(Canvas c, Size s) {
     switch (q.cena) {
       case Cena.abertura:
         break;
