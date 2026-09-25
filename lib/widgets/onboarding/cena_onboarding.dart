@@ -17,23 +17,26 @@ const _vermelhoEscuro = Color(0xFF8A1F1F);
 /// cai pra 80 entre -1.35 e -.95, antes de a câmera (em -.85) fotografar.
 double kmhRadar(double avanco) => (88 - 8 * ((avanco + 1.35) / .4).clamp(0.0, 1.0)).roundToDouble();
 
-/// Cena de uma tela de apresentação: side-scroller visto de lado, à noite.
-/// O nosso caminhão (sprite `heroi.webp`, com o alien na janela) fica parado
-/// no centro e o mundo passa por ele em três velocidades: morros e cidade ao
-/// fundo (devagar), árvores (meio), pista com postes e tracejado (rápido).
-/// Cada tela traz o seu evento vindo da direita, no ritmo da pista: pórtico
-/// com as placas, radar com flash, praça com cancela subindo, caminhão parado
-/// (sprite `parado.webp`) em que o nosso freia atrás. Os selos aparecem na
-/// hora do evento com os números reais do app.
+/// Cena da apresentação: side-scroller visto de lado, UMA só atrás de todas
+/// as páginas (o mundo não corta ao trocar de tela). O nosso caminhão
+/// (sprite `heroi.webp`, com o alien na janela) fica parado no centro e o
+/// mundo passa por ele em três velocidades: morros e cidade ao fundo
+/// (devagar), árvores (meio), pista com postes e tracejado (rápido).
+/// Cada tela arma o seu evento vindo da direita: pórtico com as placas,
+/// radar com flash, praça com cancela subindo, caminhão parado
+/// (sprite `parado.webp`) em que o nosso freia atrás. O evento da tela
+/// anterior continua até sair pela esquerda; o cenário e o dia fazem lerp.
 ///
 /// Relógio: um [Ticker] integra a distância percorrida (`_dist`, em larguras
-/// de tela) com a velocidade da cena, que só cai a zero no S.O.S. Tudo que
-/// passa é função de `_dist`; o que pulsa é função do tempo. "Reduzir
-/// animações" = um quadro parado com o evento à vista.
+/// de tela) com a velocidade da cena. Tudo que passa é função de `_dist`; o
+/// que pulsa é função do tempo. "Reduzir animações" = um quadro parado com o
+/// evento à vista.
 class CenaOnboarding extends StatefulWidget {
-  final TelaOnboarding tela;
-  final bool ativa;
-  const CenaOnboarding({super.key, required this.tela, required this.ativa});
+  final Cena cena;
+  /// Falso nas páginas sem apresentação (cadastro, permissões): a cena
+  /// esmaece e o relógio para.
+  final bool visivel;
+  const CenaOnboarding({super.key, required this.cena, this.visivel = true});
 
   @override
   State<CenaOnboarding> createState() => _CenaOnboardingState();
@@ -42,33 +45,49 @@ class CenaOnboarding extends StatefulWidget {
 class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
   Duration _ultimo = Duration.zero;
-  double _dist = 0;     // larguras de tela percorridas
-  double _tempo = 0;    // segundos desde que a página ficou ativa
-  double _x0 = -10;     // posição (mundo) onde o evento desta tela começa
-  double _v = 1;        // velocidade atual, 0..1
-  double? _tParou;      // _tempo em que a velocidade chegou a zero (S.O.S.)
+  double _dist = 0;        // larguras de tela percorridas
+  double _tempo = 0;       // segundos desde que a tela atual armou
+  double _tempoTotal = 0;  // segundos desde a abertura (entrada, faróis)
+  double _x0 = -10;        // posição (mundo) onde o evento desta tela começa
+  double _v = 1;           // velocidade atual, 0..1
+  double? _tParou;         // _tempo em que a velocidade chegou a zero
+  double _zoom = 1;        // câmera, suavizada a cada tick
+  double _sosK = 0;        // 0 = enquadramento normal, 1 = enquadramento do S.O.S.
   bool _estatico = false;
+  // Tela anterior: o evento dela continua na tela até sair pela esquerda e o
+  // cenário dela vira o novo em 1,2 s.
+  Cena? _cenaAnt;
+  double _x0Ant = -10;
+  _Mundo _mundoAntes = _Mundo.de(Cena.abertura);
 
   /// Velocidade da pista, em larguras de tela por segundo.
   static const _vel = .55;
 
+  Cena get _cena => widget.cena;
+
   @override
   void initState() {
     super.initState();
-    if (widget.ativa) _armaEvento();
+    _mundoAntes = _Mundo.de(_cena);
+    _armaEvento();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _estatico = MediaQuery.of(context).disableAnimations;
-    if (widget.tela.cena == Cena.sos) precacheImage(const AssetImage('assets/onboarding/acena.webp'), context);
+    for (final a in const ['heroi', 'acena', 'parado']) {
+      precacheImage(AssetImage('assets/onboarding/$a.webp'), context);
+    }
     if (_estatico) {
       _ticker.stop();
       _dist = 0;
       _x0 = .75; // evento no meio da tela, quadro parado
       _tempo = 10;
-    } else if (!_ticker.isActive) {
+      _tempoTotal = 10;
+      _cenaAnt = null;
+      _sosK = _cena == Cena.sos ? 1 : 0;
+    } else if (!_ticker.isActive && widget.visivel) {
       _ticker.start();
     }
   }
@@ -76,7 +95,17 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
   @override
   void didUpdateWidget(covariant CenaOnboarding old) {
     super.didUpdateWidget(old);
-    if (widget.ativa && !old.ativa) _armaEvento();
+    if (widget.cena != old.cena) {
+      _mundoAntes = _mundo();
+      if (!_estatico) {
+        _cenaAnt = old.cena;
+        _x0Ant = _x0;
+      }
+      _armaEvento();
+      if (_estatico) _x0 = .75;
+    }
+    if (widget.visivel && !old.visivel && !_estatico && !_ticker.isActive) _ticker.start();
+    if (!widget.visivel && old.visivel) _ticker.stop();
   }
 
   void _armaEvento() {
@@ -84,6 +113,9 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
     _tParou = null;
     _x0 = _dist + 1.5; // entra pela direita ~1 s depois de abrir
   }
+
+  /// Cenário atual: lerp do anterior pro desta tela em 1,2 s.
+  _Mundo _mundo() => _Mundo.lerp(_mundoAntes, _Mundo.de(_cena), Curves.easeInOut.transform((_tempo / 1.2).clamp(0.0, 1.0)));
 
   void _tick(Duration agora) {
     final dt = ((agora - _ultimo).inMicroseconds / 1e6).clamp(0.0, .05);
@@ -97,39 +129,61 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
     setState(() {
       _dist += dt * _vel * _v;
       _tempo += dt;
+      _tempoTotal += dt;
       // O evento repete em loop (como no Radarbot): quando já passou, volta
-      // pela direita. O S.O.S. não repete: o caminhão fica parado.
-      // Renasce fora da tela: o aviso do radar dispara em -1.35 e um evento
-      // rearmado em .9 nasceria já avisado.
-      if (widget.tela.cena != Cena.sos && _dist - _x0 > 1.7) _x0 = _dist + 1.5;
+      // pela direita, renascendo fora da tela (o aviso do radar dispara em
+      // -1.35). S.O.S. e fechamento não repetem.
+      if (_cena != Cena.sos && _cena != Cena.fechamento && _dist - _x0 > 1.7) _x0 = _dist + 1.5;
+      // No fechamento, o caminhão socorrido arranca e vai embora.
+      if (_cena == Cena.fechamento && _cenaAnt == Cena.sos) _x0Ant += dt * _vel * 1.1;
+      if (_cenaAnt != null && (_dist - _x0Ant > 1.7 || _x0Ant - _dist > 1.2)) _cenaAnt = null;
+      // Câmera e enquadramento, suavizados.
+      final s = (dt * 3).clamp(0.0, 1.0);
+      _zoom += (_zoomAlvo() - _zoom) * s;
+      _sosK += ((_cena == Cena.sos ? 1 : 0) - _sosK) * s;
     });
   }
 
-  /// No S.O.S. o nosso caminhão freia atrás do parado; nas outras telas a
-  /// pista corre sempre.
-  /// Abertura: o herói entra pela esquerda (0 → 1 em 1,4 s, easeOut); a
-  /// pista só começa a correr quando ele está quase no lugar.
-  double _entrada() {
-    if (widget.tela.cena != Cena.abertura || _estatico) return 1;
-    return Curves.easeOutCubic.transform((_tempo / 1.4).clamp(0.0, 1.0));
+  double _zoomAlvo() {
+    if (_cena == Cena.sos && _tParou != null) return 1.14;
+    if (_cena == Cena.radar) {
+      final k = ((_dist - _x0) + .85) / .15;
+      if (k >= 0 && k <= 1) return 1.06;
+    }
+    return 1;
   }
 
+  /// Abertura: o herói entra pela esquerda (0 → 1 em 1,4 s, easeOut); a
+  /// pista só começa a correr quando ele está quase no lugar. Só na primeira
+  /// tela, uma vez.
+  bool get _entrando => _cena == Cena.abertura && _cenaAnt == null && !_estatico;
+  double _entrada() => _entrando ? Curves.easeOutCubic.transform((_tempoTotal / 1.4).clamp(0.0, 1.0)) : 1;
+
   double _velocidade() {
-    if (widget.tela.cena == Cena.abertura && !_estatico) return ((_tempo - 1.0) / .6).clamp(0.0, 1.0);
-    if (widget.tela.cena == Cena.radar) return .85 + .15 * (kmhRadar(_dist - _x0) - 80) / 8;
-    if (widget.tela.cena == Cena.pedagio) {
-      // Folga entre o para-choque e a cancela (pivô em x0 + .25): freia até
-      // um quarto da velocidade, espera a cancela subir, arranca.
-      final folga = -(_dist - _x0) - .55;
-      if (folga > .45) return 1;
-      if (folga > .05) return .25 + .75 * (folga - .05) / .4;
-      if (folga > -.05) return .25;
-      return (.25 + .75 * (-folga - .05) / .3).clamp(.25, 1.0);
+    switch (_cena) {
+      case Cena.abertura:
+        return _entrando ? ((_tempoTotal - 1.0) / .6).clamp(0.0, 1.0) : 1;
+      case Cena.rota:
+        return 1;
+      case Cena.radar:
+        return .85 + .15 * (kmhRadar(_dist - _x0) - 80) / 8;
+      case Cena.pedagio:
+        // Folga entre o para-choque e a 1ª cancela (pivô em x0 + .25): freia
+        // até um quarto da velocidade, espera a cancela subir, arranca.
+        final folga = -(_dist - _x0) - .55;
+        if (folga > .45) return 1;
+        if (folga > .05) return .25 + .75 * (folga - .05) / .4;
+        if (folga > -.05) return .25;
+        return (.25 + .75 * (-folga - .05) / .3).clamp(.25, 1.0);
+      case Cena.sos:
+        final folga = (_x0 - _dist) - _Geo.heroDirSosF - .04; // distância até o parado
+        if (folga < .012) return 0;
+        return (folga / .5).clamp(0.0, 1.0);
+      case Cena.fechamento:
+        // Espera o socorrido ir embora (1,6 s), aí arranca.
+        if (_cenaAnt == Cena.sos) return ((_tempo - 1.6) / 1.2).clamp(0.0, 1.0);
+        return 1;
     }
-    if (widget.tela.cena != Cena.sos) return 1;
-    final folga = (_x0 - _dist) - _Geo.heroDirSosF - .04; // distância até o parado
-    if (folga < .012) return 0;
-    return (folga / .5).clamp(0.0, 1.0);
   }
 
   @override
@@ -140,41 +194,41 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final cena = widget.tela.cena;
-    final q = _Quadro(cena: cena, dist: _dist, x0: _x0, tempo: _tempo, v: _v, estatico: _estatico,
-        farol: cena != Cena.abertura || _estatico || _tempo > .9,
+    final cena = _cena;
+    final mundo = _mundo();
+    final q = _Quadro(cena: cena, dist: _dist, x0: _x0, tempo: _tempo, v: _v, estatico: _estatico, mundo: mundo,
+        farol: !_entrando || _tempoTotal > .9,
         paradoHa: _tParou == null ? -1 : _tempo - _tParou!);
-    return ClipRect(
-      child: LayoutBuilder(builder: (_, box) {
-        final g = _Geo(Size(box.maxWidth, box.maxHeight), sos: cena == Cena.sos);
-        g.heroDx = -(g.w * _Geo.heroEsqF + g.heroLarg) * (1 - _entrada());
-        final bob = _estatico ? 0.0 : math.sin(_tempo * 2 * math.pi * 1.3) * 2 * _v;
-        // Câmera: aproxima devagar quando o herói para no S.O.S. e dá um
-        // pulo curto no flash do radar; o resto do tempo fica em 1.
-        var zoom = 1.0;
-        if (!_estatico) {
-          if (cena == Cena.sos && _tParou != null) {
-            zoom = 1 + .14 * Curves.easeOutCubic.transform(((_tempo - _tParou!) / 1.6).clamp(0.0, 1.0));
-          } else if (cena == Cena.radar) {
-            final k = ((_dist - _x0) + .85) / .15;
-            if (k >= 0 && k <= 1) zoom = 1 + .04 * (1 - k);
-          }
-        }
-        return Transform.scale(
-          scale: zoom,
-          alignment: const Alignment(.55, .75), // entre o herói e o parado
-          child: Stack(fit: StackFit.expand, children: [
-          CustomPaint(painter: _FundoPainter(q, g)),
-          // Parou atrás do S.O.S.: o alien acena (mesmo sprite, braço fora).
-          _Sprite(asset: cena == Cena.sos && _v == 0 ? 'acena' : 'heroi',
-              esq: g.heroEsq, larg: g.heroLarg, chao: g.chao, dy: bob, g: g,
-              rodas: _Roda.heroi, giro: (_dist * g.w + g.heroDx) / (g.heroLarg * _Roda.pneuF)),
-          if (cena == Cena.sos)
-            _Sprite(asset: 'parado', esq: g.x(q.x0), larg: g.paradoLarg, chao: g.chao, dy: 0, g: g),
-          CustomPaint(painter: _FrentePainter(q, g)),
-        ]),
-        );
-      }),
+    final qAnt = _cenaAnt == null
+        ? null
+        : _Quadro(cena: _cenaAnt!, dist: _dist, x0: _x0Ant, tempo: _tempo + 10, v: _v, estatico: _estatico, mundo: mundo, anterior: true);
+    // Alien acena: parado atrás do S.O.S. e no fechamento.
+    final acena = (cena == Cena.sos && _v == 0) || cena == Cena.fechamento;
+    return AnimatedOpacity(
+      opacity: widget.visivel ? 1 : 0,
+      duration: const Duration(milliseconds: 350),
+      child: ClipRect(
+        child: LayoutBuilder(builder: (_, box) {
+          final g = _Geo(Size(box.maxWidth, box.maxHeight), sosK: _sosK);
+          g.heroDx = -(g.w * _Geo.heroEsqF + g.heroLarg) * (1 - _entrada());
+          final bob = _estatico ? 0.0 : math.sin(_tempo * 2 * math.pi * 1.3) * 2 * _v;
+          return Transform.scale(
+            scale: _estatico ? 1 : _zoom,
+            alignment: const Alignment(.55, .75), // entre o herói e o parado
+            child: Stack(fit: StackFit.expand, children: [
+              CustomPaint(painter: _FundoPainter(q, g, qAnt)),
+              if (qAnt?.cena == Cena.sos)
+                _Sprite(asset: 'parado', esq: g.x(qAnt!.x0), larg: g.paradoLarg, chao: g.chao, dy: 0, g: g),
+              _Sprite(asset: acena ? 'acena' : 'heroi',
+                  esq: g.heroEsq, larg: g.heroLarg, chao: g.chao, dy: bob, g: g,
+                  rodas: _Roda.heroi, giro: (_dist * g.w + g.heroDx) / (g.heroLarg * _Roda.pneuF)),
+              if (cena == Cena.sos)
+                _Sprite(asset: 'parado', esq: g.x(q.x0), larg: g.paradoLarg, chao: g.chao, dy: 0, g: g),
+              CustomPaint(painter: _FrentePainter(q, g, qAnt)),
+            ]),
+          );
+        }),
+      ),
     );
   }
 }
@@ -251,23 +305,23 @@ class _Roda {
 /// Geometria da cena em frações do box. Tudo que é posição mora aqui.
 class _Geo {
   final Size s;
-  final bool sos;
-  _Geo(this.s, {this.sos = false});
+  /// 0 = enquadramento normal; 1 = S.O.S. (herói encostado na esquerda pra
+  /// sobrar tela pro parado). Faz lerp na troca de tela.
+  final double sosK;
+  _Geo(this.s, {this.sosK = 0});
   double get w => s.width;
   double get h => s.height;
   double get horizonte => h * .60;
   double get pistaTopo => h * .74;
   double get chao => h * .87;         // linha das rodas
-  // No S.O.S. o herói encosta na esquerda (corta um pouco do baú) pra sobrar
-  // tela pro caminhão parado, cabine com capô aberto à vista.
   static const heroEsqF = .10, heroEsqSosF = -.08, heroLargF = .70;
   static const heroDirF = heroEsqF + heroLargF;
   static const heroDirSosF = heroEsqSosF + heroLargF;
   /// Deslocamento horizontal do herói (entrada pela esquerda na abertura).
   double heroDx = 0;
-  double get heroEsq => w * (sos ? heroEsqSosF : heroEsqF) + heroDx;
+  double get heroEsq => w * (heroEsqF + (heroEsqSosF - heroEsqF) * sosK) + heroDx;
   double get heroLarg => w * heroLargF;
-  double get heroDir => w * (sos ? heroDirSosF : heroDirF) + heroDx;
+  double get heroDir => heroEsq + heroLarg;
   double get heroTopo => chao - heroLarg * (567 / 1200);
   double get paradoLarg => w * .36; // menor: parado mais à frente, cabine com capô à vista
   /// Posição de mundo (em larguras) → x na tela, na velocidade da pista.
@@ -275,27 +329,41 @@ class _Geo {
   double _distAtual = 0;
 }
 
-/// Cenário de cada tela (camadas de fundo). Os eventos não mudam; o mundo
-/// em volta muda, pra as cinco telas não serem a mesma estrada.
+/// Cenário de cada tela (camadas de fundo e hora do dia). Os eventos não
+/// mudam; o mundo em volta muda, e faz lerp na troca de tela.
 class _Mundo {
-  final double morros;      // altura dos morros, 0 = horizonte chapado
-  final bool predios;       // skyline de cidade no horizonte
-  final double luzes;       // densidade das luzes de cidade, 0..1
-  final double arvores;     // densidade das árvores, 0..1
-  final double postes;      // passo dos postes em larguras; 0 = sem poste
-  final bool guardRail;
-  final bool cactos;
-  final int estrelas;
-  const _Mundo({this.morros = 1, this.predios = false, this.luzes = .45, this.arvores = .3, this.postes = 1.1,
-      this.guardRail = false, this.cactos = false, this.estrelas = 40});
+  final double morros;    // altura dos morros, 0 = horizonte chapado
+  final double predios;   // skyline de cidade no horizonte, 0..1 (alpha)
+  final double luzes;     // densidade das luzes de cidade, 0..1
+  final double arvores;   // densidade das árvores, 0..1
+  final double cactos;    // densidade dos mandacarus, 0..1
+  final double postes;    // presença dos postes, 0..1 (alpha)
+  final double passo;     // distância entre postes, em larguras
+  final double guardRail; // 0..1 (alpha)
+  final double estrelas;  // quantas
+  final double dia;       // 0 = noite, 1 = dia claro
+  const _Mundo({this.morros = 1, this.predios = 0, this.luzes = .45, this.arvores = .3, this.cactos = 0,
+      this.postes = 1, this.passo = 1.1, this.guardRail = 0, this.estrelas = 40, this.dia = 0});
 
   static _Mundo de(Cena c) => switch (c) {
-        Cena.abertura => const _Mundo(morros: .4, predios: true, luzes: .8, arvores: .15, postes: .8),
-        Cena.rota => const _Mundo(morros: 1.8, luzes: .1, arvores: .7, postes: 1.6),
-        Cena.radar => const _Mundo(morros: 0, luzes: .05, arvores: .08, postes: 1.0, guardRail: true),
-        Cena.pedagio => const _Mundo(morros: .5, predios: true, luzes: .9, arvores: .2, postes: .6),
-        Cena.sos => const _Mundo(morros: .3, luzes: 0, arvores: 0, postes: 0, cactos: true, estrelas: 90),
+        Cena.abertura => const _Mundo(morros: .4, predios: 1, luzes: .8, arvores: .15, passo: .8),
+        Cena.rota => const _Mundo(morros: 1.8, luzes: .1, arvores: .7, passo: 1.6, dia: 1),
+        Cena.radar => const _Mundo(morros: 0, luzes: .05, arvores: .08, passo: 1.0, guardRail: 1),
+        Cena.pedagio => const _Mundo(morros: .5, predios: 1, luzes: .9, arvores: .2, passo: .6, dia: .35),
+        Cena.sos => const _Mundo(morros: .3, luzes: 0, arvores: 0, postes: 0, passo: 1.0, cactos: 1, estrelas: 90),
+        Cena.fechamento => const _Mundo(morros: 1.2, luzes: 0, arvores: .4, postes: 0, passo: 1.0, estrelas: 20, dia: .85),
       };
+
+  static double _l(double a, double b, double t) => a + (b - a) * t;
+  static _Mundo lerp(_Mundo a, _Mundo b, double t) => _Mundo(
+        morros: _l(a.morros, b.morros, t), predios: _l(a.predios, b.predios, t), luzes: _l(a.luzes, b.luzes, t),
+        arvores: _l(a.arvores, b.arvores, t), cactos: _l(a.cactos, b.cactos, t), postes: _l(a.postes, b.postes, t),
+        passo: _l(a.passo, b.passo, t), guardRail: _l(a.guardRail, b.guardRail, t), estrelas: _l(a.estrelas, b.estrelas, t),
+        dia: _l(a.dia, b.dia, t),
+      );
+
+  /// Cor entre a da noite e a do dia.
+  Color cor(Color noite, Color dia_) => Color.lerp(noite, dia_, dia)!;
 }
 
 /// Estado de um quadro: o que o painter precisa pra desenhar.
@@ -303,19 +371,21 @@ class _Quadro {
   final Cena cena;
   final double dist, x0, tempo, v;
   final bool estatico;
+  final _Mundo mundo;
   /// Faróis e lanternas acesos (na abertura acendem quando o herói chega).
   final bool farol;
   /// Segundos desde que o herói parou (S.O.S.); -1 se está andando.
   final double paradoHa;
+  /// Evento da tela anterior, ainda saindo: só o objeto, sem selo nem reação.
+  final bool anterior;
   _Quadro({required this.cena, required this.dist, required this.x0, required this.tempo, required this.v, required this.estatico,
-      this.farol = true, this.paradoHa = -1});
+      required this.mundo, this.farol = true, this.paradoHa = -1, this.anterior = false});
   /// Pisca-farol de caminhoneiro: duas piscadas logo depois de parar.
   bool get piscaFarol => paradoHa >= 0 && ((paradoHa >= .4 && paradoHa < .6) || (paradoHa >= .8 && paradoHa < 1.0));
   /// Progresso do evento: 0 quando entra pela direita, 1 quando o centro dele
   /// cruza o centro do herói (em larguras de tela).
   double get avanco => dist - x0;
   double get seno => .5 + .5 * math.sin(tempo * 2 * math.pi);
-  _Mundo get mundo => _Mundo.de(cena);
 }
 
 Paint _glow(Color c, double w, {double blur = 10}) => Paint()
@@ -338,7 +408,7 @@ void _neon(Canvas c, Path p, {Color cor = kNeon, double w = 2.5}) {
 void _luz(Canvas c, Offset centro, double raio, Color cor, double k) {
   if (k <= 0) return;
   c.drawCircle(centro, raio, Paint()
-    ..shader = RadialGradient(colors: [cor.withValues(alpha: k), cor.withValues(alpha: 0)])
+    ..shader = RadialGradient(colors: [cor.withValues(alpha: k.clamp(0.0, 1.0)), cor.withValues(alpha: 0)])
         .createShader(Rect.fromCircle(center: centro, radius: raio)));
 }
 void _texto(Canvas c, String s, Offset centro, double tam,
@@ -362,51 +432,70 @@ double _hash(int i) {
 class _FundoPainter extends CustomPainter {
   final _Quadro q;
   final _Geo g;
-  _FundoPainter(this.q, this.g) {
+  final _Quadro? qAnt;
+  _FundoPainter(this.q, this.g, this.qAnt) {
     g._distAtual = q.dist;
   }
+
+  _Mundo get m => q.mundo;
 
   @override
   void paint(Canvas c, Size s) {
     final w = s.width, h = s.height;
-    c.drawRect(Offset.zero & s, Paint()..shader = const LinearGradient(
+    c.drawRect(Offset.zero & s, Paint()..shader = LinearGradient(
         begin: Alignment.topCenter, end: Alignment.bottomCenter,
-        colors: [kFundoEscuro, kFundo]).createShader(Offset.zero & s));
+        colors: [m.cor(kFundoEscuro, const Color(0xFF4F8FCB)), m.cor(kFundo, const Color(0xFFBFDCEF))]).createShader(Offset.zero & s));
     _estrelas(c, w, h);
-    _lua(c, w, h);
+    _astro(c, w, h);
     _morrosECidade(c, w, h);
     _arvores(c, w, h);
     _pista(c, w, h);
-    switch (q.cena) {
-      case Cena.abertura:
-        _placaKm(c);
-      case Cena.rota:
-        _portico(c);
-      case Cena.radar:
-        _radar(c);
-      case Cena.pedagio:
-        _pedagio(c);
-      case Cena.sos:
-        break;
-    }
+    if (qAnt != null) _evento(c, qAnt!);
+    _evento(c, q);
     _postes(c, w, h);
   }
 
+  /// Objeto do evento de uma tela (o atual ou o anterior ainda saindo).
+  void _evento(Canvas c, _Quadro e) {
+    switch (e.cena) {
+      case Cena.abertura:
+        _placaKm(c, e);
+      case Cena.rota:
+        _portico(c, e);
+      case Cena.radar:
+        _radar(c, e);
+      case Cena.pedagio:
+        _pedagio(c, e);
+      case Cena.sos:
+      case Cena.fechamento:
+        break;
+    }
+  }
+
   void _estrelas(Canvas c, double w, double h) {
-    for (var i = 0; i < q.mundo.estrelas; i++) {
+    final vis = 1 - m.dia;
+    if (vis <= 0) return;
+    final n = m.estrelas.round();
+    for (var i = 0; i < n; i++) {
       final x = _hash(i) * w, y = _hash(i + 100) * g.horizonte * .85;
-      final cint = .25 + .45 * (.5 + .5 * math.sin(q.tempo * 1.5 + i));
+      final cint = (.25 + .45 * (.5 + .5 * math.sin(q.tempo * 1.5 + i))) * vis;
       c.drawCircle(Offset(x, y), i % 6 == 0 ? 1.5 : 1, Paint()..color = Colors.white.withValues(alpha: cint));
     }
   }
 
-  void _lua(Canvas c, double w, double h) {
+  /// Lua à noite, sol de dia (mesmo lugar; a sombra da lua some com o dia).
+  void _astro(Canvas c, double w, double h) {
     final centro = Offset(w * .82, h * .17);
-    final r = w * .055;
-    c.drawCircle(centro, r * 1.6, Paint()..shader = RadialGradient(
-        colors: [_branco.withValues(alpha: .25), _branco.withValues(alpha: 0)]).createShader(Rect.fromCircle(center: centro, radius: r * 1.6)));
-    c.drawCircle(centro, r, Paint()..color = const Color(0xFFE8FFE0));
-    c.drawCircle(centro + Offset(r * .35, -r * .2), r * .92, Paint()..color = kFundoEscuro);
+    final r = w * .055 * (1 + .3 * m.dia);
+    final cor = m.cor(const Color(0xFFE8FFE0), const Color(0xFFFFD34D));
+    final halo = m.cor(_branco, const Color(0xFFFFB347));
+    c.drawCircle(centro, r * 1.8, Paint()..shader = RadialGradient(
+        colors: [halo.withValues(alpha: .25 + .25 * m.dia), halo.withValues(alpha: 0)]).createShader(Rect.fromCircle(center: centro, radius: r * 1.8)));
+    c.drawCircle(centro, r, Paint()..color = cor);
+    if (m.dia < 1) {
+      c.drawCircle(centro + Offset(r * .35, -r * .2), r * .92,
+          Paint()..color = m.cor(kFundoEscuro, const Color(0xFF4F8FCB)).withValues(alpha: 1 - m.dia));
+    }
   }
 
   /// Camada longe (12% da pista): silhueta de morros, prédios e luzes de
@@ -414,10 +503,9 @@ class _FundoPainter extends CustomPainter {
   void _morrosECidade(Canvas c, double w, double h) {
     const k = .12;
     final base = g.horizonte;
-    final m = q.mundo;
-    if (m.predios) _predios(c, w, h, k);
+    if (m.predios > 0) _predios(c, w, h, k);
     final alt = h * .10 * m.morros;
-    if (alt <= 0) {
+    if (alt <= 0.5) {
       c.drawLine(Offset(0, base), Offset(w, base), _linha(kNeon.withValues(alpha: .15), 1));
       return;
     }
@@ -429,9 +517,10 @@ class _FundoPainter extends CustomPainter {
       p.lineTo(x, y);
     }
     p..lineTo(w, base + 2)..close();
-    c.drawPath(p, Paint()..color = const Color(0xFF08111B));
+    c.drawPath(p, Paint()..color = m.cor(const Color(0xFF08111B), const Color(0xFF3A6B7A)));
     c.drawPath(p, _linha(kNeon.withValues(alpha: .15), 1));
     // Luzes: uma a cada 3% de largura no mundo, com hash decidindo se existe.
+    final vis = 1 - m.dia * .85;
     final passo = w * .03;
     final ini = (q.dist * k * w / passo).floor();
     for (var i = ini; i < ini + (w / passo).ceil() + 1; i++) {
@@ -442,7 +531,7 @@ class _FundoPainter extends CustomPainter {
       final topo = base - alt * (.45 + .3 * math.sin(u * .9) + .2 * math.sin(u * 2.3 + 1.2) + .1 * math.sin(u * 5.1));
       final y = base - (base - topo) * (.15 + .7 * _hash(i + 7));
       final cor = i % 5 == 0 ? _ambar : Colors.white;
-      final cint = .5 + .5 * (.5 + .5 * math.sin(q.tempo * 2 + i));
+      final cint = (.5 + .5 * (.5 + .5 * math.sin(q.tempo * 2 + i))) * vis;
       c.drawCircle(Offset(x, y), 1.2, Paint()..color = cor.withValues(alpha: cint));
     }
   }
@@ -452,39 +541,38 @@ class _FundoPainter extends CustomPainter {
   void _predios(Canvas c, double w, double h, double k) {
     final base = g.horizonte;
     final passo = w * .055;
+    final vis = m.predios;
+    final janelas = vis * (1 - m.dia * .7);
     final ini = (q.dist * k * w / passo).floor() - 1;
     for (var i = ini; i < ini + (w / passo).ceil() + 2; i++) {
       if (_hash(i + 900) > .8) continue;
       final x = i * passo - q.dist * k * w;
       final larg = passo * (.6 + .5 * _hash(i + 910));
-      final alt = h * (.05 + .13 * _hash(i + 920));
+      final alt = h * (.05 + .13 * _hash(i + 920)) * vis;
       final r = Rect.fromLTWH(x, base - alt, larg, alt);
-      c.drawRect(r, Paint()..color = const Color(0xFF0B1520));
-      c.drawRect(r, _linha(kNeon.withValues(alpha: .18), 1));
+      c.drawRect(r, Paint()..color = m.cor(const Color(0xFF0B1520), const Color(0xFF5B7891)));
+      c.drawRect(r, _linha(kNeon.withValues(alpha: .18 * vis), 1));
       final cols = (larg / 6).floor(), rows = (alt / 9).floor();
       for (var cx = 0; cx < cols; cx++) {
         for (var ry = 0; ry < rows; ry++) {
           if (_hash(i * 131 + cx * 17 + ry) > .35) continue;
           final acesa = .4 + .6 * (.5 + .5 * math.sin(q.tempo * .8 + cx + ry + i));
           c.drawRect(Rect.fromLTWH(x + 2 + cx * 6, base - alt + 3 + ry * 9, 2.5, 4),
-              Paint()..color = (ry % 4 == 0 ? _ambar : Colors.white).withValues(alpha: acesa * .8));
+              Paint()..color = (ry % 4 == 0 ? _ambar : Colors.white).withValues(alpha: acesa * .8 * janelas));
         }
       }
     }
   }
 
-  /// Camada do meio (45%): árvores em silhueta com um fio de neon, ou
-  /// mandacarus no sertão.
+  /// Camada do meio (45%): árvores em silhueta com um fio de neon e/ou
+  /// mandacarus no sertão, cada um na sua densidade.
   void _arvores(Canvas c, double w, double h) {
     const k = .45;
-    final m = q.mundo;
-    if (m.cactos) {
-      _cactos(c, w, h, k);
-      return;
-    }
+    if (m.cactos > 0) _cactos(c, w, h, k);
     if (m.arvores <= 0) return;
     final passo = w * .19;
     final ini = (q.dist * k * w / passo).floor() - 1;
+    final cheio = m.cor(const Color(0xFF0A1622), const Color(0xFF1E6B4A));
     for (var i = ini; i < ini + (w / passo).ceil() + 2; i++) {
       if (_hash(i + 300) > m.arvores) continue;
       final x = i * passo + (_hash(i + 400) - .5) * passo * .6 - q.dist * k * w;
@@ -499,9 +587,9 @@ class _FundoPainter extends CustomPainter {
         ..lineTo(x - alt * .18, base - alt * .35)
         ..lineTo(x - alt * .38, base - alt * .35)
         ..close();
-      c.drawPath(copa, Paint()..color = const Color(0xFF0A1622));
-      c.drawPath(copa, _linha(kNeon.withValues(alpha: .35), 1));
-      c.drawLine(Offset(x, base - alt * .05), Offset(x, base), _linha(const Color(0xFF0A1622), 3));
+      c.drawPath(copa, Paint()..color = cheio);
+      c.drawPath(copa, _linha(kNeon.withValues(alpha: .35 * (1 - m.dia * .5)), 1));
+      c.drawLine(Offset(x, base - alt * .05), Offset(x, base), _linha(cheio, 3));
     }
   }
 
@@ -509,8 +597,9 @@ class _FundoPainter extends CustomPainter {
   void _cactos(Canvas c, double w, double h, double k) {
     final passo = w * .30;
     final ini = (q.dist * k * w / passo).floor() - 1;
+    final cheio = m.cor(const Color(0xFF0A1622), const Color(0xFF1E6B4A));
     for (var i = ini; i < ini + (w / passo).ceil() + 2; i++) {
-      if (_hash(i + 700) > .6) continue;
+      if (_hash(i + 700) > .6 * m.cactos) continue;
       final x = i * passo + (_hash(i + 710) - .5) * passo * .5 - q.dist * k * w;
       final alt = h * (.06 + .06 * _hash(i + 720));
       final base = g.pistaTopo - h * .01;
@@ -521,7 +610,7 @@ class _FundoPainter extends CustomPainter {
         ..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x - e * 4, base - alt * .62, e * 4, e * 1.6), Radius.circular(e)))
         ..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x + e * 2.4, base - alt * .75, e * 1.6, alt * .5), Radius.circular(e)))
         ..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, base - alt * .42, e * 4, e * 1.6), Radius.circular(e)));
-      c.drawPath(p, Paint()..color = const Color(0xFF0A1622));
+      c.drawPath(p, Paint()..color = cheio);
       c.drawPath(p, _linha(kNeon.withValues(alpha: .35), 1));
     }
   }
@@ -529,20 +618,22 @@ class _FundoPainter extends CustomPainter {
   /// Pista: banda de asfalto, linha neon em cima, tracejado correndo.
   void _pista(Canvas c, double w, double h) {
     final topo = g.pistaTopo;
-    c.drawRect(Rect.fromLTRB(0, topo, w, h), Paint()..shader = const LinearGradient(
+    c.drawRect(Rect.fromLTRB(0, topo, w, h), Paint()..shader = LinearGradient(
         begin: Alignment.topCenter, end: Alignment.bottomCenter,
-        colors: [Color(0xFF111A24), Color(0xFF070C13)]).createShader(Rect.fromLTRB(0, topo, w, h)));
+        colors: [m.cor(const Color(0xFF111A24), const Color(0xFF4A5560)), m.cor(const Color(0xFF070C13), const Color(0xFF2E3740))])
+        .createShader(Rect.fromLTRB(0, topo, w, h)));
     _neon(c, Path()..moveTo(0, topo)..lineTo(w, topo), w: 2.5);
-    if (q.mundo.guardRail) {
+    if (m.guardRail > 0) {
       // Guard-rail na beira: lâmina dupla com mourões passando.
       final y = topo - h * .022;
-      c.drawLine(Offset(0, y), Offset(w, y), _linha(const Color(0xFF8A96A3), 3));
-      c.drawLine(Offset(0, y + 5), Offset(w, y + 5), _linha(const Color(0xFF5A6673), 2));
+      final a = m.guardRail;
+      c.drawLine(Offset(0, y), Offset(w, y), _linha(const Color(0xFF8A96A3).withValues(alpha: a), 3));
+      c.drawLine(Offset(0, y + 5), Offset(w, y + 5), _linha(const Color(0xFF5A6673).withValues(alpha: a), 2));
       final passo = w * .09;
       final ini = (q.dist * w / passo).floor() - 1;
       for (var i = ini; i < ini + (w / passo).ceil() + 2; i++) {
         final x = i * passo - q.dist * w;
-        c.drawLine(Offset(x, y + 5), Offset(x, topo), _linha(const Color(0xFF5A6673), 3));
+        c.drawLine(Offset(x, y + 5), Offset(x, topo), _linha(const Color(0xFF5A6673).withValues(alpha: a), 3));
       }
     }
     // Tracejado da faixa da frente.
@@ -558,19 +649,23 @@ class _FundoPainter extends CustomPainter {
 
   /// Postes de luz na beira da pista, na velocidade da pista, atrás do herói.
   void _postes(Canvas c, double w, double h) {
-    if (q.mundo.postes <= 0) return;
-    final passo = w * q.mundo.postes;
+    if (m.postes <= .02) return;
+    final a = m.postes;
+    final lampada = a * (1 - m.dia * .9);
+    final passo = w * m.passo.clamp(.4, 3.0);
     final ini = (q.dist * w / passo).floor() - 1;
+    final poste = const Color(0xFF2A3A4C).withValues(alpha: a);
     for (var i = ini; i < ini + (w / passo).ceil() + 2; i++) {
       final mundo = (i * passo + w * .35) / w;
-      if (mundo > q.x0 - .2 && mundo < q.x0 + 1.35) continue; // não atravessa o evento
+      if (mundo > q.x0 - .7 && mundo < q.x0 + 1.35) continue; // não atravessa o evento
+      if (qAnt != null && mundo > qAnt!.x0 - .7 && mundo < qAnt!.x0 + 1.35) continue;
       final x = mundo * w - q.dist * w;
       final base = g.pistaTopo, topo = h * .30;
-      c.drawLine(Offset(x, base), Offset(x, topo), _linha(const Color(0xFF2A3A4C), 4));
-      c.drawLine(Offset(x, topo), Offset(x - w * .06, topo + h * .02), _linha(const Color(0xFF2A3A4C), 4));
+      c.drawLine(Offset(x, base), Offset(x, topo), _linha(poste, 4));
+      c.drawLine(Offset(x, topo), Offset(x - w * .06, topo + h * .02), _linha(poste, 4));
       final lamp = Offset(x - w * .06, topo + h * .03);
-      _luz(c, lamp, w * .16, _branco, .22);
-      c.drawCircle(lamp, 3, Paint()..color = _branco);
+      _luz(c, lamp, w * .16, _branco, .22 * lampada);
+      c.drawCircle(lamp, 3, Paint()..color = _branco.withValues(alpha: a));
       // Cone no asfalto.
       final cone = Path()
         ..moveTo(lamp.dx, lamp.dy)
@@ -579,13 +674,13 @@ class _FundoPainter extends CustomPainter {
         ..close();
       c.drawPath(cone, Paint()..shader = LinearGradient(
           begin: Alignment.topCenter, end: Alignment.bottomCenter,
-          colors: [_branco.withValues(alpha: .10), _branco.withValues(alpha: 0)]).createShader(cone.getBounds()));
+          colors: [_branco.withValues(alpha: .10 * lampada), _branco.withValues(alpha: 0)]).createShader(cone.getBounds()));
     }
   }
 
   // ── cena 1: placa de km passando ────────────────────────────────────────
-  void _placaKm(Canvas c) {
-    final x = g.x(q.x0 + .3);
+  void _placaKm(Canvas c, _Quadro e) {
+    final x = g.x(e.x0 + .3);
     final base = g.pistaTopo, alt = g.h * .12;
     c.drawLine(Offset(x, base), Offset(x, base - alt), _linha(const Color(0xFF9AA5B1), 3));
     final placa = Rect.fromCenter(center: Offset(x, base - alt - g.h * .035), width: g.w * .14, height: g.h * .07);
@@ -595,8 +690,8 @@ class _FundoPainter extends CustomPainter {
   }
 
   // ── cena 2: pórtico com as placas ───────────────────────────────────────
-  void _portico(Canvas c) {
-    final esq = g.x(q.x0), dir = g.x(q.x0 + .55);
+  void _portico(Canvas c, _Quadro e) {
+    final esq = g.x(e.x0), dir = g.x(e.x0 + .55);
     final topo = g.heroTopo - g.h * .20, base = g.pistaTopo;
     final trave = Path()
       ..moveTo(esq, base)..lineTo(esq, topo)..lineTo(dir, topo)..lineTo(dir, base);
@@ -621,8 +716,8 @@ class _FundoPainter extends CustomPainter {
   }
 
   // ── cena 3: poste do radar, câmera virada pro caminhão ──────────────────
-  void _radar(Canvas c) {
-    final x = g.x(q.x0);
+  void _radar(Canvas c, _Quadro e) {
+    final x = g.x(e.x0);
     final base = g.pistaTopo, topo = g.heroTopo - g.h * .12;
     _neon(c, Path()..moveTo(x, base)..lineTo(x, topo)..lineTo(x - g.w * .08, topo), w: 3);
     final caixa = Rect.fromCenter(center: Offset(x - g.w * .08, topo + g.h * .035), width: g.w * .075, height: g.h * .06);
@@ -631,7 +726,7 @@ class _FundoPainter extends CustomPainter {
     final lente = caixa.centerLeft + Offset(caixa.width * .3, 0);
     c.drawCircle(lente, caixa.height * .22, Paint()..color = const Color(0xFF05080D));
     c.drawCircle(lente, caixa.height * .22, _linha(kNeon, 1.5));
-    _coruja(c, Offset(x, topo));
+    _coruja(c, Offset(x, topo), e);
     // Seta no asfalto, no sentido do caminhão, um pouco antes do radar.
     final sx = x - g.w * .30, sy = g.h * .80;
     final comp = g.w * .12, alt = g.h * .035;
@@ -646,7 +741,7 @@ class _FundoPainter extends CustomPainter {
   /// Coruja pousada no topo do poste do radar (pedido do Beto, 25/09):
   /// corpo em silhueta com fio neon, olhos grandes que piscam de vez em
   /// quando e viram pro caminhão quando ele chega perto.
-  void _coruja(Canvas c, Offset poste) {
+  void _coruja(Canvas c, Offset poste, _Quadro e) {
     final r = g.w * .022; // raio do corpo
     final centro = poste + Offset(0, -r * 1.3);
     final corpo = Path()..addOval(Rect.fromCenter(center: centro, width: r * 2, height: r * 2.6));
@@ -669,7 +764,7 @@ class _FundoPainter extends CustomPainter {
       }
       _luz(c, o, r * .7, kNeon, .35);
       c.drawCircle(o, r * .34, Paint()..color = const Color(0xFFF2FFEA));
-      final perto = (g.x(q.x0) - g.heroDir) < g.w * .25;
+      final perto = (g.x(e.x0) - g.heroDir) < g.w * .25;
       c.drawCircle(o + Offset(perto ? -r * .1 : 0, r * .02), r * .16, Paint()..color = const Color(0xFF05080D));
     }
     // Bico.
@@ -678,43 +773,63 @@ class _FundoPainter extends CustomPainter {
     c.drawPath(bico, Paint()..color = _ambar);
   }
 
-  // ── cena 4: praça de pedágio com cancela que sobe ───────────────────────
-  void _pedagio(Canvas c) {
-    final esq = g.x(q.x0), dir = g.x(q.x0 + 1.15);
+  // ── cena 4: praça de pedágio, em sequência ──────────────────────────────
+  /// Placa "PEDÁGIO 500 m" antes, luzes da cobertura acendendo uma a uma
+  /// conforme a praça entra, duas cabines com cancela que sobe quando o
+  /// caminhão chega.
+  void _pedagio(Canvas c, _Quadro e) {
+    final esq = g.x(e.x0), dir = g.x(e.x0 + 1.15);
     final topo = g.heroTopo - g.h * .19, base = g.pistaTopo;
+    // Placa antes da praça.
+    final px = g.x(e.x0 - .45);
+    c.drawLine(Offset(px, base), Offset(px, base - g.h * .12), _linha(const Color(0xFF9AA5B1), 3));
+    final placa = Rect.fromCenter(center: Offset(px, base - g.h * .12 - g.h * .04), width: g.w * .17, height: g.h * .075);
+    c.drawRRect(RRect.fromRectAndRadius(placa, const Radius.circular(4)), Paint()..color = const Color(0xFF1B5E20));
+    c.drawRRect(RRect.fromRectAndRadius(placa, const Radius.circular(4)), _linha(Colors.white70, 1.5));
+    _texto(c, 'PEDÁGIO', placa.center - Offset(0, placa.height * .18), placa.height * .32);
+    _texto(c, '500 m', placa.center + Offset(0, placa.height * .22), placa.height * .28, peso: FontWeight.w600);
+    // Cobertura.
     final cob = Rect.fromLTRB(esq, topo, dir, topo + g.h * .06);
     c.drawRRect(RRect.fromRectAndRadius(cob, const Radius.circular(4)), Paint()..color = const Color(0xFF101C2A));
     _neon(c, Path()..addRRect(RRect.fromRectAndRadius(cob, const Radius.circular(4))), w: 3);
-    for (final px in [esq + 6, esq + (dir - esq) * .5, dir - 6]) {
-      _neon(c, Path()..moveTo(px, cob.bottom)..lineTo(px, base), w: 3);
+    for (final x in [esq + 6, esq + (dir - esq) * .5, dir - 6]) {
+      _neon(c, Path()..moveTo(x, cob.bottom)..lineTo(x, base), w: 3);
     }
+    // Luzes: acendem da direita pra esquerda conforme a praça entra na tela.
     for (var i = 1; i < 8; i++) {
       final x = esq + (dir - esq) * i / 8;
+      final acesa = e.estatico || (e.avanco + 1.15) > (8 - i) * .06;
+      if (!acesa) {
+        c.drawCircle(Offset(x, cob.bottom + 3), 2.5, Paint()..color = const Color(0xFF3A4A5C));
+        continue;
+      }
       _luz(c, Offset(x, cob.bottom + 4), g.w * .045, _branco, .22);
       c.drawCircle(Offset(x, cob.bottom + 3), 2.5, Paint()..color = Colors.white);
     }
-    // Cabine.
-    final cab = Rect.fromLTWH(esq + (dir - esq) * .12, base - g.h * .16, g.w * .11, g.h * .16);
-    c.drawRect(cab, Paint()..color = const Color(0xFF101C2A));
-    _neon(c, Path()..addRect(cab), w: 2);
-    c.drawRect(Rect.fromLTWH(cab.left + cab.width * .2, cab.top + cab.height * .18, cab.width * .6, cab.height * .35),
-        Paint()..color = _ambar.withValues(alpha: .85));
-    // Cancela: sobe quando o caminhão se aproxima.
-    final pivo = Offset(cab.right + 6, base - g.h * .02);
-    final sobe = ((g.heroDir + g.w * .30 - pivo.dx) / (g.w * .30)).clamp(0.0, 1.0);
-    final ang = -math.pi / 2.2 * Curves.easeOutBack.transform(sobe);
-    final comp = g.w * .26;
-    final ponta = pivo + Offset(math.cos(ang) * comp, math.sin(ang) * comp);
-    c.drawLine(pivo, ponta, _glow(_vermelho, 10));
-    c.drawLine(pivo, ponta, _linha(Colors.white, 5));
-    for (var i = 0; i < 5; i++) {
-      c.drawLine(pivo + (ponta - pivo) * (i / 5 + .05), pivo + (ponta - pivo) * (i / 5 + .13), _linha(_vermelho, 5));
+    // Duas cabines, cada uma com a sua cancela.
+    for (final f in [.12, .52]) {
+      final cab = Rect.fromLTWH(esq + (dir - esq) * f, base - g.h * .16, g.w * .11, g.h * .16);
+      c.drawRect(cab, Paint()..color = const Color(0xFF101C2A));
+      _neon(c, Path()..addRect(cab), w: 2);
+      c.drawRect(Rect.fromLTWH(cab.left + cab.width * .2, cab.top + cab.height * .18, cab.width * .6, cab.height * .35),
+          Paint()..color = _ambar.withValues(alpha: .85));
+      // Cancela: sobe quando o caminhão se aproxima.
+      final pivo = Offset(cab.right + 6, base - g.h * .02);
+      final sobe = ((g.heroDir + g.w * .30 - pivo.dx) / (g.w * .30)).clamp(0.0, 1.0);
+      final ang = -math.pi / 2.2 * Curves.easeOutBack.transform(sobe);
+      final comp = g.w * .26;
+      final ponta = pivo + Offset(math.cos(ang) * comp, math.sin(ang) * comp);
+      c.drawLine(pivo, ponta, _glow(_vermelho, 10));
+      c.drawLine(pivo, ponta, _linha(Colors.white, 5));
+      for (var i = 0; i < 5; i++) {
+        c.drawLine(pivo + (ponta - pivo) * (i / 5 + .05), pivo + (ponta - pivo) * (i / 5 + .13), _linha(_vermelho, 5));
+      }
+      c.drawCircle(pivo, 5, Paint()..color = kNeon);
+      // Semáforo da faixa: vermelho fechado, verde aberto.
+      final sem = Offset(pivo.dx, cob.bottom + g.h * .05);
+      _luz(c, sem, g.w * .05, sobe > .8 ? kNeon : _vermelho, .8);
+      c.drawCircle(sem, 4, Paint()..color = sobe > .8 ? kNeon : _vermelho);
     }
-    c.drawCircle(pivo, 5, Paint()..color = kNeon);
-    // Semáforo da faixa: vermelho fechado, verde aberto.
-    final sem = Offset(pivo.dx, cob.bottom + g.h * .05);
-    _luz(c, sem, g.w * .05, sobe > .8 ? kNeon : _vermelho, .8);
-    c.drawCircle(sem, 4, Paint()..color = sobe > .8 ? kNeon : _vermelho);
   }
 
   @override
@@ -727,22 +842,26 @@ class _FundoPainter extends CustomPainter {
 class _FrentePainter extends CustomPainter {
   final _Quadro q;
   final _Geo g;
-  _FrentePainter(this.q, this.g) {
+  final _Quadro? qAnt;
+  _FrentePainter(this.q, this.g, this.qAnt) {
     g._distAtual = q.dist;
   }
 
   @override
   void paint(Canvas c, Size s) {
     if (q.farol) _luzes(c);
+    // O socorrido indo embora no fechamento ainda pisca.
+    if (qAnt?.cena == Cena.sos) _piscaAlerta(c, qAnt!);
     _eventos(c, s);
   }
 
   /// Faróis do herói (frente = direita): pulsam de leve, iluminam a pista à
-  /// frente. Lanternas atrás.
+  /// frente. Lanternas atrás. De dia, o cone quase some.
   void _luzes(Canvas c) {
     final farol = Offset(g.heroDir - g.heroLarg * .06, g.heroTopo + g.heroLarg * (567 / 1200) * .78);
     final alto = q.piscaFarol ? 2.4 : 1.0;
-    _luz(c, farol, g.w * .10 * alto, _branco, (.35 + .1 * q.seno) * alto);
+    final noite = 1 - q.mundo.dia * .8;
+    _luz(c, farol, g.w * .10 * alto, _branco, (.35 + .1 * q.seno) * alto * (1 - q.mundo.dia * .5));
     final cone = Path()
       ..moveTo(farol.dx, farol.dy - 6)
       ..lineTo(farol.dx + g.w * .28, g.pistaTopo + 2)
@@ -750,7 +869,7 @@ class _FrentePainter extends CustomPainter {
       ..close();
     c.drawPath(cone, Paint()..shader = LinearGradient(
         begin: Alignment.centerLeft, end: Alignment.centerRight,
-        colors: [_branco.withValues(alpha: .16 * alto), _branco.withValues(alpha: 0)]).createShader(cone.getBounds()));
+        colors: [_branco.withValues(alpha: .16 * alto * noite), _branco.withValues(alpha: 0)]).createShader(cone.getBounds()));
     // Lanternas do herói (traseira = esquerda).
     final lant = Offset(g.heroEsq + g.heroLarg * .005, g.heroTopo + g.heroLarg * (567 / 1200) * .78);
     _luz(c, lant, g.w * .05, _vermelho, .5 + .3 * q.seno);
@@ -759,6 +878,7 @@ class _FrentePainter extends CustomPainter {
   void _eventos(Canvas c, Size s) {
     switch (q.cena) {
       case Cena.abertura:
+      case Cena.fechamento:
         break;
       case Cena.rota:
         // Check verde quando o pórtico passa por cima do caminhão.
@@ -851,22 +971,29 @@ class _FrentePainter extends CustomPainter {
     c.restore();
   }
 
-  /// S.O.S.: pisca-alerta do parado, selo S.O.S. pulsando em cima dele e a
-  /// distância caindo no selo do herói até "Chegou".
-  void _sos(Canvas c) {
-    final esq = g.x(q.x0);
+  /// Luzes âmbar do parado (posições lidas do parado.webp, em frações),
+  /// piscando.
+  void _piscaAlerta(Canvas c, _Quadro e) {
+    final esq = g.x(e.x0);
     final larg = g.paradoLarg;
     final alt = larg * (412 / 1180);
     final topo = g.chao - alt;
-    // Luzes âmbar do sprite (posições lidas do parado.webp, em frações).
-    final acesa = q.estatico || (q.tempo % .8) < .4;
-    if (acesa) {
-      // Sprite espelhado: u vira 1 - u.
-      for (final p in const [(.16, .19), (.24, .19), (.13, .80), (.15, .70), (.45, .69), (.60, .69), (.74, .69), (.86, .69), (.97, .63)]) {
-        _luz(c, Offset(esq + larg * (1 - p.$1), topo + alt * p.$2), g.w * .03, _ambar, .8);
-      }
-      _luz(c, Offset(esq + larg * .7, g.chao), g.w * .22, _ambar, .18);
+    final acesa = e.estatico || (q.tempo % .8) < .4;
+    if (!acesa) return;
+    // Sprite espelhado: u vira 1 - u.
+    for (final p in const [(.16, .19), (.24, .19), (.13, .80), (.15, .70), (.45, .69), (.60, .69), (.74, .69), (.86, .69), (.97, .63)]) {
+      _luz(c, Offset(esq + larg * (1 - p.$1), topo + alt * p.$2), g.w * .03, _ambar, .8);
     }
+    _luz(c, Offset(esq + larg * .7, g.chao), g.w * .22, _ambar, .18);
+  }
+
+  /// S.O.S.: pisca-alerta do parado, selo S.O.S. pulsando em cima dele e a
+  /// distância caindo no selo do herói até "Chegou".
+  void _sos(Canvas c) {
+    _piscaAlerta(c, q);
+    final esq = g.x(q.x0);
+    final larg = g.paradoLarg;
+    final topo = g.chao - larg * (412 / 1180);
     // Selo S.O.S. em cima do parado.
     final pulso = q.seno;
     final centro = Offset(esq + larg * .55, topo - g.h * .10);

@@ -3,7 +3,7 @@ import 'package:geolocator/geolocator.dart';
 /// Lógica pura do onboarding (testável sem widget).
 
 /// Cena desenhada de cada tela de apresentação (ver `cena_onboarding.dart`).
-enum Cena { abertura, rota, radar, pedagio, sos }
+enum Cena { abertura, rota, radar, pedagio, sos, fechamento }
 
 /// Uma tela de apresentação: cena + copy.
 class TelaOnboarding {
@@ -28,11 +28,15 @@ const kTelasOnboarding = [
       'Antes de sair, você sabe quanto vai gastar.', Cena.pedagio),
   TelaOnboarding('S.O.S.', 'Pediu ajuda? Quem está perto recebe.',
       'Buzina, voz e a distância até você.', Cena.sos),
+  // Fechamento (copy do Pedro, 25/09): o socorrido vai embora, o nosso
+  // arranca ao amanhecer com o alien acenando.
+  TelaOnboarding('Bora', 'Bora pro trecho?',
+      'Cadastra o caminhão e o resto é com a gente.', Cena.fechamento),
 ];
 
-const kPaginaCaminhao = 5;   // índice da tela "Seu caminhão"
-const kPaginaPermissoes = 6; // índice da tela de permissões
-const kTotalPaginas = 7;
+const kPaginaCaminhao = 6;   // índice da tela "Seu caminhão"
+const kPaginaPermissoes = 7; // índice da tela de permissões
+const kTotalPaginas = 8;
 
 /// "Pular" só existe na apresentação e leva direto pro cadastro do caminhão.
 /// Null = página sem "Pular".

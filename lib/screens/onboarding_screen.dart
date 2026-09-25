@@ -239,21 +239,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
           child: Column(
             children: [
               Expanded(
-                child: PageView(
-                  controller: _ctrl,
-                  physics: const ClampingScrollPhysics(),
-                  onPageChanged: (i) {
-                    setState(() => _pagina = i);
-                    FieldLog.event('onboarding_step', {'i': i});
-                    if (i == kPaginaPermissoes) unawaited(_lerPermissoes());
-                  },
-                  children: [
-                    for (var i = 0; i < kTelasOnboarding.length; i++)
-                      _Apresentacao(tela: kTelasOnboarding[i], ativa: _pagina == i),
-                    _paginaCaminhao(),
-                    _paginaPermissoes(),
-                  ],
-                ),
+                // A cena é UMA só, atrás das páginas: o mundo não corta ao
+                // trocar de tela. As páginas de apresentação deixam o topo
+                // transparente; cadastro e permissões cobrem tudo.
+                child: Stack(children: [
+                  Positioned.fill(
+                    child: Column(children: [
+                      Expanded(
+                        flex: 11,
+                        child: CenaOnboarding(
+                          cena: kTelasOnboarding[_pagina.clamp(0, kTelasOnboarding.length - 1)].cena,
+                          visivel: _pagina < kTelasOnboarding.length,
+                        ),
+                      ),
+                      const Expanded(flex: 9, child: SizedBox()),
+                    ]),
+                  ),
+                  PageView(
+                    controller: _ctrl,
+                    physics: const ClampingScrollPhysics(),
+                    onPageChanged: (i) {
+                      setState(() => _pagina = i);
+                      FieldLog.event('onboarding_step', {'i': i});
+                      if (i == kPaginaPermissoes) unawaited(_lerPermissoes());
+                    },
+                    children: [
+                      for (var i = 0; i < kTelasOnboarding.length; i++)
+                        _Apresentacao(tela: kTelasOnboarding[i], ativa: _pagina == i),
+                      ColoredBox(color: kFundo, child: _paginaCaminhao()),
+                      ColoredBox(color: kFundo, child: _paginaPermissoes()),
+                    ],
+                  ),
+                ]),
               ),
               _rodape(),
             ],
@@ -431,7 +448,7 @@ class _Apresentacao extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Expanded(flex: 11, child: CenaOnboarding(tela: tela, ativa: ativa)),
+        const Expanded(flex: 11, child: SizedBox()), // a cena está atrás
         Expanded(
           flex: 9,
           child: SingleChildScrollView(
