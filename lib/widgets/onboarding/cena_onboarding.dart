@@ -74,7 +74,7 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
 
   void _armaEvento() {
     _tempo = 0;
-    _x0 = _dist + 1.25; // entra pela direita meio segundo depois de abrir
+    _x0 = _dist + 1.5; // entra pela direita ~1 s depois de abrir
   }
 
   void _tick(Duration agora) {
@@ -86,7 +86,9 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
       _tempo += dt;
       // O evento repete em loop (como no Radarbot): quando já passou, volta
       // pela direita. O S.O.S. não repete: o caminhão fica parado.
-      if (widget.tela.cena != Cena.sos && _dist - _x0 > 1.7) _x0 = _dist + .9;
+      // Renasce fora da tela: o aviso do radar dispara em -1.35 e um evento
+      // rearmado em .9 nasceria já avisado.
+      if (widget.tela.cena != Cena.sos && _dist - _x0 > 1.7) _x0 = _dist + 1.5;
     });
   }
 
@@ -559,9 +561,11 @@ class _FrentePainter extends CustomPainter {
         // Check verde quando o pórtico passa por cima do caminhão.
         _selo(c, 'Passa', kNeon, gatilho: q.avanco - .55 + _Geo.heroDirF, icone: Icons.check_rounded);
       case Cena.radar:
-        // O radar fotografa ANTES de o caminhão chegar nele: um quarto de tela.
+        // História: o app avisa ANTES de o radar aparecer (selo entra com o
+        // poste ainda fora da tela), o radar chega, a câmera fotografa em cima
+        // da cabine, e o selo some assim que o poste fica pra trás.
         _flash(c, s);
-        _selo(c, '90', kNeon, gatilho: q.avanco - _Geo.heroDirF + .25, sub: 'km/h', anel: true);
+        _selo(c, '90', kNeon, gatilho: q.avanco + 1.35, fim: 1.35, sub: 'km/h', anel: true);
       case Cena.pedagio:
         _selo(c, 'R\$ 28,50', kNeon, gatilho: q.avanco - .12);
       case Cena.sos:
@@ -571,24 +575,32 @@ class _FrentePainter extends CustomPainter {
 
   /// Flash do radar: um estouro branco na cena inteira quando a câmera cruza
   /// a frente do caminhão, decaindo em 15% de largura percorrida.
+  /// O poste está em `x0`: entra pela direita com `avanco` = -1 e sai pela
+  /// esquerda em 0; o gatilho cresce com o avanço. A câmera fica 8% à
+  /// esquerda do poste e fotografa quando está em cima da cabine
+  /// (`avanco` = -.85), com o estouro na lente e um clarão curto na cena.
   void _flash(Canvas c, Size s) {
-    final k = (q.avanco - _Geo.heroDirF + .25) / .15;
+    final k = (q.avanco + .85) / .15;
     if (k < 0 || k > 1) return;
     final lente = Offset(g.x(q.x0) - g.w * .08, g.heroTopo - g.h * .085);
+    c.drawCircle(lente, g.w * .04 * (1 + 2 * k), Paint()..color = Colors.white.withValues(alpha: 1 - k));
     _luz(c, lente, g.w * .35 * (1 + k), Colors.white, .9 * (1 - k));
-    c.drawRect(Offset.zero & s, Paint()..color = Colors.white.withValues(alpha: .35 * (1 - k)));
+    c.drawRect(Offset.zero & s, Paint()..color = Colors.white.withValues(alpha: .30 * (1 - k)));
   }
 
-  /// Selo acima do herói, entrando com mola quando [gatilho] passa de zero.
+  /// Selo acima do herói, entrando com mola quando [gatilho] passa de zero e,
+  /// se [fim] for dado, encolhendo até sumir quando o gatilho passa dele.
   void _selo(Canvas c, String texto, Color cor,
-      {required double gatilho, String? sub, bool anel = false, IconData? icone}) {
-    if (gatilho < 0) return;
-    final k = q.estatico ? 1.0 : Curves.elasticOut.transform((gatilho / .12).clamp(0.0, 1.0));
+      {required double gatilho, double? fim, String? sub, bool anel = false, IconData? icone}) {
+    if (gatilho < 0 && !q.estatico) return; // quadro parado mostra o selo sempre
+    var k = q.estatico ? 1.0 : Curves.elasticOut.transform((gatilho / .12).clamp(0.0, 1.0));
+    if (fim != null && !q.estatico) k *= 1 - ((gatilho - fim) / .1).clamp(0.0, 1.0);
+    if (k <= 0) return;
     final centro = Offset(g.heroEsq + g.heroLarg * .5, g.heroTopo - g.h * .11);
     c.save();
     c.translate(centro.dx, centro.dy);
     c.scale(k);
-    final r = g.w * .085;
+    final r = g.w * (anel ? .065 : .085);
     _luz(c, Offset.zero, r * 1.6, cor, .35 + .15 * q.seno);
     if (anel) {
       c.drawCircle(Offset.zero, r, Paint()..color = Colors.white);
