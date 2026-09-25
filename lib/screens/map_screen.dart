@@ -41,6 +41,7 @@ import '../widgets/map/blocked_sheet.dart';
 import '../widgets/map/history_sheet.dart';
 import '../widgets/map/marker_icons.dart';
 import '../widgets/map/marking_onboarding_sheet.dart';
+import 'onboarding_screen.dart';
 import '../widgets/map/poi_sheet.dart';
 import '../widgets/map/police_sheets.dart';
 import '../widgets/sos/sos_sheets.dart';
@@ -1771,6 +1772,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     builder: (_) => const AboutScreen(),
                                   ));
                                 }
+                                // Rever a apresentação: quem já tem o app instalado
+                                // nunca veria o onboarding novo (a marca já existe).
+                                if (value == 'onboarding') {
+                                  Navigator.push(context, MaterialPageRoute(
+                                    builder: (ctx) => OnboardingScreen(
+                                        aoConcluir: () => Navigator.pop(ctx)),
+                                  ));
+                                }
                                 if (value == 'truck') {
                                   final truckProv = context.read<TruckProfileProvider>();
                                   final routeProv = context.read<RouteProvider>();
@@ -1839,6 +1848,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     Icon(Icons.info_outline, color: Colors.teal.shade700, size: 20),
                                     const SizedBox(width: 12),
                                     const Text('Sobre'),
+                                  ]),
+                                ),
+                                PopupMenuItem(
+                                  value: 'onboarding',
+                                  child: Row(children: [
+                                    Icon(Icons.slideshow_outlined, color: Colors.teal.shade700, size: 20),
+                                    const SizedBox(width: 12),
+                                    const Text('Ver apresentação'),
                                   ]),
                                 ),
                                 PopupMenuItem(
