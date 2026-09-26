@@ -99,21 +99,13 @@ class ResultCard extends StatelessWidget {
         ),
         if (alerta != null)
           _Alerta(alerta: alerta),
+        // Uma linha só, rolando: o card fica baixo e sobra mapa. O caminhão é
+        // o último chip (o menu já mostra ele em destaque).
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: RouteChips(result: result, radares: radares, onConferir: onBlockedTap),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: ActionChip(
-              key: const Key('rota_caminhao'),
-              avatar: Icon(Icons.local_shipping, size: 18, color: cs.primary),
-              label: Text('${cmToMeters(truck.heightCm)} m · ${truck.axleCount} eixos · '
-                  '${(truck.weightKg / 1000).toStringAsFixed(0)} t  ›'),
-              onPressed: onTruckTap,
-            ),
+          padding: const EdgeInsets.only(top: 8),
+          child: RouteChips(
+            result: result, radares: radares, onConferir: onBlockedTap,
+            caminhao: '${truck.name} · ${cmToMeters(truck.heightCm)} m', onCaminhao: onTruckTap,
           ),
         ),
         Padding(
@@ -186,15 +178,16 @@ class RouteChips extends StatelessWidget {
   final int radares;
   /// Toque no chip "a conferir" (abre a lista e o mapa dos pontos).
   final VoidCallback? onConferir;
-  const RouteChips({super.key, required this.result, this.radares = 0, this.onConferir});
+  /// Rótulo do chip do caminhão ("Carreta · 4,40 m"); null = sem chip.
+  final String? caminhao;
+  final VoidCallback? onCaminhao;
+  const RouteChips({super.key, required this.result, this.radares = 0, this.onConferir, this.caminhao, this.onCaminhao});
 
   @override
   Widget build(BuildContext context) {
     final conferir = textoConferir(result.restrictionsBlocked.length);
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
+    final cs = Theme.of(context).colorScheme;
+    final chips = <Widget>[
         if (conferir != null)
           ActionChip(
             key: const Key('rota_conferir'),
@@ -212,7 +205,21 @@ class RouteChips extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             side: BorderSide(color: c.$3.withValues(alpha: .35)),
           ),
-      ],
+        if (caminhao != null)
+          ActionChip(
+            key: const Key('rota_caminhao'),
+            avatar: Icon(Icons.local_shipping, size: 16, color: cs.primary),
+            label: Text('$caminhao  ›', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            visualDensity: VisualDensity.compact,
+            onPressed: onCaminhao,
+          ),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(children: [
+        for (final (i, c) in chips.indexed) ...[if (i > 0) const SizedBox(width: 6), c],
+      ]),
     );
   }
 }
