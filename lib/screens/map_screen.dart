@@ -867,7 +867,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       final p = await DriverProfileService.loadLocal();
       if (mounted) setState(() => _nomeMotorista = p?.name);
     } catch (_) {}
-    _scaffoldKey.currentState?.openDrawer();
+    _scaffoldKey.currentState?.openEndDrawer();
   }
 
   /// Automático (escuro das 18h às 6h), Claro ou Escuro. Salvo no aparelho;
@@ -1713,7 +1713,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       },
       child: Scaffold(
       key: _scaffoldKey,
-      drawer: MenuPrincipal(
+      // Pela DIREITA: sai do lado do botão ☰ (Pedro, 26/09). O X de fechar
+      // fica no mesmo canto, o dedo abre e fecha no mesmo lugar.
+      endDrawer: MenuPrincipal(
         nomeMotorista: _nomeMotorista,
         caminhao: context.watch<TruckProfileProvider>().profile,
         tema: _themeController.escolha,
