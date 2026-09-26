@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import '../../utils/meters.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/bridge_restriction.dart';
 import '../../models/route_result.dart';
-import '../../models/truck_profile.dart';
 import '../../models/weather_alert.dart';
 import '../../providers/truck_profile_provider.dart';
 
@@ -52,7 +50,7 @@ class ResultCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final truck = context.watch<TruckProfileProvider>().profile;
     final eta = _etaString(departureTime, result.durationSeconds);
-    final alerta = alertaDaRota(result, weatherAlerts, truck);
+    final alerta = alertaDaRota(weatherAlerts);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -100,10 +98,10 @@ class ResultCard extends StatelessWidget {
           ),
         ),
         if (alerta != null)
-          _Alerta(alerta: alerta, onTap: alerta.bloqueio ? onBlockedTap : null),
+          _Alerta(alerta: alerta),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: RouteChips(result: result, radares: radares),
+          child: RouteChips(result: result, radares: radares, onConferir: onBlockedTap),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -132,17 +130,17 @@ class ResultCard extends StatelessWidget {
   }
 }
 
-/// O alerta do card: um só, o mais grave. Bloqueio físico > clima severo.
+/// O alerta do card: só clima severo. Restrição que o roteador não contornou
+/// virou chip âmbar "a conferir" (Pedro, 26/09: o bannerzão vermelho gritava
+/// num falso positivo de ponte). O aviso de segurança dela é o da navegação, a
+/// 300 m, na hora em que o motorista age; esse não mudou.
 class AlertaRota {
   final String texto;
   final IconData icone;
-  final bool bloqueio;
-  const AlertaRota(this.texto, this.icone, {this.bloqueio = false});
+  const AlertaRota(this.texto, this.icone);
 }
 
-AlertaRota? alertaDaRota(RouteResult r, List<WeatherAlert> clima, TruckProfile truck) {
-  final b = r.restrictionsBlocked;
-  if (b.isNotEmpty) return AlertaRota(textoBloqueio(b, truck), Icons.block, bloqueio: true);
+AlertaRota? alertaDaRota(List<WeatherAlert> clima) {
   if (clima.isEmpty) return null;
   final sorted = [...clima]..sort((a, b) => a.time.compareTo(b.time));
   final first = sorted.first;
@@ -157,52 +155,25 @@ AlertaRota? alertaDaRota(RouteResult r, List<WeatherAlert> clima, TruckProfile t
   });
 }
 
-/// "Passagem de 4,20 m no caminho. Seu caminhão tem 4,40." O limite ao lado
-/// da medida dele, pra ele julgar (a base tem contaminação conhecida).
-String textoBloqueio(List<BridgeRestriction> b, TruckProfile t) {
-  if (b.length > 1) return '${b.length} pontos no caminho que não cabem no seu caminhão.';
-  final r = b.first;
-  String m(double v) => cmToMeters((v * 100).round());
-  return switch (r.type) {
-    'maxheight' => 'Passagem de ${m(r.value)} m no caminho. Seu caminhão tem ${cmToMeters(t.heightCm)}.',
-    'maxweight' => 'Limite de ${r.value.toStringAsFixed(0)} t no caminho. Seu caminhão tem ${(t.weightKg / 1000).toStringAsFixed(0)} t.',
-    'maxwidth' => 'Largura de ${m(r.value)} m no caminho. Seu caminhão tem ${cmToMeters(t.widthCm)}.',
-    _ => '${r.label} no caminho.',
-  };
-}
-
 class _Alerta extends StatelessWidget {
   final AlertaRota alerta;
-  final VoidCallback? onTap;
-  const _Alerta({required this.alerta, this.onTap});
+  const _Alerta({required this.alerta});
 
   @override
   Widget build(BuildContext context) {
-    final cor = alerta.bloqueio ? Colors.red.shade700 : Colors.deepOrange.shade700;
-    final fundo = alerta.bloqueio ? Colors.red.shade50 : Colors.deepOrange.shade50;
+    final cor = Colors.deepOrange.shade700;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Material(
-        color: fundo,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          key: const Key('rota_alerta'),
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-            child: Row(children: [
-              Icon(alerta.icone, color: cor, size: 20),
-              const SizedBox(width: 10),
-              Expanded(child: Text(alerta.texto,
-                  style: TextStyle(fontSize: 14, color: cor, fontWeight: FontWeight.w600, height: 1.3))),
-              if (onTap != null) ...[
-                const SizedBox(width: 8),
-                Text('Ver no mapa', style: TextStyle(color: cor, fontWeight: FontWeight.w800, fontSize: 13)),
-              ],
-            ]),
-          ),
-        ),
+      child: Container(
+        key: const Key('rota_alerta'),
+        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+        decoration: BoxDecoration(color: Colors.deepOrange.shade50, borderRadius: BorderRadius.circular(12)),
+        child: Row(children: [
+          Icon(alerta.icone, color: cor, size: 20),
+          const SizedBox(width: 10),
+          Expanded(child: Text(alerta.texto,
+              style: TextStyle(fontSize: 14, color: cor, fontWeight: FontWeight.w600, height: 1.3))),
+        ]),
       ),
     );
   }
@@ -213,14 +184,27 @@ class _Alerta extends StatelessWidget {
 class RouteChips extends StatelessWidget {
   final RouteResult result;
   final int radares;
-  const RouteChips({super.key, required this.result, this.radares = 0});
+  /// Toque no chip "a conferir" (abre a lista e o mapa dos pontos).
+  final VoidCallback? onConferir;
+  const RouteChips({super.key, required this.result, this.radares = 0, this.onConferir});
 
   @override
   Widget build(BuildContext context) {
+    final conferir = textoConferir(result.restrictionsBlocked.length);
     return Wrap(
       spacing: 6,
       runSpacing: 6,
       children: [
+        if (conferir != null)
+          ActionChip(
+            key: const Key('rota_conferir'),
+            avatar: Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade800),
+            label: Text('$conferir  ›', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.orange.shade900)),
+            visualDensity: VisualDensity.compact,
+            backgroundColor: Colors.orange.shade50,
+            side: BorderSide(color: Colors.orange.shade300),
+            onPressed: onConferir,
+          ),
         for (final c in chipsDaRota(result, radares))
           Chip(
             avatar: Icon(c.$1, size: 16, color: c.$3),
@@ -232,6 +216,10 @@ class RouteChips extends StatelessWidget {
     );
   }
 }
+
+/// "1 passagem a conferir" — restrição que o roteador não conseguiu contornar.
+/// Null = nenhuma.
+String? textoConferir(int n) => n == 0 ? null : n == 1 ? '1 passagem a conferir' : '$n passagens a conferir';
 
 /// Ícone, texto e cor de cada chip. Puro, pra teste.
 List<(IconData, String, Color)> chipsDaRota(RouteResult r, int radares) => [
