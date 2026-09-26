@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../models/bridge_restriction.dart';
+import '../../models/truck_profile.dart';
+import '../../utils/meters.dart';
 
-// ── BlockedSheet — detalhes de restrição não contornável ────────────────────
+// ── BlockedSheet — restrição que o roteador não conseguiu contornar ─────────
+//
+// Cores do TEMA (não rosa/cinza fixos): em tema escuro o texto herdava cor
+// clara em fundo claro e ficava ilegível (print do Pedro, 26/09). Texto sem
+// nome de fornecedor (regra: o motorista vê resultado, nunca processo interno).
 
 class BlockedSheet extends StatelessWidget {
   final List<BridgeRestriction> blocked;
@@ -10,12 +16,15 @@ class BlockedSheet extends StatelessWidget {
   // Toque no card → fecha a sheet e leva a câmera ao ponto restrito, pro
   // motorista ver ONDE é (separar restrição real da via de baixo / de um prédio).
   final void Function(BridgeRestriction)? onSelect;
+  /// Caminhão ativo, pra pôr a medida dele do lado do limite.
+  final TruckProfile? caminhao;
 
   const BlockedSheet({
     super.key,
     required this.blocked,
     required this.onAddWaypoint,
     this.onSelect,
+    this.caminhao,
   });
 
   static IconData _iconFor(String type) => switch (type) {
@@ -25,135 +34,94 @@ class BlockedSheet extends StatelessWidget {
         _           => Icons.warning_amber_rounded,
       };
 
-  static String _typeLabel(String type) => switch (type) {
-        'maxheight' => 'Altura máxima',
-        'maxweight' => 'Peso máximo',
-        'maxwidth'  => 'Largura máxima',
-        _           => 'Restrição',
-      };
+  /// "Passagem de 4,20 m" / "Limite de 30 t" / "Largura de 2,50 m".
+  static String limite(BridgeRestriction r) {
+    String m(double v) => cmToMeters((v * 100).round());
+    return switch (r.type) {
+      'maxheight' => 'Passagem de ${m(r.value)} m',
+      'maxweight' => 'Limite de ${r.value.toStringAsFixed(0)} t',
+      'maxwidth'  => 'Largura de ${m(r.value)} m',
+      _           => r.label,
+    };
+  }
+
+  /// "Seu caminhão: 4,40 m". Null sem caminhão ou tipo sem medida.
+  static String? doCaminhao(BridgeRestriction r, TruckProfile? t) {
+    if (t == null) return null;
+    return switch (r.type) {
+      'maxheight' => 'Seu caminhão: ${cmToMeters(t.heightCm)} m',
+      'maxweight' => 'Seu caminhão: ${(t.weightKg / 1000).toStringAsFixed(0)} t',
+      'maxwidth'  => 'Seu caminhão: ${cmToMeters(t.widthCm)} m',
+      _           => null,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.block, color: Colors.red.shade700, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  blocked.length == 1
-                      ? 'Passagem incompatível com seu caminhão'
-                      : '${blocked.length} restrições incompatíveis com seu caminhão',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
+          Text(
+            blocked.length == 1
+                ? 'Passagem mais baixa que o seu caminhão'
+                : '${blocked.length} pontos que não cabem no seu caminhão',
+            style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 6),
           Text(
-            'HERE não encontrou rota alternativa automática para estas restrições.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            'Não achei outro caminho que evite. Confira no mapa: às vezes a passagem é de outra via, '
+            'por baixo da ponte por onde você passa.',
+            style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.35),
           ),
           const SizedBox(height: 16),
-          ...blocked.map((r) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
+          ...blocked.map((r) {
+            final meu = doCaminhao(r, caminhao);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Material(
+                color: cs.errorContainer,
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
                   onTap: onSelect == null ? null : () => onSelect!(r),
-                  child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.red.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(_iconFor(r.type), color: Colors.red.shade700, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _typeLabel(r.type),
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.red.shade700,
-                                  fontWeight: FontWeight.w600),
-                            ),
-                            Text(
-                              r.label,
-                              style: const TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.bold),
-                            ),
-                            if (onSelect != null) ...[
-                              const SizedBox(height: 4),
-                              Row(children: [
-                                Icon(Icons.location_on,
-                                    size: 13, color: Colors.blue.shade700),
-                                const SizedBox(width: 3),
-                                Text('Ver no mapa',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.blue.shade700,
-                                        fontWeight: FontWeight.w600)),
-                                Icon(Icons.chevron_right,
-                                    size: 16, color: Colors.blue.shade700),
-                              ]),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Icon(_iconFor(r.type), color: cs.onErrorContainer, size: 26),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(limite(r),
+                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: cs.onErrorContainer)),
+                              if (meu != null)
+                                Text(meu, style: TextStyle(fontSize: 14, color: cs.onErrorContainer)),
+                              if (r.roadName != null && r.roadName!.isNotEmpty)
+                                Text(r.roadName!, style: TextStyle(fontSize: 13, color: cs.onErrorContainer.withValues(alpha: .8))),
                             ],
-                          ],
-                        ),
-                      ),
-                      if (r.isVerified)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.shade100,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.amber.shade400),
                           ),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.verified, size: 11, color: Colors.amber.shade700),
-                            const SizedBox(width: 3),
-                            Text('Verificada',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.amber.shade800,
-                                    fontWeight: FontWeight.w600)),
-                          ]),
                         ),
-                    ],
+                        if (onSelect != null)
+                          Text('Ver no mapa ›',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: cs.onErrorContainer)),
+                      ],
+                    ),
                   ),
                 ),
-                ),
-                ),
-              )),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.lightbulb_outline, size: 16, color: Colors.grey.shade600),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Adicione uma parada antes da restrição para forçar um desvio manual.',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            );
+          }),
+          const SizedBox(height: 4),
+          Text(
+            'Se for mesmo no seu caminho, adicione uma parada antes dela pra forçar outro trajeto.',
+            style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.35),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -165,15 +133,15 @@ class BlockedSheet extends StatelessWidget {
               },
               icon: const Icon(Icons.add_location_alt),
               label: const Text('Adicionar parada'),
+              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           SizedBox(
             width: double.infinity,
             child: TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Continuar mesmo assim',
-                  style: TextStyle(color: Colors.grey.shade600)),
+              child: const Text('Continuar mesmo assim'),
             ),
           ),
         ],

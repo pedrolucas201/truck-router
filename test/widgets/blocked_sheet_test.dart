@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:truck_router/models/bridge_restriction.dart';
+import 'package:truck_router/models/truck_profile.dart';
 import 'package:truck_router/widgets/map/blocked_sheet.dart';
 
 // O caso que o Gilberto viveu: tocar na restrição não fazia nada. Este teste
@@ -19,16 +20,25 @@ void main() {
   testWidgets('tocar no card dispara onSelect com a restrição', (tester) async {
     BridgeRestriction? picked;
     await tester.pumpWidget(wrap(onSelect: (x) => picked = x));
-    expect(find.text('Ver no mapa'), findsOneWidget); // affordance visível
-    await tester.tap(find.text('Altura máx. 3.6 m'));
+    expect(find.text('Ver no mapa ›'), findsOneWidget); // affordance visível
+    await tester.tap(find.text('Passagem de 3,60 m'));
     await tester.pump();
     expect(picked, same(r));
   });
 
   testWidgets('sem onSelect: sem affordance e tap inerte', (tester) async {
     await tester.pumpWidget(wrap(onSelect: null));
-    expect(find.text('Ver no mapa'), findsNothing);
-    await tester.tap(find.text('Altura máx. 3.6 m')); // não deve lançar
+    expect(find.text('Ver no mapa ›'), findsNothing);
+    await tester.tap(find.text('Passagem de 3,60 m')); // não deve lançar
     await tester.pump();
+  });
+
+  testWidgets('medida do caminhão do lado do limite, sem nome de fornecedor', (tester) async {
+    const t = TruckProfile(id: 'c', name: 'C', heightCm: 440, lengthCm: 1860, weightKg: 41500, axleCount: 5);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: BlockedSheet(blocked: const [r], onAddWaypoint: () {}, caminhao: t)),
+    ));
+    expect(find.text('Seu caminhão: 4,40 m'), findsOneWidget);
+    expect(find.textContaining('HERE'), findsNothing);
   });
 }

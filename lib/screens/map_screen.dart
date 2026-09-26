@@ -39,6 +39,8 @@ import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
 import '../widgets/map/blocked_sheet.dart';
 import '../widgets/map/estreia_sheet.dart';
+import '../widgets/map/menu_principal.dart';
+import '../services/driver_profile_service.dart';
 import '../widgets/onboarding/trecho.dart' show ehRadarDeVelocidade;
 import '../widgets/map/history_sheet.dart';
 import '../widgets/map/marker_icons.dart';
@@ -127,6 +129,8 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   GoogleMapController? _mapController;
   late ThemeController _themeController;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  String? _nomeMotorista;
   String?   _lastHandledUri;
   DateTime? _lastHandledAt;
   bool      _openedViaDeepLink = false;
@@ -853,6 +857,43 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     // checagem rodava, não abre o card por cima da tela de rota.
     if (ModalRoute.of(context)?.isCurrent != true) return;
     await showUpdateDialog(context, info);
+  }
+
+  /// Menu principal (gaveta). Lê o nome do motorista na hora: ele pode ter
+  /// acabado de editar o perfil.
+  Future<void> _abrirMenu() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    try {
+      final p = await DriverProfileService.loadLocal();
+      if (mounted) setState(() => _nomeMotorista = p?.name);
+    } catch (_) {}
+    _scaffoldKey.currentState?.openDrawer();
+  }
+
+  /// Automático (escuro das 18h às 6h), Claro ou Escuro. Salvo no aparelho;
+  /// o mapa e a navegação já escutam o controller.
+  Future<void> _escolherTema() async {
+    final atual = _themeController.escolha;
+    final e = await showModalBottomSheet<TemaEscolha>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: RadioGroup<TemaEscolha>(
+          groupValue: atual,
+          onChanged: (v) => Navigator.pop(ctx, v),
+          child: Column(mainAxisSize: MainAxisSize.min, children: const [
+            RadioListTile(value: TemaEscolha.automatico, title: Text('Automático'),
+                subtitle: Text('Escuro das 18h às 6h, claro de dia')),
+            RadioListTile(value: TemaEscolha.claro, title: Text('Claro')),
+            RadioListTile(value: TemaEscolha.escuro, title: Text('Escuro')),
+          ]),
+        ),
+      ),
+    );
+    if (e == null || e == atual) return;
+    FieldLog.event('tema', {'escolha': e.name});
+    await _themeController.escolher(e);
+    if (mounted) setState(() {});
   }
 
   /// Tela de caminhões (menu e chip do card da rota). Trocou o ativo ou mudou
@@ -1671,6 +1712,25 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         if (!didPop) _onBack();
       },
       child: Scaffold(
+      key: _scaffoldKey,
+      drawer: MenuPrincipal(
+        nomeMotorista: _nomeMotorista,
+        caminhao: context.watch<TruckProfileProvider>().profile,
+        tema: _themeController.escolha,
+        onPerfil: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverProfileScreen())),
+        onCaminhoes: _abrirCaminhoes,
+        onHistorico: _showHistory,
+        onSos: _abrirSos,
+        onTema: _escolherTema,
+        onVoz: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VoiceSettingsScreen())),
+        // Rever a apresentação: quem já tem o app instalado nunca veria o
+        // onboarding novo (a marca já existe).
+        onApresentacao: () => Navigator.push(context, MaterialPageRoute(
+            builder: (ctx) => OnboardingScreen(aoConcluir: () => Navigator.pop(ctx)))),
+        // Crédito das fontes: o OpenStreetMap (ODbL) e o MapAtlas (CC BY 4.0)
+        // EXIGEM atribuição. Sem esta tela o uso do dado está fora da licença.
+        onSobre: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutScreen())),
+      ),
       // Tocar em qualquer área fora dos campos (inclusive sobre as sugestões que
       // cobrem a tela com o teclado aberto) tira o foco. HitTestBehavior.translucent
       // deixa os botões/itens receberem o toque normalmente.
@@ -1773,130 +1833,18 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                               onPressed: _locatingGps ? null : _useCurrentLocation,
                             ),
                             const SizedBox(width: 4),
-                            PopupMenuButton<String>(
-                              icon: Icon(Icons.more_vert, color: Colors.teal.shade800),
-                              style: ButtonStyle(
-                                backgroundColor: WidgetStateProperty.all(Colors.teal.shade50),
-                                shape: WidgetStateProperty.all(RoundedRectangleBorder(
+                            IconButton(
+                              key: const Key('mapa_menu'),
+                              icon: const Icon(Icons.menu),
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.teal.shade50,
+                                foregroundColor: Colors.teal.shade800,
+                                shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10),
-                                )),
+                                ),
                               ),
-                              onSelected: (value) {
-                                if (value == 'history') { _showHistory(); }
-                                if (value == 'voice') {
-                                  Navigator.push(context, MaterialPageRoute(
-                                    builder: (_) => const VoiceSettingsScreen(),
-                                  ));
-                                }
-                                if (value == 'sos') { _abrirSos(); }
-                                if (value == 'driver') {
-                                  Navigator.push(context, MaterialPageRoute(
-                                    builder: (_) => const DriverProfileScreen(),
-                                  ));
-                                }
-                                // Crédito das fontes: o OpenStreetMap (ODbL) e o
-                                // MapAtlas (CC BY 4.0) EXIGEM atribuição. Sem esta
-                                // tela o uso do dado está fora da licença.
-                                if (value == 'about') {
-                                  Navigator.push(context, MaterialPageRoute(
-                                    builder: (_) => const AboutScreen(),
-                                  ));
-                                }
-                                // Rever a apresentação: quem já tem o app instalado
-                                // nunca veria o onboarding novo (a marca já existe).
-                                if (value == 'onboarding') {
-                                  Navigator.push(context, MaterialPageRoute(
-                                    builder: (ctx) => OnboardingScreen(
-                                        aoConcluir: () => Navigator.pop(ctx)),
-                                  ));
-                                }
-                                if (value == 'truck') _abrirCaminhoes();
-                              },
-                              itemBuilder: (_) => [
-                                PopupMenuItem(
-                                  value: 'history',
-                                  child: Row(children: [
-                                    Icon(Icons.history, color: Colors.teal.shade700, size: 20),
-                                    const SizedBox(width: 12),
-                                    const Text('Histórico'),
-                                  ]),
-                                ),
-                                PopupMenuItem(
-                                  value: 'sos',
-                                  child: Row(children: [
-                                    Icon(Icons.sos, color: Colors.red.shade700, size: 20),
-                                    const SizedBox(width: 12),
-                                    // Sem Google a rede está DESLIGADA nos dois
-                                    // sentidos: ele não pede e, pior, não recebe
-                                    // pedido de ninguém (a regra do `sos` exige
-                                    // Google pra ler). Até 2.4.73 isso era mudo:
-                                    // só um erro de permissão no log. Ver o
-                                    // gate sosPerfilOk, que cobre só o pedir.
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Text('Pedir ajuda'),
-                                        if (!AuthService.isGoogleLinked)
-                                          Text('Entre com o Google pra ativar',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.red.shade700)),
-                                      ],
-                                    ),
-                                  ]),
-                                ),
-                                PopupMenuItem(
-                                  value: 'driver',
-                                  child: Row(children: [
-                                    Icon(Icons.person_outline, color: Colors.teal.shade700, size: 20),
-                                    const SizedBox(width: 12),
-                                    const Text('Meu perfil'),
-                                  ]),
-                                ),
-                                PopupMenuItem(
-                                  value: 'voice',
-                                  child: Row(children: [
-                                    Icon(Icons.record_voice_over, color: Colors.teal.shade700, size: 20),
-                                    const SizedBox(width: 12),
-                                    const Text('Voz do guia'),
-                                  ]),
-                                ),
-                                PopupMenuItem(
-                                  value: 'about',
-                                  child: Row(children: [
-                                    Icon(Icons.info_outline, color: Colors.teal.shade700, size: 20),
-                                    const SizedBox(width: 12),
-                                    const Text('Sobre'),
-                                  ]),
-                                ),
-                                PopupMenuItem(
-                                  value: 'onboarding',
-                                  child: Row(children: [
-                                    Icon(Icons.slideshow_outlined, color: Colors.teal.shade700, size: 20),
-                                    const SizedBox(width: 12),
-                                    const Text('Ver apresentação'),
-                                  ]),
-                                ),
-                                PopupMenuItem(
-                                  value: 'truck',
-                                  child: Row(children: [
-                                    Icon(Icons.local_shipping, color: Colors.teal.shade700, size: 20),
-                                    const SizedBox(width: 12),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Text('Caminhões'),
-                                        Text(
-                                          truckProvider.profile.name,
-                                          style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                                        ),
-                                      ],
-                                    ),
-                                  ]),
-                                ),
-                              ],
+                              tooltip: 'Menu',
+                              onPressed: _abrirMenu,
                             ),
                             if (_origin != null ||
                                 _destination != null ||
@@ -2238,6 +2186,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                               ),
                               builder: (_) => BlockedSheet(
                                 blocked: routeProvider.result!.restrictionsBlocked,
+                                caminhao: context.read<TruckProfileProvider>().profile,
                                 onAddWaypoint: () {
                                   setState(() => _panelCollapsed = false);
                                   _addWaypoint();
