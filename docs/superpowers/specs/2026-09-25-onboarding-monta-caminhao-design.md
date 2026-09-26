@@ -25,7 +25,7 @@ responde com o trecho real dele.
 
 | # | Página | Ação do motorista | O que ele vê/ouve | Botões |
 |---|---|---|---|---|
-| 0 | Chegada | — (1 toque) | fundo cinematográfico, o caminhão entra e o alien acena. Voz: **"Oi! Eu sou seu parceiro no trecho. Grátis de verdade, sem cadastro."** | **Bora** |
+| 0 | Chegada | — (1 toque) | fundo cinematográfico, o caminhão entra e o alien acena. **"Oi! Sou seu parceiro no trecho. Rota, radar e pedágio no limite do seu caminhão."** (25/09: "grátis" saiu, o app não será 100% grátis) | **Bora** |
 | 1 | Garagem | escolhe o tipo | 5 cartões grandes (toco, truck, carreta, bitrem, rodotrem); o caminhão da cena troca na hora, eixos contam, o alien reage. Voz: **"Com que caminhão você roda?"** Link "Ajustar medidas" abre o formulário atual (altura, comprimento, peso, eixos) já preenchido pelo tipo | **É esse** |
 | 2 | Onde você está | permite localização | cena de mapa neon esperando. Voz: **"Deixa eu ver onde você está pra te mostrar o seu trecho."** | **Mostrar meu trecho** · Escolher cidade |
 | 3 | Seu trecho (o "aha") | — | radar de varredura neon centrado nele com os pontos reais (ver abaixo). Voz lê o resumo | **Próxima** |
@@ -125,6 +125,65 @@ responde com o trecho real dele.
 - Asset: soma de `assets/onboarding/*` ≤ 7 MB.
 - Device (obrigatório antes de dizer pronto): instalação limpa (`pm clear`) no Redmi, fluxo completo com localização
   concedida e negada, `--profile` com timeline do vídeo + sprite, e o `onboarding_aha` chegando no field_logs.
+
+## Fase 1b — Primeira rota (desenho, 25/09)
+
+**Por quê:** no device, o Pedro notou que o fluxo novo prova só o radar; rota e pedágio sumiram da história. A
+resposta não é voltar ao tour: é terminar o onboarding na **primeira rota de verdade** do motorista, com o caminhão
+que ele montou. Rota, pedágio e radar aparecem juntos, com o resultado da viagem dele.
+
+### O que muda no fluxo
+| # | Página | Muda o quê |
+|---|---|---|
+| 4 | Ajuda na estrada | ganha os dois cartões opcionais que hoje estão no "Bora": **"Voz com a tela apagada" (permitir sempre)** e **início automático (Xiaomi)**. É o mesmo assunto: o app conseguir te avisar. |
+| 5 | **Pra onde você vai hoje?** (substitui "Bora") | campo de destino (`AddressSearchField`, `historyRole: 'destination'`). Sem localização concedida, aparece também **"De onde você sai?"**. Botão **Traçar rota**; secundário **Só abrir o mapa**. |
+
+### O que o motorista vê
+1. Digita o destino, escolhe na lista, toca em **Traçar rota**.
+2. O onboarding grava `onboarding_done` e abre o mapa **já com origem e destino**; o mapa calcula pelo caminho de
+   sempre (`RouteProvider.calculate`, desvio de restrição, TomTom, pedágio da HERE com `return=tolls`).
+3. Quando a rota chega, **uma vez só**, um cartão de estreia sobe por cima do card normal:
+   > **Pro seu caminhão (Carreta · 5 eixos):**
+   > R$ 107,70 de pedágio · 14 radares no caminho · desviou de 2 passagens baixas
+   Botões: **Iniciar viagem** (o mesmo do card) e **Ver rota**. Os números vêm do `RouteResult` (`tollText`,
+   `restrictionsAvoided`) e da lista de radares que o mapa já monta pra desenhar (`filterNearRoute` + dedupe + crowd).
+4. Quem toca em **Só abrir o mapa** cai no mapa vazio, como hoje.
+
+### Decisões de desenho (e por quê)
+- **Calcular no mapa, não no onboarding.** O `MapScreen` já tem `_routeTo` (destino + origem + cálculo) e o card de
+  resultado. Calcular dentro do onboarding duplicaria corrida, erro, clima e estado de origem/destino que vivem no
+  mapa. Custo: `MapScreen` ganha um parâmetro opcional `estreia: (destino, rótulo, origem?)`, lido uma vez no
+  primeiro frame.
+- **⛔ Origem nunca pede permissão.** `_useCurrentLocation` (chamado pelo `_routeTo` quando falta origem) faz
+  `requestPermission` se estiver `denied`: vindo do onboarding, isso gastaria a segunda negação sem o motorista ter
+  tocado em nada. Regra: com localização concedida, a origem é a posição (o mapa pega pelo caminho atual); **sem
+  localização, o onboarding exige "De onde você sai?"** e passa a origem pronta, e o mapa não chama
+  `_useCurrentLocation`. Teste trava isso.
+- **O cartão de estreia é uma vez só** (prefs `estreia_vista`), pra não virar ruído na rota seguinte.
+- **Texto honesto:** "desviou de N passagens baixas" só com `restrictionsAvoided` (desvio confirmado na
+  polyline); `restrictionsBlocked` não entra como vitória. Pedágio sem valor em alguma praça → "a partir de", como o
+  `tollText` já faz. Zero pedágio → a linha some, não aparece "R$ 0".
+- **Falha de rede** no cálculo cai no erro normal do mapa (já tratado, sem vazar erro de sistema); a estreia só
+  aparece em sucesso.
+
+### Custo e risco
+- Por instalação que traça: 1 sessão de autocomplete, 1 a 2 chamadas de rota HERE (a 2ª só com restrição no caminho)
+  e 1 TomTom. O ticket CS0187056 confirmou cobrança por transação no Base Plan.
+- Fora do hot path; nada muda na navegação.
+
+### Telemetria
+`onboarding_rota {acao: tracou|so_mapa, origem: gps|digitada}` e `estreia_vista {pedagios, radares_faixa,
+desvios}`. Responde: quantos traçam a primeira rota, e se quem traça volta (cruza com `nav_start` do mesmo uid).
+
+### Testes
+- Widget: com localização concedida, a página 5 tem só o destino; negada, tem os dois campos e "Traçar rota" fica
+  desabilitado sem origem.
+- Unit: o texto da estreia (com e sem pedágio, pedágio parcial, sem desvio) e a regra "blocked não conta".
+- Regressão: abrir o mapa pela estreia sem localização **não** chama `requestPermission` (fake do Geolocator ou
+  guarda testável em função pura).
+
+### Fora de escopo
+Escolher horário de saída, paradas, salvar favorito, iniciar a navegação sozinho.
 
 ## Fases
 1. **Fluxo + garagem + aha + voz**, com o fundo atual (cena ao vivo) e o sprite atual escalado. Já entrega o estalo.

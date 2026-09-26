@@ -519,7 +519,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
         corpo: const [
           _Kicker('No Trecho'),
           _Titulo('Oi! Sou seu parceiro no trecho.'),
-          _Texto('Grátis de verdade, sem cadastro. Bora montar o seu caminhão?'),
+          _Texto('Rota, radar e pedágio no limite do seu caminhão.'),
         ],
         botoes: _botoes('Bora', () => _irPara(kPagGaragem)),
       );
