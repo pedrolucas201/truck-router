@@ -233,25 +233,3 @@ List<(IconData, String, Color)> chipsDaRota(RouteResult r, int radares) => [
           Colors.green.shade700,
         ),
     ];
-
-class InfoItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-  const InfoItem({super.key, required this.icon, required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(height: 3),
-        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
-        const SizedBox(height: 1),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-      ],
-    );
-  }
-}
