@@ -17,8 +17,8 @@ void main() {
       ],
     );
     await t.pumpWidget(
-        const MaterialApp(home: Scaffold(body: TollBanner(result: r))));
-    expect(find.text('2 pedágios · R\$ 69,00 na rota'), findsOneWidget);
+        const MaterialApp(home: Scaffold(body: RouteChips(result: r))));
+    expect(find.text('2 pedágios · R\$ 69,00'), findsOneWidget);
     expect(find.byIcon(Icons.toll), findsOneWidget);
   });
 }

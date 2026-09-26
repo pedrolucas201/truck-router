@@ -39,6 +39,7 @@ import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
 import '../widgets/map/blocked_sheet.dart';
 import '../widgets/map/estreia_sheet.dart';
+import '../widgets/onboarding/trecho.dart' show ehRadarDeVelocidade;
 import '../widgets/map/history_sheet.dart';
 import '../widgets/map/marker_icons.dart';
 import '../widgets/map/marking_onboarding_sheet.dart';
@@ -852,6 +853,25 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     // checagem rodava, não abre o card por cima da tela de rota.
     if (ModalRoute.of(context)?.isCurrent != true) return;
     await showUpdateDialog(context, info);
+  }
+
+  /// Tela de caminhões (menu e chip do card da rota). Trocou o ativo ou mudou
+  /// a medida dele: a rota da tela era pro caminhão antigo, então limpa.
+  void _abrirCaminhoes() {
+    final truckProv = context.read<TruckProfileProvider>();
+    final routeProv = context.read<RouteProvider>();
+    final antes = truckProv.profile;
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => const TruckProfileScreen(),
+    )).then((_) {
+      if (!mounted) return;
+      final depois = truckProv.profile;
+      if (depois.id != antes.id || depois.heightCm != antes.heightCm ||
+          depois.weightKg != antes.weightKg || depois.axleCount != antes.axleCount ||
+          depois.lengthCm != antes.lengthCm || depois.widthCm != antes.widthCm) {
+        routeProv.clear();
+      }
+    });
   }
 
   Future<void> _routeTo(LatLng dest, String label, {bool lembrar = true}) async {
@@ -1790,17 +1810,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                         aoConcluir: () => Navigator.pop(ctx)),
                                   ));
                                 }
-                                if (value == 'truck') {
-                                  final truckProv = context.read<TruckProfileProvider>();
-                                  final routeProv = context.read<RouteProvider>();
-                                  final prevId = truckProv.activeId;
-                                  Navigator.push(context, MaterialPageRoute(
-                                    builder: (_) => const TruckProfileScreen(),
-                                  )).then((_) {
-                                    if (!mounted) return;
-                                    if (truckProv.activeId != prevId) routeProv.clear();
-                                  });
-                                }
+                                if (value == 'truck') _abrirCaminhoes();
                               },
                               itemBuilder: (_) => [
                                 PopupMenuItem(
@@ -2207,6 +2217,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     result: routeProvider.result!,
                     weatherAlerts: routeProvider.weatherAlerts,
                     departureTime: _departureTime,
+                    radares: _nearbyRadares.where(ehRadarDeVelocidade).length,
+                    onTruckTap: _abrirCaminhoes,
                     onStartNavigation: _startNavigation,
                     onOpenExternal: _launchNavigation,
                     onShare: () => _shareRoute(

@@ -94,9 +94,9 @@ void main() {
               color: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                DirtRoadBanner(result: rotaLonga),
+                RouteChips(result: rotaLonga),
                 const SizedBox(height: 10),
-                DirtRoadBanner(result: rotaCurta),
+                RouteChips(result: rotaCurta),
               ]),
             ),
           ),

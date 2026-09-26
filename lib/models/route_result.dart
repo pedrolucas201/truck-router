@@ -260,7 +260,7 @@ class RouteResult {
 
   String get distanceText {
     if (distanceMeters >= 1000) {
-      return '${(distanceMeters / 1000).toStringAsFixed(1)} km';
+      return '${(distanceMeters / 1000).toStringAsFixed(1).replaceAll('.', ',')} km';
     }
     return '$distanceMeters m';
   }

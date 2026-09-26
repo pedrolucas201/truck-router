@@ -70,15 +70,15 @@ void main() {
     expect(rota.dirtText, '3,9 km');
 
     await t.pumpWidget(MaterialApp(
-      home: Scaffold(body: DirtRoadBanner(result: rota)),
+      home: Scaffold(body: RouteChips(result: rota)),
     ));
 
     // O que aparece na tela, antes de ele sair:
-    expect(find.text('3,9 km de estrada de terra na rota, em 2 trechos'),
+    expect(find.text('3,9 km de terra, em 2 trechos'),
         findsOneWidget);
     expect(find.byIcon(Icons.terrain), findsOneWidget);
 
-    debugPrint('[BANNER] ${(t.widget(find.byType(Text)) as Text).data}');
+    
   });
 
   testWidgets('um trecho só não diz "em N trechos"', (t) async {
@@ -96,10 +96,10 @@ void main() {
     );
 
     await t.pumpWidget(MaterialApp(
-      home: Scaffold(body: DirtRoadBanner(result: rota)),
+      home: Scaffold(body: RouteChips(result: rota)),
     ));
 
-    expect(find.text('881 m de estrada de terra na rota'), findsOneWidget);
-    debugPrint('[BANNER] ${(t.widget(find.byType(Text)) as Text).data}');
+    expect(find.text('881 m de terra'), findsOneWidget);
+    
   });
 }
