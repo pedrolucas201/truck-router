@@ -245,10 +245,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       alturaAtualCm: atual.heightCm, comprimentoAtualCm: atual.lengthCm,
       pesoAtualKg: atual.weightKg, eixosAtual: atual.axleCount,
     );
+    // O caminhão de fábrica se chama "Padrão": escolher um tipo dá o nome dele
+    // ("Carreta"), que é o que aparece no menu e no card. Nome dado pelo
+    // motorista nunca é trocado.
+    final nome = nomeDoCaminhao(atual: atual.name, tipo: _oMeu ? null : _tipo);
     FieldLog.event('onboarding_truck', {'tipo': _oMeu ? 'meu' : _tipo?.name ?? '-', 'changed': mudou, 'ajustou': _ajustando});
-    if (mudou) {
+    if (mudou || nome != atual.name) {
       await provider.saveProfile(atual.copyWith(
-          heightCm: alturaCm, lengthCm: compCm, weightKg: peso, axleCount: eixos));
+          name: nome, heightCm: alturaCm, lengthCm: compCm, weightKg: peso, axleCount: eixos));
     }
     _irPara(kPagLocal);
   }

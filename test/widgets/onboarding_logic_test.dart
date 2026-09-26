@@ -47,6 +47,12 @@ void main() {
       }
     });
 
+    test('escolher tipo dá nome ao caminhão de fábrica, nunca a um nome do motorista', () {
+      expect(nomeDoCaminhao(atual: 'Padrão', tipo: TipoCaminhao.carreta), 'Carreta');
+      expect(nomeDoCaminhao(atual: 'Scania do Beto', tipo: TipoCaminhao.carreta), 'Scania do Beto');
+      expect(nomeDoCaminhao(atual: 'Padrão'), 'Padrão');
+    });
+
     test('"O meu" só aparece pra quem já tem caminhão (protege o espelho)', () {
       expect(abreComOMeu(editado: true), isTrue);
       expect(abreComOMeu(editado: false), isFalse);

@@ -85,6 +85,11 @@ bool caminhaoMudou({
     pesoKg != pesoAtualKg ||
     eixos != eixosAtual;
 
+/// Nome do caminhão depois da garagem: o de fábrica ("Padrão") vira o nome do
+/// tipo escolhido; qualquer outro nome é do motorista e fica.
+String nomeDoCaminhao({required String atual, TipoCaminhao? tipo}) =>
+    tipo != null && atual == 'Padrão' ? tipo.nome : atual;
+
 /// A garagem abre com "O meu" marcado quando o aparelho já tem um caminhão de
 /// verdade (editado aqui ou restaurado do espelho). Instalação limpa abre sem
 /// seleção: o motorista escolhe o tipo.
