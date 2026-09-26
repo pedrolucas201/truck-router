@@ -218,7 +218,7 @@ class _ProfileFormScreenState extends State<_ProfileFormScreen> {
     super.initState();
     final p = widget.existing;
     _nameCtrl   = TextEditingController(text: p?.name   ?? '');
-    _heightCtrl = TextEditingController(text: cmToMeters(p?.heightCm ?? 420));
+    _heightCtrl = TextEditingController(text: cmToMeters(p?.heightCm ?? kAlturaPadraoCm));
     _widthCtrl  = TextEditingController(text: cmToMeters(p?.widthCm  ?? 260));
     _lengthCtrl = TextEditingController(text: cmToMeters(p?.lengthCm ?? 1400));
     _weightCtrl = TextEditingController(text: (p?.weightKg ?? 25000).toString());

@@ -29,11 +29,14 @@ class TruckProfileProvider extends ChangeNotifier {
 
   List<TruckProfile> get profiles => List.unmodifiable(_profiles);
 
+  /// Leitura do [_editado] (o onboarding abre a garagem com "O meu" marcado).
+  bool get editado => _editado;
+
   TruckProfile get profile {
     if (_profiles.isEmpty) {
       return TruckProfile(
         id: 'default', name: 'Padrão',
-        heightCm: 420, lengthCm: 1400, weightKg: 25000, axleCount: 5,
+        heightCm: kAlturaPadraoCm, lengthCm: 1400, weightKg: 25000, axleCount: 5,
       );
     }
     return _profiles.firstWhere(
@@ -65,7 +68,7 @@ class TruckProfileProvider extends ChangeNotifier {
       final p = TruckProfile(
         id:        DateTime.now().millisecondsSinceEpoch.toString(),
         name:      'Padrão',
-        heightCm:  legadoAltura                     ?? 420,
+        heightCm:  legadoAltura                     ?? kAlturaPadraoCm,
         widthCm:   prefs.getInt('truck_width')      ?? 260,
         lengthCm:  prefs.getInt('truck_length')     ?? 1400,
         weightKg:  prefs.getInt('truck_weight')     ?? 25000,

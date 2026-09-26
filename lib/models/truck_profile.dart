@@ -7,6 +7,11 @@
 /// cara dirigindo o truck azul. Aqui fica certo por construção — o S.O.S. copia
 /// do perfil ATIVO, o mesmo que já decide se o caminhão passa embaixo do
 /// viaduto. Quem confia nele pra não bater pode confiar pra ser encontrado.
+/// Altura padrão de fábrica (instalação limpa e caminhão novo): o teto legal
+/// da Res. CONTRAN 210/2006. Falso alarme incomoda, sem alarme bate; vale pra
+/// quem não ajusta a medida (decisão do Pedro, 25/09/2026).
+const kAlturaPadraoCm = 440;
+
 class TruckProfile {
   final String id;
   final String name;

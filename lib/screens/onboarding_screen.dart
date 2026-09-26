@@ -3,29 +3,36 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_player/video_player.dart';
 
+import '../models/bridge_restriction.dart';
+import '../models/radar_point.dart';
 import '../providers/truck_profile_provider.dart';
 import '../services/field_log.dart';
 import '../services/location_asked.dart';
+import '../services/physical_restriction_service.dart';
+import '../services/radar_service.dart';
 import '../services/sistema.dart';
+import '../services/voice_settings.dart';
 import '../utils/meters.dart';
 import '../widgets/onboarding/cena_onboarding.dart';
 import '../widgets/onboarding/onboarding_logic.dart';
+import '../widgets/onboarding/radar_varredura.dart';
+import '../widgets/onboarding/trecho.dart';
 import 'map_screen.dart';
 
-/// O que a tela de permissões pergunta ao sistema. Interface pra o teste de
-/// widget não bater em plugin; o app usa [PermissoesReais].
+/// O que o onboarding pergunta ao sistema. Interface pra o teste de widget não
+/// bater em plugin; o app usa [PermissoesReais].
 abstract class PermissoesApi {
   Future<LocationPermission> localizacao();
   Future<LocationPermission> pedirLocalizacao();
+  /// Posição atual (ou a última conhecida). Null = não deu.
+  Future<({double lat, double lng})?> posicao();
   Future<bool> notificacaoOk();
   Future<void> pedirNotificacao();
-  Future<bool> bateriaIsenta();
-  Future<void> pedirBateria();
   Future<void> abrirAjustes();
   Future<bool> ehXiaomi();
   Future<bool> abrirInicioAutomatico();
@@ -38,14 +45,25 @@ class PermissoesReais implements PermissoesApi {
   @override
   Future<LocationPermission> pedirLocalizacao() => Geolocator.requestPermission();
   @override
+  Future<({double lat, double lng})?> posicao() async {
+    try {
+      final p = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium, timeLimit: Duration(seconds: 6)));
+      return (lat: p.latitude, lng: p.longitude);
+    } catch (_) {
+      try {
+        final p = await Geolocator.getLastKnownPosition();
+        return p == null ? null : (lat: p.latitude, lng: p.longitude);
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+  @override
   Future<bool> notificacaoOk() async =>
       await FlutterForegroundTask.checkNotificationPermission() == NotificationPermission.granted;
   @override
   Future<void> pedirNotificacao() => FlutterForegroundTask.requestNotificationPermission();
-  @override
-  Future<bool> bateriaIsenta() => FlutterForegroundTask.isIgnoringBatteryOptimizations;
-  @override
-  Future<void> pedirBateria() => FlutterForegroundTask.requestIgnoreBatteryOptimization();
   @override
   Future<void> abrirAjustes() => Geolocator.openAppSettings();
   @override
@@ -54,13 +72,16 @@ class PermissoesReais implements PermissoesApi {
   Future<bool> abrirInicioAutomatico() => Sistema.abrirInicioAutomatico();
 }
 
-/// Onboarding: 5 telas de apresentação, "Seu caminhão", permissões.
-/// Spec: docs/superpowers/specs/2026-09-24-onboarding-design.md.
-/// Permissão negada nunca segura: "Começar" libera sempre.
+/// Onboarding "Monta o seu caminhão": chegada, garagem, onde você está, seu
+/// trecho (o "aha" com os dados offline em volta dele), ajuda na estrada, bora.
+/// Spec: docs/superpowers/specs/2026-09-25-onboarding-monta-caminhao-design.md.
+/// Nada trava: toda permissão tem "Pular" e o "Começar" libera sempre.
 class OnboardingScreen extends StatefulWidget {
   final PermissoesApi permissoes;
   final VoidCallback? aoConcluir; // testes: evita abrir o MapScreen
-  const OnboardingScreen({super.key, this.permissoes = const PermissoesReais(), this.aoConcluir});
+  /// Testes desligam a voz (sem plugin de TTS).
+  final bool voz;
+  const OnboardingScreen({super.key, this.permissoes = const PermissoesReais(), this.aoConcluir, this.voz = true});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -71,18 +92,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   final _sw = Stopwatch()..start();
   int _pagina = 0;
 
-  // Página 6
+  // Garagem
+  TipoCaminhao? _tipo;
+  bool _oMeu = false; // "O meu" marcado: confirmar não grava
+  bool _temOMeu = false;
+  bool _ajustando = false;
   final _form = GlobalKey<FormState>();
   final _altura = TextEditingController();
   final _comprimento = TextEditingController();
   final _peso = TextEditingController();
   final _eixos = TextEditingController();
-  bool _formPreenchido = false;
+  bool _garagemPronta = false;
 
-  // Página 7
+  // Seu trecho
+  Future<(List<RadarPoint>, List<BridgeRestriction>)>? _dados;
+  ResumoTrecho? _resumo;
+  String? _cidade; // escolhida à mão (sem localização)
+  bool _procurando = false;
+  String? _avisoLocal;
+
+  // Permissões
   LocationPermission _loc = LocationPermission.denied;
   bool _notif = false;
-  bool _bateria = false;
   bool _xiaomi = false;
   // Início automático da MIUI: o Android não deixa LER essa chave, só abrir a
   // tela. Então o estado é a palavra do motorista ("Já liguei"), guardada.
@@ -90,29 +121,44 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   bool _autostartOk = false;
   static const _kAutostartOk = 'autostart_confirmado';
 
+  // Voz
+  static const _kMudo = 'onboarding_voz_muda';
+  bool _mudo = false;
+  FlutterTts? _tts;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     FieldLog.event('onboarding_step', {'i': 0});
     unawaited(_lerPermissoes());
+    unawaited(_iniciaVoz());
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_formPreenchido) return;
-    _formPreenchido = true;
-    final p = context.read<TruckProfileProvider>().profile;
-    _altura.text = cmToMeters(p.heightCm);
-    _comprimento.text = cmToMeters(p.lengthCm);
-    _peso.text = p.weightKg.toString();
-    _eixos.text = p.axleCount.toString();
+    if (_garagemPronta) return;
+    _garagemPronta = true;
+    final prov = context.read<TruckProfileProvider>();
+    _temOMeu = abreComOMeu(editado: prov.editado);
+    _oMeu = _temOMeu;
+    _preencheForm(Medidas(
+      alturaCm: prov.profile.heightCm, comprimentoCm: prov.profile.lengthCm,
+      pesoKg: prov.profile.weightKg, eixos: prov.profile.axleCount,
+    ));
+  }
+
+  void _preencheForm(Medidas m) {
+    _altura.text = cmToMeters(m.alturaCm);
+    _comprimento.text = cmToMeters(m.comprimentoCm);
+    _peso.text = m.pesoKg.toString();
+    _eixos.text = m.eixos.toString();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Voltou dos Ajustes: os cartões têm que refletir o que ele mexeu lá.
+    // Voltou dos Ajustes: o estado da localização e da notificação muda lá.
     if (state == AppLifecycleState.resumed) unawaited(_lerPermissoes());
   }
 
@@ -123,40 +169,87 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     for (final c in [_altura, _comprimento, _peso, _eixos]) {
       c.dispose();
     }
+    unawaited(_tts?.stop());
     super.dispose();
   }
 
   Future<void> _lerPermissoes() async {
     final api = widget.permissoes;
-    final r = await Future.wait<Object>([
-      api.localizacao(), api.notificacaoOk(), api.bateriaIsenta(), api.ehXiaomi(),
-    ]).catchError((_) => <Object>[LocationPermission.denied, false, false, false]);
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      _loc = r[0] as LocationPermission;
-      _notif = r[1] as bool;
-      _bateria = r[2] as bool;
-      _xiaomi = r[3] as bool;
-      _autostartOk = prefs.getBool(_kAutostartOk) ?? false;
-    });
+    try {
+      final r = await Future.wait<Object>([api.localizacao(), api.notificacaoOk(), api.ehXiaomi()]);
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _loc = r[0] as LocationPermission;
+        _notif = r[1] as bool;
+        _xiaomi = r[2] as bool;
+        _autostartOk = prefs.getBool(_kAutostartOk) ?? false;
+      });
+    } catch (_) {/* permissão ilegível = segue como pendente */}
   }
 
-  Future<void> _confirmarAutostart() async {
+  // ── Voz ────────────────────────────────────────────────────────────────────
+
+  Future<void> _iniciaVoz() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kAutostartOk, true);
-    FieldLog.event('onboarding_perm', {'kind': 'autostart', 'result': 'confirmado'});
-    if (mounted) setState(() => _autostartOk = true);
+    if (mounted) setState(() => _mudo = prefs.getBool(_kMudo) ?? false);
+    if (!widget.voz) return;
+    try {
+      _tts = FlutterTts();
+      await _tts!.setLanguage('pt-BR');
+      await VoiceSettings.apply(_tts!);
+    } catch (e, st) {
+      FieldLog.error('onboarding_tts', e, st);
+      _tts = null;
+    }
+    _fala(_pagina);
   }
+
+  /// Uma fala por página. Falhar nunca trava: o texto está na tela.
+  void _fala(int p) {
+    final t = _tts;
+    if (t == null || _mudo) return;
+    final frase = switch (p) {
+      kPagChegada => 'Oi! Eu sou seu parceiro no trecho. Grátis de verdade, sem cadastro.',
+      kPagGaragem => 'Com que caminhão você roda?',
+      kPagLocal => 'Deixa eu ver onde você está, pra te mostrar o seu trecho.',
+      kPagTrecho => _resumo == null ? null : '${_resumo!.titulo}. ${_resumo!.texto}',
+      kPagAjuda => 'Se der problema, quem está perto recebe o seu pedido. E você recebe o deles.',
+      _ => 'Bora pro trecho?',
+    };
+    if (frase == null) return;
+    unawaited(() async {
+      try {
+        await t.stop();
+        await t.speak(frase);
+      } catch (_) {}
+    }());
+  }
+
+  Future<void> _alternaMudo() async {
+    final mudo = !_mudo;
+    setState(() => _mudo = mudo);
+    FieldLog.event('onboarding_voz', {'muda': mudo});
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kMudo, mudo);
+    if (mudo) {
+      unawaited(_tts?.stop());
+    } else {
+      _fala(_pagina);
+    }
+  }
+
+  // ── Navegação ──────────────────────────────────────────────────────────────
 
   void _irPara(int i) {
+    if (i == kPagGaragem) _carregaDados();
     _ctrl.animateToPage(i, duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
   }
 
-  Future<void> _proxima() async {
-    if (_pagina == kPaginaCaminhao && !await _salvarCaminhao()) return;
-    if (_pagina == kPaginaPermissoes) return _concluir();
-    _irPara(_pagina + 1);
+  void _aoMudarPagina(int i) {
+    setState(() => _pagina = i);
+    FieldLog.event('onboarding_step', {'i': i});
+    _fala(i);
   }
 
   void _pular() {
@@ -166,10 +259,44 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     _irPara(destino);
   }
 
-  /// Grava só se mudou do caminhão ativo: passar direto não escreve nada
+  Future<void> _concluir() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding_done', true);
+    FieldLog.event('onboarding_done', {'ms': _sw.elapsedMilliseconds});
+    unawaited(_tts?.stop());
+    if (!mounted) return;
+    if (widget.aoConcluir != null) return widget.aoConcluir!();
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MapScreen()));
+  }
+
+  // ── Garagem ────────────────────────────────────────────────────────────────
+
+  void _escolhe(TipoCaminhao? t) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _tipo = t;
+      _oMeu = t == null;
+      if (t != null) _preencheForm(Medidas.doTipo(t));
+      if (t == null) {
+        final p = context.read<TruckProfileProvider>().profile;
+        _preencheForm(Medidas(alturaCm: p.heightCm, comprimentoCm: p.lengthCm, pesoKg: p.weightKg, eixos: p.axleCount));
+      }
+    });
+  }
+
+  String? get _rotulo {
+    if (_oMeu) {
+      final p = context.read<TruckProfileProvider>().profile;
+      return 'O meu · ${p.axleCount} eixos';
+    }
+    final t = _tipo;
+    return t == null ? null : '${t.nome} · ${t.eixos} eixos';
+  }
+
+  /// Grava só se mudou do caminhão ativo: "O meu" sem ajuste não escreve nada
   /// (nem no espelho da conta).
-  Future<bool> _salvarCaminhao() async {
-    if (!(_form.currentState?.validate() ?? false)) return false;
+  Future<void> _confirmaGaragem() async {
+    if (_ajustando && !(_form.currentState?.validate() ?? false)) return;
     final provider = context.read<TruckProfileProvider>();
     final atual = provider.profile;
     final alturaCm = metersToCm(_altura.text)!;
@@ -181,46 +308,126 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       alturaAtualCm: atual.heightCm, comprimentoAtualCm: atual.lengthCm,
       pesoAtualKg: atual.weightKg, eixosAtual: atual.axleCount,
     );
-    FieldLog.event('onboarding_truck', {'changed': mudou});
+    FieldLog.event('onboarding_truck', {'tipo': _oMeu ? 'meu' : _tipo?.name ?? '-', 'changed': mudou, 'ajustou': _ajustando});
     if (mudou) {
       await provider.saveProfile(atual.copyWith(
           heightCm: alturaCm, lengthCm: compCm, weightKg: peso, axleCount: eixos));
     }
-    return true;
+    _irPara(kPagLocal);
   }
 
-  Future<void> _concluir() async {
+  // ── Seu trecho ─────────────────────────────────────────────────────────────
+
+  /// Os dois assets offline. Carrega ao entrar na garagem: o caminhão está
+  /// parado e o motorista escolhendo, então o parse não briga com animação.
+  // ponytail: parse do CSV de radar (2,3 MB) na isolate principal, ~100-300 ms
+  // estimados; mover pra compute() se o --profile no Redmi mostrar engasgo.
+  void _carregaDados() {
+    _dados ??= () async {
+      final r = await Future.wait<Object>([RadarService.load(), PhysicalRestrictionService.load()]);
+      return (r[0] as List<RadarPoint>, r[1] as List<BridgeRestriction>);
+    }();
+  }
+
+  Future<void> _mostrarMeuTrecho() async {
+    setState(() {
+      _procurando = true;
+      _avisoLocal = null;
+    });
+    var perm = _loc;
+    if (estadoLocalizacao(perm) != PermissaoEstado.concedida) {
+      // Carimba ANTES de pedir: é a mesma marca do boot do mapa, então ele não
+      // gasta a segunda chance (a segunda negação no Android é permanente).
+      await markLocationAsked();
+      perm = await widget.permissoes.pedirLocalizacao();
+      FieldLog.event('onboarding_perm', {'kind': 'loc', 'result': perm.name});
+      if (mounted) setState(() => _loc = perm);
+    }
+    if (estadoLocalizacao(perm) != PermissaoEstado.concedida) {
+      if (!mounted) return;
+      setState(() {
+        _procurando = false;
+        _avisoLocal = 'Sem a localização, escolha uma cidade.';
+      });
+      return _escolherCidade();
+    }
+    final pos = await widget.permissoes.posicao();
+    if (pos == null) {
+      if (!mounted) return;
+      setState(() {
+        _procurando = false;
+        _avisoLocal = 'Não achei a sua posição agora. Escolha uma cidade.';
+      });
+      return _escolherCidade();
+    }
+    await _calcula(pos.lat, pos.lng, cidade: null);
+  }
+
+  Future<void> _escolherCidade() async {
+    final c = await showModalBottomSheet<(String, double, double)>(
+      context: context,
+      backgroundColor: kFundo,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final c in kCidades)
+              ListTile(
+                title: Text(c.$1, style: const TextStyle(color: Colors.white, fontSize: 17)),
+                onTap: () => Navigator.pop(ctx, c),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (c == null) return;
+    await _calcula(c.$2, c.$3, cidade: c.$1);
+  }
+
+  Future<void> _calcula(double lat, double lng, {required String? cidade}) async {
+    setState(() => _procurando = true);
+    _carregaDados();
+    try {
+      final (radares, restricoes) = await _dados!;
+      if (!mounted) return;
+      final altura = context.read<TruckProfileProvider>().profile.heightCm;
+      final r = calcularTrecho(lat: lat, lng: lng, alturaCm: altura, radares: radares, restricoes: restricoes);
+      FieldLog.event('onboarding_aha', {
+        'raio_km': r.raioKm.round(), 'radares': faixa(r.radares), 'viadutos': faixa(r.viadutos),
+        'caso': r.caso.name, 'cidade_manual': cidade != null,
+      });
+      setState(() {
+        _resumo = r;
+        _cidade = cidade;
+        _procurando = false;
+      });
+      _irPara(kPagTrecho);
+    } catch (e, st) {
+      FieldLog.error('onboarding_aha', e, st);
+      if (!mounted) return;
+      setState(() => _procurando = false);
+      _irPara(kPagAjuda);
+    }
+  }
+
+  // ── Ajuda e permissões finais ──────────────────────────────────────────────
+
+  Future<void> _ativarAjuda() async {
+    if (!_notif) {
+      await widget.permissoes.pedirNotificacao();
+      final ok = await widget.permissoes.notificacaoOk();
+      FieldLog.event('onboarding_perm', {'kind': 'notif', 'result': ok});
+      if (mounted) setState(() => _notif = ok);
+    }
+    _irPara(kPagBora);
+  }
+
+  Future<void> _confirmarAutostart() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('onboarding_done', true);
-    FieldLog.event('onboarding_done', {'ms': _sw.elapsedMilliseconds});
-    if (!mounted) return;
-    if (widget.aoConcluir != null) return widget.aoConcluir!();
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MapScreen()));
-  }
-
-  // ── Permissões ─────────────────────────────────────────────────────────────
-
-  Future<void> _pedirLocalizacao() async {
-    // Carimba ANTES de pedir: é a mesma marca do boot do mapa, então ele não
-    // gasta a segunda chance (a segunda negação no Android é permanente).
-    await markLocationAsked();
-    final r = await widget.permissoes.pedirLocalizacao();
-    FieldLog.event('onboarding_perm', {'kind': 'loc', 'result': r.name});
-    if (mounted) setState(() => _loc = r);
-  }
-
-  Future<void> _pedirNotificacao() async {
-    await widget.permissoes.pedirNotificacao();
-    final ok = await widget.permissoes.notificacaoOk();
-    FieldLog.event('onboarding_perm', {'kind': 'notif', 'result': ok});
-    if (mounted) setState(() => _notif = ok);
-  }
-
-  Future<void> _pedirBateria() async {
-    await widget.permissoes.pedirBateria();
-    final ok = await widget.permissoes.bateriaIsenta();
-    FieldLog.event('onboarding_perm', {'kind': 'bateria', 'result': ok});
-    if (mounted) setState(() => _bateria = ok);
+    await prefs.setBool(_kAutostartOk, true);
+    FieldLog.event('onboarding_perm', {'kind': 'autostart', 'result': 'confirmado'});
+    if (mounted) setState(() => _autostartOk = true);
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -232,128 +439,223 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: kNeon, brightness: Brightness.dark, surface: kFundo),
     );
+    final varre = mostraVarredura(_pagina);
     return Theme(
       data: tema,
-      child: Scaffold(
-        backgroundColor: kFundo,
-        body: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                // A cena é UMA só, atrás das páginas: o mundo não corta ao
-                // trocar de tela. As páginas de apresentação deixam o topo
-                // transparente; cadastro e permissões cobrem tudo.
-                child: Stack(children: [
-                  Positioned.fill(
-                    child: Column(children: [
-                      Expanded(
-                        flex: 11,
-                        child: kFilmeOnboarding
-                            ? _FilmeOnboarding(pagina: _pagina.clamp(0, kTelasOnboarding.length - 1), visivel: _pagina < kTelasOnboarding.length)
-                            : CenaOnboarding(
-                                cena: kTelasOnboarding[_pagina.clamp(0, kTelasOnboarding.length - 1)].cena,
-                                visivel: _pagina < kTelasOnboarding.length,
-                              ),
-                      ),
-                      const Expanded(flex: 9, child: SizedBox()),
-                    ]),
-                  ),
-                  PageView(
-                    controller: _ctrl,
-                    physics: const ClampingScrollPhysics(),
-                    onPageChanged: (i) {
-                      setState(() => _pagina = i);
-                      FieldLog.event('onboarding_step', {'i': i});
-                      if (i == kPaginaPermissoes) unawaited(_lerPermissoes());
-                    },
-                    children: [
-                      for (var i = 0; i < kTelasOnboarding.length; i++)
-                        _Apresentacao(tela: kTelasOnboarding[i], ativa: _pagina == i),
-                      ColoredBox(color: kFundo, child: _paginaCaminhao()),
-                      ColoredBox(color: kFundo, child: _paginaPermissoes()),
-                    ],
-                  ),
-                ]),
-              ),
-              _rodape(),
-            ],
+      child: PopScope(
+        canPop: _pagina == 0,
+        onPopInvokedWithResult: (pop, _) {
+          if (!pop && _pagina > 0) _irPara(_pagina == kPagAjuda && _resumo == null ? kPagLocal : _pagina - 1);
+        },
+        child: Scaffold(
+          backgroundColor: kFundo,
+          body: SafeArea(
+            child: Column(
+              children: [
+                _topo(),
+                Expanded(
+                  // A cena é UMA só, atrás das páginas: o mundo não corta ao
+                  // trocar de tela. Nas páginas 2 e 3 entra o radar de varredura.
+                  child: Stack(children: [
+                    Positioned.fill(
+                      child: Column(children: [
+                        Expanded(
+                          flex: 11,
+                          child: Stack(fit: StackFit.expand, children: [
+                            CenaOnboarding(cena: cenaDaPagina(_pagina), visivel: !varre,
+                                rotulo: _pagina == kPagGaragem ? _rotulo : null),
+                            RadarVarredura(resumo: _resumo, visivel: varre),
+                          ]),
+                        ),
+                        const Expanded(flex: 9, child: SizedBox()),
+                      ]),
+                    ),
+                    PageView(
+                      controller: _ctrl,
+                      physics: const NeverScrollableScrollPhysics(),
+                      onPageChanged: _aoMudarPagina,
+                      children: [
+                        _pagina0(),
+                        _paginaGaragem(),
+                        _paginaLocal(),
+                        _paginaTrecho(),
+                        _paginaAjuda(),
+                        _paginaBora(),
+                      ],
+                    ),
+                  ]),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _rodape() {
-    final ultima = _pagina == kPaginaPermissoes;
+  Widget _topo() {
     final pular = pularDestino(_pagina) != null;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+          Expanded(
+            child: Row(children: [
               for (var i = 0; i < kTotalPaginas; i++)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: i == _pagina ? 22 : 7, height: 7,
-                  decoration: BoxDecoration(
-                    color: i == _pagina ? kNeon : Colors.white24,
-                    borderRadius: BorderRadius.circular(4),
+                Expanded(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: i <= _pagina ? kNeon : Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-            ],
+            ]),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              if (pular)
-                TextButton(
-                  key: const Key('onb_pular'),
-                  onPressed: _pular,
-                  child: const Text('Pular', style: TextStyle(color: Colors.white70)),
-                ),
-              const Spacer(),
-              FilledButton(
-                key: const Key('onb_proxima'),
-                onPressed: _proxima,
-                style: FilledButton.styleFrom(
-                  backgroundColor: kNeon, foregroundColor: const Color(0xFF06140A),
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                child: Text(ultima ? 'Começar' : 'Próxima',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-              ),
-            ],
+          if (pular)
+            TextButton(
+              key: const Key('onb_pular'),
+              onPressed: _pular,
+              child: const Text('Pular', style: TextStyle(color: Colors.white70)),
+            ),
+          IconButton(
+            key: const Key('onb_mudo'),
+            tooltip: _mudo ? 'Ligar a voz' : 'Silenciar a voz',
+            onPressed: _alternaMudo,
+            icon: Icon(_mudo ? Icons.volume_off : Icons.volume_up, color: _mudo ? Colors.white54 : kNeon),
           ),
         ],
       ),
     );
   }
 
-  Widget _paginaCaminhao() => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-        child: Form(
-          key: _form,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _Kicker('Seu caminhão'),
-              const _Titulo('Com que caminhão você roda?'),
-              const _Texto('É isso que decide ponte, balança e o valor do pedágio. Dá pra mudar depois em "Caminhões".'),
-              const SizedBox(height: 20),
-              _campo(_altura, 'Altura (m)', 'Ex: 4,20', metros: true, max: 700),
-              const SizedBox(height: 12),
-              _campo(_comprimento, 'Comprimento (m)', 'Ex: 14,00', metros: true, max: 3000),
-              const SizedBox(height: 12),
-              _campo(_peso, 'Peso bruto (kg)', 'Ex: 25000', max: 100000),
-              const SizedBox(height: 12),
-              _campo(_eixos, 'Número de eixos', 'Ex: 5', min: 2, max: 9),
-            ],
+  /// Molde das páginas: a parte de cima fica transparente (cena atrás), o
+  /// texto e os botões embaixo.
+  Widget _molde({required List<Widget> corpo, required Widget botoes}) => Column(
+        children: [
+          const Expanded(flex: 11, child: SizedBox()),
+          Expanded(
+            flex: 9,
+            child: Container(
+              color: kFundo,
+              padding: const EdgeInsets.fromLTRB(24, 18, 24, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: corpo))),
+                  const SizedBox(height: 8),
+                  botoes,
+                ],
+              ),
+            ),
           ),
+        ],
+      );
+
+  /// Botão principal em largura cheia (alvo grande pra dedo na cabine) e o
+  /// secundário embaixo, centralizado.
+  Widget _botoes(String principal, VoidCallback? acao, {String? secundario, VoidCallback? acaoSec, Key? chave, bool ocupado = false}) =>
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FilledButton(
+            key: chave ?? const Key('onb_proxima'),
+            onPressed: ocupado ? null : acao,
+            style: FilledButton.styleFrom(
+              backgroundColor: kNeon, foregroundColor: const Color(0xFF06140A),
+              disabledBackgroundColor: kNeon.withValues(alpha: .35),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            child: ocupado
+                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF06140A)))
+                : Text(principal, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          ),
+          if (secundario != null)
+            TextButton(
+              key: const Key('onb_secundario'),
+              onPressed: acaoSec,
+              child: Text(secundario, style: const TextStyle(color: Colors.white70, fontSize: 16)),
+            ),
+        ],
+      );
+
+  Widget _pagina0() => _molde(
+        corpo: const [
+          _Kicker('No Trecho'),
+          _Titulo('Oi! Sou seu parceiro no trecho.'),
+          _Texto('Grátis de verdade, sem cadastro. Bora montar o seu caminhão?'),
+        ],
+        botoes: _botoes('Bora', () => _irPara(kPagGaragem)),
+      );
+
+  Widget _paginaGaragem() {
+    final escolheu = _oMeu || _tipo != null;
+    return _molde(
+      corpo: [
+        const _Kicker('Seu caminhão'),
+        const _Titulo('Com que caminhão você roda?'),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            if (_temOMeu) _cartaoTipo('O meu', 'atual', selecionado: _oMeu, onTap: () => _escolhe(null), chave: const Key('onb_tipo_meu')),
+            for (final t in TipoCaminhao.values)
+              _cartaoTipo(t.nome, '${t.eixos} eixos',
+                  selecionado: !_oMeu && _tipo == t, onTap: () => _escolhe(t), chave: Key('onb_tipo_${t.name}')),
+          ],
+        ),
+        const SizedBox(height: 6),
+        if (!_ajustando)
+          TextButton.icon(
+            key: const Key('onb_ajustar'),
+            onPressed: escolheu ? () => setState(() => _ajustando = true) : null,
+            icon: const Icon(Icons.tune, size: 18),
+            label: Text(escolheu
+                ? 'Ajustar medidas (${_altura.text} m · ${_eixos.text} eixos)'
+                : 'Escolha um tipo pra ver as medidas'),
+          )
+        else
+          Form(
+            key: _form,
+            child: Column(children: [
+              const SizedBox(height: 8),
+              _campo(_altura, 'Altura (m)', 'Ex: 4,40', metros: true, max: 700),
+              const SizedBox(height: 10),
+              _campo(_comprimento, 'Comprimento (m)', 'Ex: 18,60', metros: true, max: 3000),
+              const SizedBox(height: 10),
+              _campo(_peso, 'Peso bruto (kg)', 'Ex: 41500', max: 100000),
+              const SizedBox(height: 10),
+              _campo(_eixos, 'Número de eixos', 'Ex: 5', min: 2, max: 9),
+            ]),
+          ),
+      ],
+      botoes: _botoes('É esse', escolheu ? _confirmaGaragem : null, chave: const Key('onb_e_esse')),
+    );
+  }
+
+  Widget _cartaoTipo(String nome, String sub, {required bool selecionado, required VoidCallback onTap, Key? chave}) =>
+      InkWell(
+        key: chave,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: selecionado ? kNeon.withValues(alpha: .16) : Colors.white.withValues(alpha: .06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: selecionado ? kNeon : Colors.white12, width: selecionado ? 2 : 1),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(nome, style: TextStyle(color: selecionado ? kNeon : Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
+            Text(sub, style: const TextStyle(color: Colors.white60, fontSize: 13)),
+          ]),
         ),
       );
 
@@ -377,96 +679,88 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     );
   }
 
-  Widget _paginaPermissoes() {
-    final loc = estadoLocalizacao(_loc);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _Kicker('Permissões'),
-          const _Titulo('Pra avisar com a tela apagada.'),
-          const _Texto('O app fala radar e pedágio com o celular no bolso ou no suporte. Pra isso o Android pede três coisas.'),
-          const SizedBox(height: 16),
-          _CartaoPermissao(
-            icone: Icons.my_location,
-            titulo: 'Localização',
-            porque: 'Sem ela não tem rota nem alerta. "O tempo todo" mantém a voz viva com a tela apagada.',
-            estado: loc,
-            acao: switch (loc) {
-              PermissaoEstado.pendente => ('Permitir', _pedirLocalizacao),
-              PermissaoEstado.negadaDeVez => ('Abrir Ajustes', widget.permissoes.abrirAjustes),
-              PermissaoEstado.concedida when _loc != LocationPermission.always =>
-                ('Permitir sempre', widget.permissoes.abrirAjustes),
-              _ => null,
-            },
-          ),
-          _CartaoPermissao(
-            icone: Icons.notifications_active,
-            titulo: 'Notificação',
-            porque: 'É ela que segura a navegação viva em segundo plano e traz o pedido de ajuda de outro motorista.',
-            estado: _notif ? PermissaoEstado.concedida : PermissaoEstado.pendente,
-            acao: _notif ? null : ('Permitir', _pedirNotificacao),
-          ),
-          _CartaoPermissao(
-            icone: Icons.battery_saver,
-            titulo: 'Bateria sem restrição',
-            porque: 'Sem isso o celular mata o app no meio da viagem pra economizar bateria.',
-            estado: _bateria ? PermissaoEstado.concedida : PermissaoEstado.pendente,
-            acao: _bateria ? null : ('Permitir', _pedirBateria),
-          ),
-          if (_xiaomi)
-            _CartaoPermissao(
-              icone: Icons.power_settings_new,
-              titulo: 'Início automático (Xiaomi)',
-              porque: _autostartOk
-                  ? 'Você confirmou que ligou "No Trecho" na lista. O app não consegue conferir isso sozinho.'
-                  : 'No Xiaomi essa chave fica desligada de fábrica e o app some em segundo plano. Ligue "No Trecho" na lista e volte.',
-              estado: _autostartOk ? PermissaoEstado.concedida : PermissaoEstado.pendente,
-              rotuloEstado: _autostartOk ? 'Marcada por você' : 'Manual',
-              acao: _autostartOk
-                  ? null
-                  : _autostartAberto
-                      ? ('Já liguei', _confirmarAutostart)
-                      : ('Abrir', () async {
-                          final ok = await widget.permissoes.abrirInicioAutomatico();
-                          FieldLog.event('onboarding_perm', {'kind': 'autostart', 'result': ok});
-                          if (mounted) setState(() => _autostartAberto = true);
-                        }),
-            ),
-          const SizedBox(height: 8),
-          const _Texto('Se preferir, dá pra liberar depois: o mapa avisa o que ficou faltando.'),
+  Widget _paginaLocal() => _molde(
+        corpo: [
+          const _Kicker('Seu trecho'),
+          const _Titulo('Deixa eu ver onde você está.'),
+          const _Texto('Mostro os radares e as passagens baixas perto de você, pro seu caminhão. Nada sai do seu celular.'),
+          if (_avisoLocal != null) ...[
+            const SizedBox(height: 10),
+            Text(_avisoLocal!, style: const TextStyle(color: Color(0xFFFFB300), fontSize: 15, fontWeight: FontWeight.w600)),
+          ],
         ],
-      ),
+        botoes: _botoes('Mostrar meu trecho', _mostrarMeuTrecho,
+            secundario: 'Escolher cidade', acaoSec: _procurando ? null : _escolherCidade,
+            chave: const Key('onb_meu_trecho'), ocupado: _procurando),
+      );
+
+  Widget _paginaTrecho() {
+    final r = _resumo;
+    return _molde(
+      corpo: [
+        _Kicker(_cidade == null ? 'Perto de você' : 'Perto de $_cidade'),
+        _Titulo(r?.titulo ?? ''),
+        _Texto(r?.texto ?? ''),
+        const SizedBox(height: 10),
+        const Row(children: [
+          _Legenda(cor: kNeon, texto: 'radar'),
+          SizedBox(width: 16),
+          _Legenda(cor: Color(0xFFFF3B3B), texto: 'passagem baixa', triangulo: true),
+        ]),
+      ],
+      botoes: _botoes('Próxima', () => _irPara(kPagAjuda)),
     );
   }
-}
 
-class _Apresentacao extends StatelessWidget {
-  final TelaOnboarding tela;
-  final bool ativa;
-  const _Apresentacao({required this.tela, required this.ativa});
+  Widget _paginaAjuda() => _molde(
+        corpo: const [
+          _Kicker('S.O.S.'),
+          _Titulo('Deu problema? Quem está perto recebe.'),
+          _Texto('E você recebe o pedido de quem precisa. Pra isso, o app precisa poder te avisar.'),
+        ],
+        botoes: _notif
+            ? _botoes('Próxima', () => _irPara(kPagBora))
+            : _botoes('Ativar ajuda', _ativarAjuda, chave: const Key('onb_ativar_ajuda')),
+      );
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const Expanded(flex: 11, child: SizedBox()), // a cena está atrás
-        Expanded(
-          flex: 9,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 300),
-              opacity: ativa ? 1 : 0,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [_Kicker(tela.kicker), _Titulo(tela.titulo), _Texto(tela.texto)],
-              ),
-            ),
+  Widget _paginaBora() {
+    final soDuranteUso = _loc == LocationPermission.whileInUse;
+    return _molde(
+      corpo: [
+        const _Kicker('Pronto'),
+        const _Titulo('Bora pro trecho?'),
+        const _Texto('Rota, radar e pedágio no limite do seu caminhão.'),
+        const SizedBox(height: 12),
+        if (soDuranteUso)
+          _CartaoPermissao(
+            icone: Icons.my_location,
+            titulo: 'Voz com a tela apagada',
+            porque: 'Com a localização "o tempo todo", o app fala radar e pedágio mesmo com a tela apagada.',
+            estado: PermissaoEstado.pendente,
+            rotuloEstado: 'Opcional',
+            acao: ('Permitir sempre', widget.permissoes.abrirAjustes),
           ),
-        ),
+        if (_xiaomi)
+          _CartaoPermissao(
+            icone: Icons.power_settings_new,
+            titulo: 'Início automático (Xiaomi)',
+            porque: _autostartOk
+                ? 'Você confirmou que ligou "No Trecho" na lista. O app não consegue conferir isso sozinho.'
+                : 'No Xiaomi essa chave fica desligada de fábrica e o app some em segundo plano. Ligue "No Trecho" na lista e volte.',
+            estado: _autostartOk ? PermissaoEstado.concedida : PermissaoEstado.pendente,
+            rotuloEstado: _autostartOk ? 'Marcada por você' : 'Manual',
+            acao: _autostartOk
+                ? null
+                : _autostartAberto
+                    ? ('Já liguei', _confirmarAutostart)
+                    : ('Abrir', () async {
+                        final ok = await widget.permissoes.abrirInicioAutomatico();
+                        FieldLog.event('onboarding_perm', {'kind': 'autostart', 'result': ok});
+                        if (mounted) setState(() => _autostartAberto = true);
+                      }),
+          ),
       ],
+      botoes: _botoes('Começar', _concluir, chave: const Key('onb_comecar')),
     );
   }
 }
@@ -489,7 +783,7 @@ class _Titulo extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Text(t,
-            style: const TextStyle(color: Colors.white, fontSize: 30, height: 1.12, fontWeight: FontWeight.w800)),
+            style: const TextStyle(color: Colors.white, fontSize: 28, height: 1.12, fontWeight: FontWeight.w800)),
       );
 }
 
@@ -499,6 +793,19 @@ class _Texto extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Text(t, style: const TextStyle(color: Color(0xFFC9D6E2), fontSize: 17, height: 1.4));
+}
+
+class _Legenda extends StatelessWidget {
+  final Color cor;
+  final String texto;
+  final bool triangulo;
+  const _Legenda({required this.cor, required this.texto, this.triangulo = false});
+  @override
+  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(triangulo ? Icons.change_history : Icons.circle, size: 12, color: cor),
+        const SizedBox(width: 6),
+        Text(texto, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+      ]);
 }
 
 class _CartaoPermissao extends StatelessWidget {
@@ -519,7 +826,7 @@ class _CartaoPermissao extends StatelessWidget {
     final rotulo = rotuloEstado ?? (ok ? 'Concedida' : estado == PermissaoEstado.negadaDeVez ? 'Bloqueada' : 'Pendente');
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: .06),
         borderRadius: BorderRadius.circular(16),
@@ -531,7 +838,7 @@ class _CartaoPermissao extends StatelessWidget {
           Row(children: [
             Icon(icone, color: ok ? kNeon : Colors.white70),
             const SizedBox(width: 10),
-            Expanded(child: Text(titulo, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700))),
+            Expanded(child: Text(titulo, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700))),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -541,10 +848,10 @@ class _CartaoPermissao extends StatelessWidget {
               child: Text(rotulo, style: TextStyle(color: ok ? kNeon : Colors.white70, fontSize: 12, fontWeight: FontWeight.w700)),
             ),
           ]),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(porque, style: const TextStyle(color: Color(0xFFC9D6E2), fontSize: 14, height: 1.35)),
           if (acao != null) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
               child: OutlinedButton(
@@ -555,83 +862,6 @@ class _CartaoPermissao extends StatelessWidget {
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-
-/// Experimento (build de teste, `--dart-define=ONB_FILME=true`): no lugar da
-/// cena ao vivo, o filme renderizado por código (`docs/marca/onboarding/
-/// filme.py`), um capítulo de 6 s por página. Ao trocar de página, pula pro
-/// capítulo; dentro dele, repete.
-const kFilmeOnboarding = bool.fromEnvironment('ONB_FILME');
-
-class _FilmeOnboarding extends StatefulWidget {
-  final int pagina;
-  final bool visivel;
-  const _FilmeOnboarding({required this.pagina, required this.visivel});
-
-  @override
-  State<_FilmeOnboarding> createState() => _FilmeOnboardingState();
-}
-
-class _FilmeOnboardingState extends State<_FilmeOnboarding> {
-  static const _cap = Duration(seconds: 6);
-  late final VideoPlayerController _c = VideoPlayerController.asset('assets/onboarding/filme.mp4');
-  bool _pronto = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _c.initialize().then((_) {
-      if (!mounted) return;
-      setState(() => _pronto = true);
-      _c.setVolume(0);
-      _c.addListener(_loopCapitulo);
-      _c.play();
-    });
-  }
-
-  void _loopCapitulo() {
-    final fim = _cap * (widget.pagina + 1);
-    if (_c.value.position >= fim - const Duration(milliseconds: 80)) {
-      _c.seekTo(_cap * widget.pagina);
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _FilmeOnboarding old) {
-    super.didUpdateWidget(old);
-    if (widget.pagina != old.pagina && _pronto) {
-      _c.seekTo(_cap * widget.pagina);
-      if (!_c.value.isPlaying) _c.play();
-    }
-    if (widget.visivel != old.visivel && _pronto) {
-      widget.visivel ? _c.play() : _c.pause();
-    }
-  }
-
-  @override
-  void dispose() {
-    _c.removeListener(_loopCapitulo);
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_pronto) return const ColoredBox(color: kFundo);
-    return AnimatedOpacity(
-      opacity: widget.visivel ? 1 : 0,
-      duration: const Duration(milliseconds: 350),
-      child: ClipRect(
-        child: SizedBox.expand(
-          child: FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(width: _c.value.size.width, height: _c.value.size.height, child: VideoPlayer(_c)),
-          ),
-        ),
       ),
     );
   }
