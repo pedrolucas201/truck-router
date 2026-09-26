@@ -25,17 +25,17 @@ responde com o trecho real dele.
 
 | # | Página | Ação do motorista | O que ele vê/ouve | Botões |
 |---|---|---|---|---|
-| 0 | Chegada | — (1 toque) | fundo cinematográfico, o caminhão entra e o alien acena. Voz: **"Oi! Eu sou teu parceiro no trecho. Grátis de verdade, sem cadastro."** | **Bora** |
-| 1 | Garagem | escolhe o tipo | 5 cartões grandes (toco, truck, carreta, bitrem, rodotrem); o caminhão da cena troca na hora, eixos contam, o alien reage. Voz: **"Com que caminhão tu roda?"** Link "Ajustar medidas" abre o formulário atual (altura, comprimento, peso, eixos) já preenchido pelo tipo | **É esse** |
-| 2 | Onde tu tá | permite localização | cena de mapa neon esperando. Voz: **"Deixa eu ver onde tu tá pra te mostrar o teu trecho."** | **Mostrar meu trecho** · Escolher cidade |
-| 3 | Teu trecho (o "aha") | — | radar de varredura neon centrado nele com os pontos reais (ver abaixo). Voz lê o resumo | **Próxima** |
-| 4 | Ajuda na estrada | permite notificação | cena do S.O.S. Voz: **"Se der problema, quem tá perto recebe teu pedido. E tu recebe o deles."** | **Ativar ajuda** · Agora não |
+| 0 | Chegada | — (1 toque) | fundo cinematográfico, o caminhão entra e o alien acena. Voz: **"Oi! Eu sou seu parceiro no trecho. Grátis de verdade, sem cadastro."** | **Bora** |
+| 1 | Garagem | escolhe o tipo | 5 cartões grandes (toco, truck, carreta, bitrem, rodotrem); o caminhão da cena troca na hora, eixos contam, o alien reage. Voz: **"Com que caminhão você roda?"** Link "Ajustar medidas" abre o formulário atual (altura, comprimento, peso, eixos) já preenchido pelo tipo | **É esse** |
+| 2 | Onde você está | permite localização | cena de mapa neon esperando. Voz: **"Deixa eu ver onde você está pra te mostrar o seu trecho."** | **Mostrar meu trecho** · Escolher cidade |
+| 3 | Seu trecho (o "aha") | — | radar de varredura neon centrado nele com os pontos reais (ver abaixo). Voz lê o resumo | **Próxima** |
+| 4 | Ajuda na estrada | permite notificação | cena do S.O.S. Voz: **"Se der problema, quem está perto recebe o seu pedido. E você recebe o deles."** | **Ativar ajuda** · Agora não |
 | 5 | Bora | — | amanhecer, o caminhão arranca com o alien acenando, ícone + "No Trecho". Voz: **"Bora pro trecho?"** | **Começar** |
 
 - **"Agora não" / pular** existe em 1–4 e avança sem gravar nada daquela etapa. Nunca há bloqueio.
 - Indicador de progresso fino no topo (6 segmentos), não bolinhas.
 - **Mudo:** ícone de alto-falante no canto superior direito, visível em todas as páginas; estado salvo em prefs.
-- Copy acima é proposta; aprovar com o Pedro antes do código (tom "tu" x "você" também é decisão dele).
+- Tom: **"você"** (Pedro, 25/09). Falas acima são a copy proposta; o Pedro revisa no device.
 
 ## Página 1 — Garagem
 
@@ -58,7 +58,7 @@ responde com o trecho real dele.
 - Cena: o caminhão vivo por cima do fundo. **Fase 1** usa o sprite atual escalado em comprimento + selo de eixos;
   **fase 3** troca por sprites próprios (ver "Arte").
 
-## Página 3 — Teu trecho (o "aha")
+## Página 3 — Seu trecho (o "aha")
 
 **Cálculo (puro, testável, offline):** a partir da posição e do caminhão escolhido, varrer o cache de
 `RadarService.load()` e `PhysicalRestrictionService.load()` num raio de 30 km (bbox + `RadarService.haversine`).
@@ -66,14 +66,14 @@ responde com o trecho real dele.
   Limite de caminhão por `truckRadarLimit(speedKmh, officialTruckLimit: truckLimitOff)`.
 - **Viadutos:** `type == 'maxheight'` e `value < altura do caminhão`.
 - **Resumo (3 casos):**
-  1. Há viaduto baixo: *"Num raio de 30 km: N radares e M passagens mais baixas que o teu caminhão. O app avisa cada uma."*
-  2. Zero viaduto (interior; Cuiabá e Uberlândia dão 0): *"O radar mais perto tá a X km. Pro teu caminhão o limite é Y."*
+  1. Há viaduto baixo: *"Num raio de 30 km: N radares e M passagens mais baixas que o seu caminhão. O app avisa cada uma."*
+  2. Zero viaduto (interior; Cuiabá e Uberlândia dão 0): *"O radar mais perto tá a X km. Pro seu caminhão o limite é Y."*
      (Y é o diferencial: ninguém mais sabe o limite de pesado.)
   3. Zero radar em 30 km (MT rural): expande pra 100 km; se ainda zero, *"Aqui tá tranquilo. Quando aparecer, eu aviso."*
 - **Visual:** radar de varredura neon (CustomPainter), o caminhão no centro, radares em verde, viadutos em vermelho,
   posição por rumo e distância. **Sem GoogleMap** no onboarding (platform view pesada; histórico de tela cinza).
 - **Nome da via** só aparece se `roadName` existir. Restrição tem contaminação conhecida (heliponto, prédio, trevo):
-  por isso o texto conta e avisa, não afirma "tu não passa na rua X".
+  por isso o texto conta e avisa, não afirma "você não passa na rua X".
 - **Custo:** o parse do CSV de radar (2,3 MB) roda num isolate (`compute`) disparado na página 0; a varredura é
   ~57 mil comparações, poucos ms. Estimado, **medir no Redmi**.
 - **Localização negada** → "Escolher cidade": lista curta das capitais + cidades-polo; mesmo cálculo no centro dela.
@@ -148,12 +148,25 @@ sólida; o motorista está em público), 3D ao vivo, Rive (exportação exige pl
 - **O que me faria estar errado:** `onboarding_done` cair em relação ao fluxo atual, ou opt-in de localização não
   subir. A comparação é pelo field_logs das duas versões (hoje: `onboarding_step` e `onboarding_perm` já existem).
 
-## Decisões abertas (Pedro)
-1. Altura padrão 4,40 m (teto legal) em vez de 4,20.
-2. Orçamento de assets 7 MB (APK +~5 MB) pros fundos em vídeo.
-3. Tom "tu" ou "você" na copy e na voz; copy das 6 falas.
-4. Voz ligada por padrão com mudo visível (proposta) ou desligada.
-5. Gerar os sprites de cavalo e semirreboque no Gemini (fase 3).
+## Decisões
+- ✅ Orçamento de assets 7 MB (APK +~5 MB) — Pedro, 25/09.
+- ✅ Tom "você" — Pedro, 25/09.
+- ✅ Voz ligada por padrão com mudo visível — Pedro, 25/09.
+- ✅ Sprites de cavalo e semirreboque: Pedro gera no Gemini (prompts abaixo) — 25/09.
+- ⏳ **Altura padrão pra quem não ajusta: 4,40 m (teto legal) ou 4,20 (hoje).** Recomendação: 4,40. Só vale pra
+  quem pula a garagem; quem escolhe tipo ou ajusta usa o próprio valor.
+
+## Prompts dos sprites (Gemini, chat "Neon Alien Truck Driver Icon", anexar `docs/marca/onboarding/heroi.jpg`)
+Cavalo mecânico:
+> Same style, colors and neon edge light as the attached truck. Flat 2D side view of a white semi-truck TRACTOR UNIT
+> only (cab + chassis + fifth wheel, no trailer), cab facing LEFT, same cab design as the attached image, the green
+> alien driver in the side window. 3 axles. Isolated on a solid flat magenta background (#FF00FF), no ground, no
+> shadow, no text.
+
+Semirreboque:
+> Same style as the previous images. Flat 2D side view of a dark box SEMI-TRAILER only (no tractor), front end facing
+> LEFT with the kingpin, 3 rear axles, the same neon green frame and the same neon alien face logo on the side as the
+> attached truck. Isolated on a solid flat magenta background (#FF00FF), no ground, no shadow, no text.
 
 ## Fontes da pesquisa (25/09)
 NN/g onboarding e tutoriais mobile; Chameleon (product tours); First Round Review (Duolingo); Adapty (testes de
