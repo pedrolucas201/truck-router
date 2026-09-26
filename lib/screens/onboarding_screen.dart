@@ -660,7 +660,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       corpo: [
         const _Kicker('Pronto'),
         const _Titulo('Bora pro trecho?'),
-        const _Texto('Rota, radar e pedágio no limite do seu caminhão.'),
+        const _Texto('Na sua primeira rota, eu te mostro o pedágio do seu eixo e os radares do caminho.'),
         const SizedBox(height: 12),
         if (soDuranteUso)
           _CartaoPermissao(

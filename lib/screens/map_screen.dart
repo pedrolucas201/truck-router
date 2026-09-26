@@ -38,6 +38,7 @@ import '../widgets/address_search_field.dart';
 import '../widgets/add_restriction_sheet.dart';
 import '../widgets/crosshair.dart';
 import '../widgets/map/blocked_sheet.dart';
+import '../widgets/map/estreia_sheet.dart';
 import '../widgets/map/history_sheet.dart';
 import '../widgets/map/marker_icons.dart';
 import '../widgets/map/marking_onboarding_sheet.dart';
@@ -1333,6 +1334,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           _nearbyRadares  = filtered;
           _panelCollapsed = true;
         });
+      }
+      // Estreia: na 1ª rota com pedágio, radar ou desvio, uma vez só. Só com o
+      // mapa por cima e se esta ainda é a rota da tela (nada de cartão velho).
+      if (mounted &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          identical(context.read<RouteProvider>().result, result)) {
+        final iniciar = await mostrarEstreiaSeFor(
+            context: context, rota: result, radaresNaRota: filtered, caminhao: truck);
+        if (iniciar && mounted) _startNavigation();
       }
     }
 
