@@ -2168,7 +2168,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     weatherAlerts: routeProvider.weatherAlerts,
                     departureTime: _departureTime,
                     radares: _nearbyRadares.where(ehRadarDeVelocidade).length,
-                    onTruckTap: _abrirCaminhoes,
                     onStartNavigation: _startNavigation,
                     onOpenExternal: _launchNavigation,
                     onShare: () => _shareRoute(

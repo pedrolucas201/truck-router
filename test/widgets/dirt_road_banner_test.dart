@@ -102,4 +102,17 @@ void main() {
     expect(find.text('881 m de terra'), findsOneWidget);
     
   });
+
+  test('terra que começa na partida é a rua onde o caminhão já está: não avisa', () {
+    final pontos = _pontos(60);
+    // Vitória de Santo Antão → Recife, 26/09: os 41 m iniciais na própria rua
+    // do Pedro vinham marcados como terra.
+    final segs = HereRoutingService.groupDirtSpans([
+      _sp(0, dirt: true, meters: 41),
+      _sp(3, meters: 5000),
+      _sp(40, dirt: true, meters: 300), // terra no meio: avisa
+      _sp(45),
+    ], pontos);
+    expect(segs.map((s) => s.meters), [300]);
+  });
 }

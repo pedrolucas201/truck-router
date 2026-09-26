@@ -452,18 +452,25 @@ class HereRoutingService {
     var start  = -1;
     var meters = 0;
     LatLng at(int i) => i < points.length ? points[i] : points.last;
+    // Terra que começa NO ponto de partida é a rua onde o caminhão já está: o
+    // motorista sabe como ela é (Pedro, 26/09: 41 m "de terra" na própria rua
+    // dele, que ele não reconhece). Vale também no reroute, onde a partida é
+    // a posição atual. Terra no meio ou no destino continua avisando.
+    void fecha() {
+      if (start > 0) out.add(DirtRoadSegment(at(start), meters));
+      start  = -1;
+      meters = 0;
+    }
 
     for (final s in spans) {
       if (s.dirt) {
         if (start < 0) start = s.offset;
         meters += s.meters;
       } else if (start >= 0) {
-        out.add(DirtRoadSegment(at(start), meters));
-        start  = -1;
-        meters = 0;
+        fecha();
       }
     }
-    if (start >= 0) out.add(DirtRoadSegment(at(start), meters));
+    if (start >= 0) fecha();
     return out;
   }
 
