@@ -21,6 +21,9 @@ class MenuPrincipal extends StatelessWidget {
   final VoidCallback onVoz;
   final VoidCallback onApresentacao;
   final VoidCallback onSobre;
+  /// Pedidos de ajuda ABERTOS de outros motoristas por perto (0 = nenhum).
+  final int sosPerto;
+  final VoidCallback? onSosPerto;
 
   const MenuPrincipal({
     super.key,
@@ -35,6 +38,8 @@ class MenuPrincipal extends StatelessWidget {
     required this.onVoz,
     required this.onApresentacao,
     required this.onSobre,
+    this.sosPerto = 0,
+    this.onSosPerto,
   });
 
   /// Fecha a gaveta e só então abre o destino (senão a tela nova abre por
@@ -115,6 +120,25 @@ class MenuPrincipal extends StatelessWidget {
               ),
             ),
             const Padding(padding: EdgeInsets.fromLTRB(20, 20, 20, 8), child: Divider(height: 1)),
+            if (sosPerto > 0 && onSosPerto != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Material(
+                  color: Colors.red.shade700,
+                  borderRadius: BorderRadius.circular(14),
+                  child: ListTile(
+                    key: const Key('menu_sos_perto'),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    leading: const Icon(Icons.sos, color: Colors.white, size: 28),
+                    title: Text(
+                      sosPerto == 1 ? '1 motorista pedindo ajuda perto' : '$sosPerto motoristas pedindo ajuda perto',
+                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
+                    ),
+                    trailing: const Icon(Icons.chevron_right, color: Colors.white),
+                    onTap: _vai(context, onSosPerto!),
+                  ),
+                ),
+              ),
             _Item(Icons.history, 'Histórico de rotas', _vai(context, onHistorico)),
             _Item(Icons.sos, 'Pedir ajuda', _vai(context, onSos), cor: Colors.red.shade400),
             _Item(Icons.local_shipping_outlined, 'Caminhões', _vai(context, onCaminhoes)),

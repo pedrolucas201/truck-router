@@ -131,6 +131,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   late ThemeController _themeController;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   String? _nomeMotorista;
+  // Pedidos de ajuda de OUTROS motoristas perto (mesma regra da navegação:
+  // kSosRaioM da posição, sem o próprio). Ponto vermelho no ☰ e linha no menu.
+  StreamSubscription<List<SosRequest>>? _sosSub;
+  List<(SosRequest, double)> _sosPerto = const [];
   String?   _lastHandledUri;
   DateTime? _lastHandledAt;
   bool      _openedViaDeepLink = false;
@@ -221,6 +225,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _initDeepLinks();
     _themeController = context.read<ThemeController>();
     _themeController.addListener(_onThemeChanged);
+    _sosSub ??= SosService.streamAtivos().listen(_onSosAtivos);
   }
 
   // Semeia a memória de lugares a partir do histórico de rotas (uma vez), pra
@@ -427,6 +432,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _incomingNavLocation.dispose();
     _policeAlertSub?.cancel();
     _themeController.removeListener(_onThemeChanged);
+    _sosSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -857,6 +863,37 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     // checagem rodava, não abre o card por cima da tela de rota.
     if (ModalRoute.of(context)?.isCurrent != true) return;
     await showUpdateDialog(context, info);
+  }
+
+  Future<void> _onSosAtivos(List<SosRequest> todos) async {
+    final me = AuthService.currentUid;
+    Position? pos;
+    try {
+      pos = await Geolocator.getLastKnownPosition();
+    } catch (_) {}
+    if (!mounted) return;
+    final perto = pos == null
+        ? const <(SosRequest, double)>[]
+        : sosPertoDe(todos, me, pos.latitude, pos.longitude);
+    if (perto.length != _sosPerto.length || !perto.every((p) => _sosPerto.any((q) => q.$1.id == p.$1.id))) {
+      setState(() => _sosPerto = perto);
+    }
+  }
+
+  void _listaSosPerto() {
+    if (_sosPerto.isEmpty) return;
+    if (_sosPerto.length == 1) return _fichaSos(_sosPerto.first.$1.id);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SosListaSheet(
+        pedidos: _sosPerto,
+        onEscolher: (s, _) {
+          Navigator.pop(ctx);
+          _fichaSos(s.id);
+        },
+      ),
+    );
   }
 
   /// Menu principal (gaveta). Lê o nome do motorista na hora: ele pode ter
@@ -1732,6 +1769,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         // Crédito das fontes: o OpenStreetMap (ODbL) e o MapAtlas (CC BY 4.0)
         // EXIGEM atribuição. Sem esta tela o uso do dado está fora da licença.
         onSobre: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutScreen())),
+        sosPerto: _sosPerto.length,
+        onSosPerto: _listaSosPerto,
       ),
       // Tocar em qualquer área fora dos campos (inclusive sobre as sugestões que
       // cobrem a tela com o teclado aberto) tira o foco. HitTestBehavior.translucent
@@ -1837,7 +1876,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             const SizedBox(width: 4),
                             IconButton(
                               key: const Key('mapa_menu'),
-                              icon: const Icon(Icons.menu),
+                              icon: Badge(
+                                isLabelVisible: _sosPerto.isNotEmpty,
+                                smallSize: 10,
+                                child: const Icon(Icons.menu),
+                              ),
                               style: IconButton.styleFrom(
                                 backgroundColor: Colors.teal.shade50,
                                 foregroundColor: Colors.teal.shade800,

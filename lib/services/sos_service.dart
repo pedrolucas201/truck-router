@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -25,6 +26,21 @@ class SosException implements Exception {
 const kSosRaioM = 20000.0;
 
 /// Escrita: backend (gates). Leitura: Firestore direto (stream).
+/// Pedidos ABERTOS de outros motoristas a até [raioM] de (lat, lng), do mais
+/// perto pro mais longe, com a distância. Mesma regra da navegação; puro pra
+/// teste. Pedido com ajudante a caminho não conta: não é mais urgente.
+List<(SosRequest, double)> sosPertoDe(List<SosRequest> todos, String? me, double lat, double lng,
+    {double raioM = kSosRaioM}) {
+  final out = <(SosRequest, double)>[];
+  for (final s in todos) {
+    if (s.uid == me || !s.aberto) continue;
+    final d = Geolocator.distanceBetween(lat, lng, s.lat, s.lng);
+    if (d <= raioM) out.add((s, d));
+  }
+  out.sort((a, b) => a.$2.compareTo(b.$2));
+  return out;
+}
+
 class SosService {
   SosService._();
 
