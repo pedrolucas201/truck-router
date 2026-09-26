@@ -59,6 +59,9 @@ enum TipoCaminhao {
   int get alturaCm => kAlturaPadraoCm;
 }
 
+/// Altura depois do − / + da garagem, presa entre 3,00 e 4,80 m.
+int ajustaAltura(int cm, int delta) => (cm + delta).clamp(300, 480);
+
 /// Medidas que a garagem grava. `null` em [tipo] = "O meu" (o caminhão que o
 /// aparelho já tem, restaurado ou editado): confirmar não grava nada.
 class Medidas {

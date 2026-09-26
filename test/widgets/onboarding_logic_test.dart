@@ -47,6 +47,12 @@ void main() {
       }
     });
 
+    test('ajuste de altura: 5 em 5 cm, entre 3,00 e 4,80', () {
+      expect(ajustaAltura(440, -5), 435);
+      expect(ajustaAltura(300, -5), 300);
+      expect(ajustaAltura(480, 5), 480);
+    });
+
     test('pedágio do exemplo: tarifa por eixo × eixos, com vírgula', () {
       expect(pedagioExemplo(5), '5 eixos · R\$ 47,50');
       expect(pedagioExemplo(2), '2 eixos · R\$ 19,00');

@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/bridge_restriction.dart';
 import '../models/radar_point.dart';
+import '../models/truck_profile.dart' show kAlturaPadraoCm;
 import '../providers/truck_profile_provider.dart';
 import '../services/field_log.dart';
 import '../services/location_asked.dart';
@@ -94,6 +95,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   bool _oMeu = false; // "O meu" marcado: confirmar não grava
   bool _temOMeu = false;
   bool _ajustando = false;
+  bool _alturaMexida = false; // mexeu no − / + da altura
   final _form = GlobalKey<FormState>();
   final _altura = TextEditingController();
   final _comprimento = TextEditingController();
@@ -220,7 +222,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     setState(() {
       _tipo = t;
       _oMeu = t == null;
-      if (t != null) _preencheForm(Medidas.doTipo(t));
+      if (t != null) {
+        // A altura que ele acertou no − / + vale mais que a do tipo.
+        final altura = _alturaMexida ? _altura.text : null;
+        _preencheForm(Medidas.doTipo(t));
+        if (altura != null) _altura.text = altura;
+      }
       if (t == null) {
         final p = context.read<TruckProfileProvider>().profile;
         _preencheForm(Medidas(alturaCm: p.heightCm, comprimentoCm: p.lengthCm, pesoKg: p.weightKg, eixos: p.axleCount));
@@ -558,7 +565,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
           ],
         ),
         if (escolheu) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
+          _ajusteAltura(),
+          const SizedBox(height: 6),
           Text('Pedágio de caminhão é por eixo. Na sua rota, eu mostro o valor certo.',
               style: const TextStyle(color: Color(0xFFC9D6E2), fontSize: 15, height: 1.35)),
         ],
@@ -588,6 +597,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
           ),
       ],
       botoes: _botoes('É esse', escolheu ? _confirmaGaragem : null, chave: const Key('onb_e_esse')),
+    );
+  }
+
+  /// Altura com − e + (5 cm): é a medida que decide passagem baixa, e o tipo
+  /// vem no teto legal (4,40). Caminhão de 4,15 acertado aqui não vê
+  /// "passagem a conferir" que não existe pra ele.
+  Widget _ajusteAltura() {
+    final cm = metersToCm(_altura.text) ?? kAlturaPadraoCm;
+    void muda(int delta) {
+      final novo = ajustaAltura(cm, delta);
+      if (novo == cm) return;
+      HapticFeedback.selectionClick();
+      setState(() {
+        _altura.text = cmToMeters(novo);
+        _alturaMexida = true;
+      });
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: .06), borderRadius: BorderRadius.circular(14)),
+      child: Row(children: [
+        const Icon(Icons.height, color: Colors.white70),
+        const SizedBox(width: 8),
+        const Expanded(child: Text('Altura do caminhão', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600))),
+        IconButton.filledTonal(key: const Key('onb_altura_menos'), onPressed: () => muda(-5), icon: const Icon(Icons.remove)),
+        SizedBox(
+          width: 86,
+          child: Text('${cmToMeters(cm)} m', textAlign: TextAlign.center,
+              style: const TextStyle(color: kNeon, fontSize: 20, fontWeight: FontWeight.w800)),
+        ),
+        IconButton.filledTonal(key: const Key('onb_altura_mais'), onPressed: () => muda(5), icon: const Icon(Icons.add)),
+      ]),
     );
   }
 
