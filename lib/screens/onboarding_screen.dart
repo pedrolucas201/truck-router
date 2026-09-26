@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,7 +15,6 @@ import '../services/location_asked.dart';
 import '../services/physical_restriction_service.dart';
 import '../services/radar_service.dart';
 import '../services/sistema.dart';
-import '../services/voice_settings.dart';
 import '../utils/meters.dart';
 import '../widgets/onboarding/cena_onboarding.dart';
 import '../widgets/onboarding/onboarding_logic.dart';
@@ -76,12 +74,11 @@ class PermissoesReais implements PermissoesApi {
 /// trecho (o "aha" com os dados offline em volta dele), ajuda na estrada, bora.
 /// Spec: docs/superpowers/specs/2026-09-25-onboarding-monta-caminhao-design.md.
 /// Nada trava: toda permissão tem "Pular" e o "Começar" libera sempre.
+/// Sem voz: o Pedro prefere o onboarding sempre mudo (25/09).
 class OnboardingScreen extends StatefulWidget {
   final PermissoesApi permissoes;
   final VoidCallback? aoConcluir; // testes: evita abrir o MapScreen
-  /// Testes desligam a voz (sem plugin de TTS).
-  final bool voz;
-  const OnboardingScreen({super.key, this.permissoes = const PermissoesReais(), this.aoConcluir, this.voz = true});
+  const OnboardingScreen({super.key, this.permissoes = const PermissoesReais(), this.aoConcluir});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -121,18 +118,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   bool _autostartOk = false;
   static const _kAutostartOk = 'autostart_confirmado';
 
-  // Voz
-  static const _kMudo = 'onboarding_voz_muda';
-  bool _mudo = false;
-  FlutterTts? _tts;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     FieldLog.event('onboarding_step', {'i': 0});
     unawaited(_lerPermissoes());
-    unawaited(_iniciaVoz());
   }
 
   @override
@@ -169,7 +160,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     for (final c in [_altura, _comprimento, _peso, _eixos]) {
       c.dispose();
     }
-    unawaited(_tts?.stop());
     super.dispose();
   }
 
@@ -188,57 +178,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     } catch (_) {/* permissão ilegível = segue como pendente */}
   }
 
-  // ── Voz ────────────────────────────────────────────────────────────────────
-
-  Future<void> _iniciaVoz() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) setState(() => _mudo = prefs.getBool(_kMudo) ?? false);
-    if (!widget.voz) return;
-    try {
-      _tts = FlutterTts();
-      await _tts!.setLanguage('pt-BR');
-      await VoiceSettings.apply(_tts!);
-    } catch (e, st) {
-      FieldLog.error('onboarding_tts', e, st);
-      _tts = null;
-    }
-    _fala(_pagina);
-  }
-
-  /// Uma fala por página. Falhar nunca trava: o texto está na tela.
-  void _fala(int p) {
-    final t = _tts;
-    if (t == null || _mudo) return;
-    final frase = switch (p) {
-      kPagChegada => 'Oi! Eu sou seu parceiro no trecho. Grátis de verdade, sem cadastro.',
-      kPagGaragem => 'Com que caminhão você roda?',
-      kPagLocal => 'Deixa eu ver onde você está, pra te mostrar o seu trecho.',
-      kPagTrecho => _resumo == null ? null : '${_resumo!.titulo}. ${_resumo!.texto}',
-      kPagAjuda => 'Se der problema, quem está perto recebe o seu pedido. E você recebe o deles.',
-      _ => 'Bora pro trecho?',
-    };
-    if (frase == null) return;
-    unawaited(() async {
-      try {
-        await t.stop();
-        await t.speak(frase);
-      } catch (_) {}
-    }());
-  }
-
-  Future<void> _alternaMudo() async {
-    final mudo = !_mudo;
-    setState(() => _mudo = mudo);
-    FieldLog.event('onboarding_voz', {'muda': mudo});
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kMudo, mudo);
-    if (mudo) {
-      unawaited(_tts?.stop());
-    } else {
-      _fala(_pagina);
-    }
-  }
-
   // ── Navegação ──────────────────────────────────────────────────────────────
 
   void _irPara(int i) {
@@ -249,7 +188,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   void _aoMudarPagina(int i) {
     setState(() => _pagina = i);
     FieldLog.event('onboarding_step', {'i': i});
-    _fala(i);
   }
 
   void _pular() {
@@ -263,7 +201,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboarding_done', true);
     FieldLog.event('onboarding_done', {'ms': _sw.elapsedMilliseconds});
-    unawaited(_tts?.stop());
     if (!mounted) return;
     if (widget.aoConcluir != null) return widget.aoConcluir!();
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MapScreen()));
@@ -496,7 +433,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   Widget _topo() {
     final pular = pularDestino(_pagina) != null;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       child: Row(
         children: [
           Expanded(
@@ -521,12 +458,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
               onPressed: _pular,
               child: const Text('Pular', style: TextStyle(color: Colors.white70)),
             ),
-          IconButton(
-            key: const Key('onb_mudo'),
-            tooltip: _mudo ? 'Ligar a voz' : 'Silenciar a voz',
-            onPressed: _alternaMudo,
-            icon: Icon(_mudo ? Icons.volume_off : Icons.volume_up, color: _mudo ? Colors.white54 : kNeon),
-          ),
         ],
       ),
     );

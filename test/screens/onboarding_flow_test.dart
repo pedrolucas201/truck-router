@@ -7,8 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:truck_router/providers/truck_profile_provider.dart';
 import 'package:truck_router/screens/onboarding_screen.dart';
 
-/// Percorre o fluxo "Monta o seu caminhão" sem plugin: permissões falsas, voz
-/// desligada, e "Começar" marca `onboarding_done`.
+/// Percorre o fluxo "Monta o seu caminhão" sem plugin: permissões falsas e
+/// "Começar" marca `onboarding_done`.
 class _PermFake implements PermissoesApi {
   LocationPermission loc = LocationPermission.denied;
   int pedidosLoc = 0;
@@ -53,7 +53,7 @@ Future<(_PermFake, TruckProfileProvider, bool Function())> _abre(WidgetTester te
   await tester.pumpWidget(ChangeNotifierProvider.value(
     value: prov,
     child: MaterialApp(
-      home: OnboardingScreen(permissoes: perm, voz: false, aoConcluir: () => concluiu = true),
+      home: OnboardingScreen(permissoes: perm, aoConcluir: () => concluiu = true),
     ),
   ));
   await tester.pump();

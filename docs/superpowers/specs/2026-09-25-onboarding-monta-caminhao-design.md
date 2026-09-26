@@ -151,7 +151,7 @@ sólida; o motorista está em público), 3D ao vivo, Rive (exportação exige pl
 ## Decisões
 - ✅ Orçamento de assets 7 MB (APK +~5 MB) — Pedro, 25/09.
 - ✅ Tom "você" — Pedro, 25/09.
-- ✅ Voz ligada por padrão com mudo visível — Pedro, 25/09.
+- ✅ ~~Voz ligada com mudo~~ → **sem voz no onboarding** (Pedro no device, 25/09: "melhor sempre deixar mudo, tira essa opção de som"). As falas da tabela ficam só como texto.
 - ✅ Sprites de cavalo e semirreboque: Pedro gera no Gemini (prompts abaixo) — 25/09.
 - ✅ **Altura padrão pra quem pula a garagem: 4,40 m** (teto legal; Pedro aceitou a recomendação, 25/09). Falso
   alarme incomoda, sem alarme bate. Quem escolhe tipo ou ajusta usa o próprio valor. Constante única, reversível.
