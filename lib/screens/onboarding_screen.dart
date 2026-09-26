@@ -404,7 +404,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                           flex: 11,
                           child: Stack(fit: StackFit.expand, children: [
                             CenaOnboarding(cena: cenaDaPagina(_pagina), visivel: !varre,
-                                rotulo: _pagina == kPagGaragem ? _rotulo : null),
+                                rotulo: _pagina == kPagGaragem ? _rotulo : null,
+                                pedagio: _pagina == kPagGaragem && (_oMeu || _tipo != null)
+                                    ? pedagioExemplo(int.tryParse(_eixos.text) ?? 5)
+                                    : null),
                             RadarVarredura(resumo: _resumo, visivel: varre),
                           ]),
                         ),
@@ -545,6 +548,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                   selecionado: !_oMeu && _tipo == t, onTap: () => _escolhe(t), chave: Key('onb_tipo_${t.name}')),
           ],
         ),
+        if (escolheu) ...[
+          const SizedBox(height: 8),
+          Text('No pedágio, caminhão paga por eixo: com ${_eixos.text} eixos, ${_eixos.text}× a tarifa. '
+              'Na sua rota, o app já mostra o valor certo.',
+              style: const TextStyle(color: Color(0xFFC9D6E2), fontSize: 15, height: 1.35)),
+        ],
         const SizedBox(height: 6),
         if (!_ajustando)
           TextButton.icon(

@@ -85,6 +85,15 @@ bool caminhaoMudou({
     pesoKg != pesoAtualKg ||
     eixos != eixosAtual;
 
+/// Tarifa básica ILUSTRATIVA de uma praça (R$ por eixo). Nas concessões,
+/// caminhão paga a tarifa básica × número de eixos; o valor real de cada praça
+/// vem da HERE na rota. ponytail: número de exemplo, não é de praça nenhuma.
+const kTarifaExemploPorEixo = 9.50;
+
+/// "5 eixos · R$ 47,50" pro selo da garagem.
+String pedagioExemplo(int eixos) =>
+    '$eixos eixos · R\$ ${(eixos * kTarifaExemploPorEixo).toStringAsFixed(2).replaceAll('.', ',')}';
+
 /// Nome do caminhão depois da garagem: o de fábrica ("Padrão") vira o nome do
 /// tipo escolhido; qualquer outro nome é do motorista e fica.
 String nomeDoCaminhao({required String atual, TipoCaminhao? tipo}) =>

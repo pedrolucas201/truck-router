@@ -36,7 +36,10 @@ class CenaOnboarding extends StatefulWidget {
   /// Selo sobre o caminhão na garagem ("Carreta · 5 eixos"). Trocar o texto
   /// faz o selo pular de novo e o alien acenar.
   final String? rotulo;
-  const CenaOnboarding({super.key, required this.cena, this.visivel = true, this.rotulo});
+  /// Garagem: valor do pedágio pro tipo escolhido ("5 eixos · R$ 47,50"). Ao
+  /// escolher um tipo, o caminhão passa por uma praça e o valor aparece.
+  final String? pedagio;
+  const CenaOnboarding({super.key, required this.cena, this.visivel = true, this.rotulo, this.pedagio});
 
   @override
   State<CenaOnboarding> createState() => _CenaOnboardingState();
@@ -55,6 +58,7 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
   double _sosK = 0;        // 0 = enquadramento normal, 1 = enquadramento do S.O.S.
   bool _estatico = false;
   double _tRotulo = -99; // _tempo em que o rótulo mudou (garagem)
+  bool _praca = false;   // garagem: a praça foi armada pela escolha do tipo
   // Tela anterior: o evento dela continua na tela até sair pela esquerda e o
   // cenário dela vira o novo em 1,2 s.
   Cena? _cenaAnt;
@@ -111,7 +115,15 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
       if (_cenaAnt != null) _x0 = math.max(_x0, _x0Ant + _largura(_cenaAnt!) + .4);
       if (_estatico) _x0 = .75;
     }
-    if (widget.rotulo != old.rotulo && widget.rotulo != null) _tRotulo = _tempo;
+    if (widget.rotulo != old.rotulo && widget.rotulo != null) {
+      _tRotulo = _tempo;
+      // Escolheu (ou trocou) o tipo: o caminhão sai do pátio e passa por uma
+      // praça, que entra pela direita.
+      if (_cena == Cena.garagem && !_estatico) {
+        _praca = true;
+        _x0 = _dist + 1.3;
+      }
+    }
     if (widget.visivel && !old.visivel && !_estatico && !_ticker.isActive) _ticker.start();
     if (!widget.visivel && old.visivel) _ticker.stop();
   }
@@ -125,6 +137,7 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
 
   void _armaEvento() {
     _tempo = 0;
+    _praca = false;
     _tParou = null;
     _x0 = _dist + 1.5; // entra pela direita ~1 s depois de abrir
   }
@@ -176,9 +189,31 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
       case Cena.abertura:
         return _entrando ? ((_tempoTotal - 1.0) / .6).clamp(0.0, 1.0) : 1;
       case Cena.garagem:
-        // Encosta no pátio: freia em 1,2 s e fica parado enquanto ele escolhe.
-        final v = 1 - (_tempo / 1.2).clamp(0.0, 1.0);
-        return v < .02 ? 0 : v;
+        if (!_praca) {
+          // Encosta no pátio: freia em 1,2 s e fica parado enquanto ele escolhe.
+          final v = 1 - (_tempo / 1.2).clamp(0.0, 1.0);
+          return v < .02 ? 0 : v;
+        }
+        final av = _dist - _x0;
+        if (av > 1.25) {
+          // Passou a praça: freia e estaciona de novo.
+          final v = 1 - ((av - 1.25) / .35).clamp(0.0, 1.0);
+          return v < .02 ? 0 : v;
+        }
+        // Arranca do pátio (0,8 s) e, na praça, freia na cancela como antes.
+        final arranque = ((_tempo - _tRotulo) / .8).clamp(0.0, 1.0);
+        final folga = -av - .55;
+        final double naPraca;
+        if (folga > .45) {
+          naPraca = 1;
+        } else if (folga > .05) {
+          naPraca = .25 + .75 * (folga - .05) / .4;
+        } else if (folga > -.05) {
+          naPraca = .25;
+        } else {
+          naPraca = (.25 + .75 * (-folga - .05) / .3).clamp(.25, 1.0);
+        }
+        return math.max(.02, math.min(arranque, naPraca));
       case Cena.sos:
         final folga = (_x0 - _dist) - _Geo.heroDirSosF - .04; // distância até o parado
         if (folga < .012) return 0;
@@ -203,7 +238,8 @@ class _CenaOnboardingState extends State<CenaOnboarding> with SingleTickerProvid
     final q = _Quadro(cena: cena, dist: _dist, x0: _x0, tempo: _tempo, v: _v, estatico: _estatico, mundo: mundo,
         farol: !_entrando || _tempoTotal > .9,
         paradoHa: _tParou == null ? -1 : _tempo - _tParou!,
-        rotulo: widget.rotulo, rotuloHa: _estatico ? 9 : _tempo - _tRotulo);
+        rotulo: widget.rotulo, rotuloHa: _estatico ? 9 : _tempo - _tRotulo,
+        praca: _praca && cena == Cena.garagem, pedagio: widget.pedagio);
     final qAnt = _cenaAnt == null
         ? null
         : _Quadro(cena: _cenaAnt!, dist: _dist, x0: _x0Ant, tempo: _tempo + 10, v: _v, estatico: _estatico, mundo: mundo, anterior: true);
@@ -393,8 +429,12 @@ class _Quadro {
   /// Garagem: selo do tipo e há quanto tempo ele mudou.
   final String? rotulo;
   final double rotuloHa;
+  /// Garagem: praça armada e o texto do pedágio do tipo.
+  final bool praca;
+  final String? pedagio;
   _Quadro({required this.cena, required this.dist, required this.x0, required this.tempo, required this.v, required this.estatico,
-      required this.mundo, this.farol = true, this.paradoHa = -1, this.anterior = false, this.rotulo, this.rotuloHa = 9});
+      required this.mundo, this.farol = true, this.paradoHa = -1, this.anterior = false, this.rotulo, this.rotuloHa = 9,
+      this.praca = false, this.pedagio});
   /// Pisca-farol de caminhoneiro: duas piscadas logo depois de parar.
   bool get piscaFarol => paradoHa >= 0 && ((paradoHa >= .4 && paradoHa < .6) || (paradoHa >= .8 && paradoHa < 1.0));
   /// Progresso do evento: 0 quando entra pela direita, 1 quando o centro dele
@@ -485,6 +525,7 @@ class _FundoPainter extends CustomPainter {
       case Cena.abertura:
         _placaKm(c, e);
       case Cena.garagem:
+        if (e.praca) _pedagio(c, e);
       case Cena.sos:
       case Cena.fechamento:
         break;
@@ -728,6 +769,65 @@ class _FundoPainter extends CustomPainter {
     _texto(c, 'km 142', placa.center, placa.height * .42);
   }
 
+  // ── cena 4: praça de pedágio, em sequência ──────────────────────────────
+  /// Placa "PEDÁGIO 500 m" antes, luzes da cobertura acendendo uma a uma
+  /// conforme a praça entra, duas cabines com cancela que sobe quando o
+  /// caminhão chega.
+  void _pedagio(Canvas c, _Quadro e) {
+    final esq = g.x(e.x0), dir = g.x(e.x0 + 1.15);
+    final topo = g.heroTopo - g.h * .19, base = g.pistaTopo;
+    // Placa antes da praça.
+    final px = g.x(e.x0 - .45);
+    c.drawLine(Offset(px, base), Offset(px, base - g.h * .12), _linha(const Color(0xFF9AA5B1), 3));
+    final placa = Rect.fromCenter(center: Offset(px, base - g.h * .12 - g.h * .04), width: g.w * .17, height: g.h * .075);
+    c.drawRRect(RRect.fromRectAndRadius(placa, const Radius.circular(4)), Paint()..color = const Color(0xFF1B5E20));
+    c.drawRRect(RRect.fromRectAndRadius(placa, const Radius.circular(4)), _linha(Colors.white70, 1.5));
+    _texto(c, 'PEDÁGIO', placa.center - Offset(0, placa.height * .18), placa.height * .32);
+    _texto(c, '500 m', placa.center + Offset(0, placa.height * .22), placa.height * .28, peso: FontWeight.w600);
+    // Cobertura.
+    final cob = Rect.fromLTRB(esq, topo, dir, topo + g.h * .06);
+    c.drawRRect(RRect.fromRectAndRadius(cob, const Radius.circular(4)), Paint()..color = const Color(0xFF101C2A));
+    _neon(c, Path()..addRRect(RRect.fromRectAndRadius(cob, const Radius.circular(4))), w: 3);
+    for (final x in [esq + 6, esq + (dir - esq) * .5, dir - 6]) {
+      _neon(c, Path()..moveTo(x, cob.bottom)..lineTo(x, base), w: 3);
+    }
+    // Luzes: acendem da direita pra esquerda conforme a praça entra na tela.
+    for (var i = 1; i < 8; i++) {
+      final x = esq + (dir - esq) * i / 8;
+      final acesa = e.estatico || (e.avanco + 1.15) > (8 - i) * .06;
+      if (!acesa) {
+        c.drawCircle(Offset(x, cob.bottom + 3), 2.5, Paint()..color = const Color(0xFF3A4A5C));
+        continue;
+      }
+      _luz(c, Offset(x, cob.bottom + 4), g.w * .045, _branco, .22);
+      c.drawCircle(Offset(x, cob.bottom + 3), 2.5, Paint()..color = Colors.white);
+    }
+    // Duas cabines, cada uma com a sua cancela.
+    for (final f in [.12, .52]) {
+      final cab = Rect.fromLTWH(esq + (dir - esq) * f, base - g.h * .16, g.w * .11, g.h * .16);
+      c.drawRect(cab, Paint()..color = const Color(0xFF101C2A));
+      _neon(c, Path()..addRect(cab), w: 2);
+      c.drawRect(Rect.fromLTWH(cab.left + cab.width * .2, cab.top + cab.height * .18, cab.width * .6, cab.height * .35),
+          Paint()..color = _ambar.withValues(alpha: .85));
+      // Cancela: sobe quando o caminhão se aproxima.
+      final pivo = Offset(cab.right + 6, base - g.h * .02);
+      final sobe = ((g.heroDir + g.w * .30 - pivo.dx) / (g.w * .30)).clamp(0.0, 1.0);
+      final ang = -math.pi / 2.2 * Curves.easeOutBack.transform(sobe);
+      final comp = g.w * .26;
+      final ponta = pivo + Offset(math.cos(ang) * comp, math.sin(ang) * comp);
+      c.drawLine(pivo, ponta, _glow(_vermelho, 10));
+      c.drawLine(pivo, ponta, _linha(Colors.white, 5));
+      for (var i = 0; i < 5; i++) {
+        c.drawLine(pivo + (ponta - pivo) * (i / 5 + .05), pivo + (ponta - pivo) * (i / 5 + .13), _linha(_vermelho, 5));
+      }
+      c.drawCircle(pivo, 5, Paint()..color = kNeon);
+      // Semáforo da faixa: vermelho fechado, verde aberto.
+      final sem = Offset(pivo.dx, cob.bottom + g.h * .05);
+      _luz(c, sem, g.w * .05, sobe > .8 ? kNeon : _vermelho, .8);
+      c.drawCircle(sem, 4, Paint()..color = sobe > .8 ? kNeon : _vermelho);
+    }
+  }
+
   @override
   bool shouldRepaint(_FundoPainter old) => true;
 }
@@ -778,7 +878,13 @@ class _FrentePainter extends CustomPainter {
         break;
       case Cena.garagem:
         final r = q.rotulo;
-        if (r != null) _selo(c, r, kNeon, gatilho: q.rotuloHa * .6);
+        final ped = q.pedagio;
+        if (q.praca && ped != null && q.avanco + 1.1 >= 0) {
+          // A praça chegou: o valor pelo eixo dele troca o selo do tipo.
+          _selo(c, ped, kNeon, gatilho: q.avanco + 1.1);
+        } else if (r != null) {
+          _selo(c, r, kNeon, gatilho: q.rotuloHa * .6);
+        }
       case Cena.sos:
         _sos(c);
     }

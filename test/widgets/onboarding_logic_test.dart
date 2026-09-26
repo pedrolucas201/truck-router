@@ -47,6 +47,12 @@ void main() {
       }
     });
 
+    test('pedágio do exemplo: tarifa por eixo × eixos, com vírgula', () {
+      expect(pedagioExemplo(5), '5 eixos · R\$ 47,50');
+      expect(pedagioExemplo(2), '2 eixos · R\$ 19,00');
+      expect(pedagioExemplo(9), '9 eixos · R\$ 85,50');
+    });
+
     test('escolher tipo dá nome ao caminhão de fábrica, nunca a um nome do motorista', () {
       expect(nomeDoCaminhao(atual: 'Padrão', tipo: TipoCaminhao.carreta), 'Carreta');
       expect(nomeDoCaminhao(atual: 'Scania do Beto', tipo: TipoCaminhao.carreta), 'Scania do Beto');
