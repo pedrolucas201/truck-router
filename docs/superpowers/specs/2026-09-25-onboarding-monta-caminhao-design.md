@@ -52,7 +52,7 @@ responde com o trecho real dele.
 - ⚠️ **Os pesos por tipo são derivados dos limites por eixo e têm que ser conferidos na tabela oficial antes de codar.**
   Um resumo automático do Guia do TRC deu 57 t pra carreta de 5 eixos, o que contradiz a conta por eixo (41,5 t).
 - **Altura padrão 4,40 m (o teto legal), não 4,20.** Princípio do projeto: falso alarme é passável, sem alarme é multa.
-  Altura maior → mais viaduto avisado/evitado, nunca menos. **Decisão do Pedro** (hoje o padrão do app é 4,20).
+  Altura maior → mais viaduto avisado/evitado, nunca menos. Decidido com o Pedro em 25/09.
 - Escolher um tipo **não grava** até "É esse"; grava pelo caminho atual (`caminhaoMudou` + `saveProfile`, espelho).
 - "Ajustar medidas" reaproveita os `_campo` atuais (mesma validação).
 - Cena: o caminhão vivo por cima do fundo. **Fase 1** usa o sprite atual escalado em comprimento + selo de eixos;
@@ -153,8 +153,11 @@ sólida; o motorista está em público), 3D ao vivo, Rive (exportação exige pl
 - ✅ Tom "você" — Pedro, 25/09.
 - ✅ Voz ligada por padrão com mudo visível — Pedro, 25/09.
 - ✅ Sprites de cavalo e semirreboque: Pedro gera no Gemini (prompts abaixo) — 25/09.
-- ⏳ **Altura padrão pra quem não ajusta: 4,40 m (teto legal) ou 4,20 (hoje).** Recomendação: 4,40. Só vale pra
-  quem pula a garagem; quem escolhe tipo ou ajusta usa o próprio valor.
+- ✅ **Altura padrão pra quem pula a garagem: 4,40 m** (teto legal; Pedro aceitou a recomendação, 25/09). Falso
+  alarme incomoda, sem alarme bate. Quem escolhe tipo ou ajusta usa o próprio valor. Constante única, reversível.
+- Sprites (25/09): `cavalo.jpg` aprovado (cabine igual à do herói, quinta-roda, 3 eixos). `semirreboque.jpg`
+  **refazer**: veio com cambão/olhal (é reboque, não semirreboque) e pés de apoio baixados. Contagem visual de eixos
+  bate com os tipos: carreta = cavalo 3 + semi 2 = 5; bitrem = 3 + 2 + 2 = 7; rodotrem = 3 + 2 + dolly 2 + 2 = 9.
 
 ## Prompts dos sprites (Gemini, chat "Neon Alien Truck Driver Icon", anexar `docs/marca/onboarding/heroi.jpg`)
 Cavalo mecânico:
