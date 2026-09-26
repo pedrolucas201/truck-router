@@ -132,7 +132,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     if (_garagemPronta) return;
     _garagemPronta = true;
     final prov = context.read<TruckProfileProvider>();
-    _temOMeu = abreComOMeu(editado: prov.editado);
+    final p = prov.profile;
+    final atual = Medidas(alturaCm: p.heightCm, comprimentoCm: p.lengthCm, pesoKg: p.weightKg, eixos: p.axleCount);
+    // Caminhão do aparelho igual a um tipo: o tipo já vem marcado, sem cartão
+    // extra ("Carreta · atual" ao lado de "Carreta" confundia, print 26/09).
+    // Medidas próprias: cartão "Seu atual". Instalação limpa: nada marcado.
+    final igual = prov.editado ? tipoIgual(atual) : null;
+    _tipo = igual;
+    _temOMeu = abreComOMeu(editado: prov.editado) && igual == null;
     _oMeu = _temOMeu;
     _preencheForm(Medidas(
       alturaCm: prov.profile.heightCm, comprimentoCm: prov.profile.lengthCm,
@@ -224,7 +231,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   String? get _rotulo {
     if (_oMeu) {
       final p = context.read<TruckProfileProvider>().profile;
-      return 'O meu · ${p.axleCount} eixos';
+      return '${nomeDoAtual(p.name)} · ${p.axleCount} eixos';
     }
     final t = _tipo;
     return t == null ? null : '${t.nome} · ${t.eixos} eixos';
@@ -535,14 +542,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     final escolheu = _oMeu || _tipo != null;
     return _molde(
       corpo: [
-        const _Kicker('Seu caminhão'),
         const _Titulo('Com que caminhão você roda?'),
         const SizedBox(height: 4),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
-            if (_temOMeu) _cartaoTipo('O meu', 'atual', selecionado: _oMeu, onTap: () => _escolhe(null), chave: const Key('onb_tipo_meu')),
+            if (_temOMeu)
+              _cartaoTipo(nomeDoAtual(context.read<TruckProfileProvider>().profile.name),
+                  '${context.read<TruckProfileProvider>().profile.axleCount} eixos · atual',
+                  selecionado: _oMeu, onTap: () => _escolhe(null), chave: const Key('onb_tipo_meu')),
             for (final t in TipoCaminhao.values)
               _cartaoTipo(t.nome, '${t.eixos} eixos',
                   selecionado: !_oMeu && _tipo == t, onTap: () => _escolhe(t), chave: Key('onb_tipo_${t.name}')),
@@ -550,8 +559,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
         ),
         if (escolheu) ...[
           const SizedBox(height: 8),
-          Text('No pedágio, caminhão paga por eixo: com ${_eixos.text} eixos, ${_eixos.text}× a tarifa. '
-              'Na sua rota, o app já mostra o valor certo.',
+          Text('Pedágio de caminhão é por eixo. Na sua rota, eu mostro o valor certo.',
               style: const TextStyle(color: Color(0xFFC9D6E2), fontSize: 15, height: 1.35)),
         ],
         const SizedBox(height: 6),

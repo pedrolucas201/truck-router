@@ -59,6 +59,16 @@ void main() {
       expect(nomeDoCaminhao(atual: 'Padrão'), 'Padrão');
     });
 
+    test('caminhão igual a um tipo marca o tipo; medidas próprias não casam', () {
+      expect(tipoIgual(Medidas.doTipo(TipoCaminhao.carreta)), TipoCaminhao.carreta);
+      expect(tipoIgual(const Medidas(alturaCm: 420, comprimentoCm: 1860, pesoKg: 41500, eixos: 5)), isNull);
+    });
+
+    test('cartão do caminhão atual mostra o nome dele, não "O meu"', () {
+      expect(nomeDoAtual('Carreta'), 'Carreta');
+      expect(nomeDoAtual('Padrão'), 'Seu atual');
+    });
+
     test('"O meu" só aparece pra quem já tem caminhão (protege o espelho)', () {
       expect(abreComOMeu(editado: true), isTrue);
       expect(abreComOMeu(editado: false), isFalse);

@@ -94,6 +94,21 @@ const kTarifaExemploPorEixo = 9.50;
 String pedagioExemplo(int eixos) =>
     '$eixos eixos · R\$ ${(eixos * kTarifaExemploPorEixo).toStringAsFixed(2).replaceAll('.', ',')}';
 
+/// O tipo cujas medidas são exatamente as do caminhão, ou null.
+TipoCaminhao? tipoIgual(Medidas m) {
+  for (final t in TipoCaminhao.values) {
+    final d = Medidas.doTipo(t);
+    if (d.alturaCm == m.alturaCm && d.comprimentoCm == m.comprimentoCm && d.pesoKg == m.pesoKg && d.eixos == m.eixos) {
+      return t;
+    }
+  }
+  return null;
+}
+
+/// Rótulo do cartão do caminhão que o aparelho já tem: o nome dele; o de
+/// fábrica ("Padrão") não diz nada, vira "Seu atual".
+String nomeDoAtual(String nome) => nome == 'Padrão' || nome.trim().isEmpty ? 'Seu atual' : nome;
+
 /// Nome do caminhão depois da garagem: o de fábrica ("Padrão") vira o nome do
 /// tipo escolhido; qualquer outro nome é do motorista e fica.
 String nomeDoCaminhao({required String atual, TipoCaminhao? tipo}) =>
